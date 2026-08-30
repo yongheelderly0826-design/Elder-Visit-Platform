@@ -5,8 +5,12 @@
 var Config = (function () {
   var props = PropertiesService.getScriptProperties();
 
+  function local(key) {
+    return (typeof LocalConfig !== 'undefined' && LocalConfig[key]) || '';
+  }
+
   function get(key, fallback) {
-    return props.getProperty(key) || fallback || '';
+    return props.getProperty(key) || local(key) || fallback || '';
   }
 
   return {

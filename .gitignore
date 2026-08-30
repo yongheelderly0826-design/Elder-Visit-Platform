@@ -44,3 +44,6 @@ cloudflare-env.d.ts
 # Google Apps Script (clasp)
 gas/.clasp.json
 gas/.claspignore
+gas/.local-config.json
+gas/src/LocalConfig.gs
+gas/*.xlsx
