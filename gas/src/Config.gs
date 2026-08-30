@@ -10,7 +10,7 @@ var Config = (function () {
   }
 
   function get(key, fallback) {
-    return props.getProperty(key) || local(key) || fallback || '';
+    return local(key) || props.getProperty(key) || fallback || '';
   }
 
   return {

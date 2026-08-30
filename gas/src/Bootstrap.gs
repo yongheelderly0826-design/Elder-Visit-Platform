@@ -4,7 +4,9 @@
  */
 function bootstrapPlatform() {
   var props = PropertiesService.getScriptProperties();
-  var existingId = props.getProperty('SPREADSHEET_ID');
+  var existingId = props.getProperty('SPREADSHEET_ID') ||
+    (typeof LocalConfig !== 'undefined' && LocalConfig.SPREADSHEET_ID) ||
+    '';
   var ss;
 
   if (existingId) {
