@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { parseCsvRows } from "@/lib/domain/imports";
+import { gasClient, isGasConfigured } from "@/lib/gas-client";
+import { getSystemStatus } from "@/lib/system/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type WorkspaceRow = {
@@ -97,6 +99,43 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (getSystemStatus().dataMode === "gas_ready" && isGasConfigured()) {
+    const gasRows = normalizedRows.map((row) => ({
+      external_id: row.caseCode,
+      case_type: mapCaseTypeLabel(row.caseType),
+      name: row.name,
+      id_number: row.nationalId,
+      age: row.age ?? "",
+      household_district: row.householdDistrict ?? "永和區",
+      household_village: row.householdVillage ?? "",
+      visit_district: row.visitDistrict ?? "永和區",
+      visit_village: row.householdVillage ?? "",
+      address: row.visitAddress,
+      primary_phone: row.primaryPhone ?? "",
+      secondary_phone: row.backupPhone ?? "",
+      contact_note: row.contactNote ?? row.note ?? "",
+      visit_status: "待訪",
+      dispatch_priority: mapPriorityLabel(row.assignmentPriority),
+      data_quality_tag: row.dataQualityFlag ?? "",
+    }));
+
+    const result = await gasClient.cases.import({ rows: gasRows });
+    const batchCode = createImportBatchCode();
+
+    return NextResponse.json({
+      data: {
+        batchCode,
+        totalRows: rows.length,
+        parsedRows: normalizedRows.length,
+        insertedRows: result.imported,
+        skippedRows: normalizedRows.length - result.imported,
+        skippedCaseCodes: [],
+        columns,
+        mode: "gas",
+      },
+    });
+  }
+
   const supabase = createAdminClient() as unknown as ImportSupabaseClient;
   const { data: workspace, error: workspaceError } = await supabase
     .from("workspaces")
@@ -147,8 +186,23 @@ export async function POST(request: NextRequest) {
       skippedRows: skippedRows.length,
       skippedCaseCodes: skippedRows.slice(0, 20).map((row) => row.caseCode),
       columns,
+      mode: "supabase",
     },
   });
+}
+
+function mapCaseTypeLabel(caseType: string) {
+  if (caseType === "solitary_elder" || caseType === "獨老") return "獨老";
+  if (caseType === "middle_elder" || caseType === "中老") return "中老";
+  return caseType || "獨老";
+}
+
+function mapPriorityLabel(priority: string | null) {
+  if (!priority) return "中";
+  if (priority === "urgent" || priority === "緊急" || priority === "高") return "高";
+  if (priority === "medium_high" || priority === "中高") return "中";
+  if (priority === "low" || priority === "低") return "低";
+  return priority;
 }
 
 type NormalizedImportRow = {
@@ -178,10 +232,10 @@ function normalizeImportRow(
   index: number,
   sourceFile: string,
 ): NormalizedImportRow | null {
-  const caseCode = getCell(row, ["測試編號", "個案編號", "個案編碼", "案號"]);
-  const name = getCell(row, ["姓名", "長者姓名"]);
-  const visitAddress = getCell(row, ["訪視地址", "地址", "住址"]);
-  const visitDistrict = getCell(row, ["訪視行政區", "行政區", "區域"]);
+  const caseCode = getCell(row, ["external_id", "測試編號", "個案編號", "個案編碼", "案號"]);
+  const name = getCell(row, ["name", "姓名", "長者姓名"]);
+  const visitAddress = getCell(row, ["visit_address", "訪視地址", "地址", "住址"]);
+  const visitDistrict = getCell(row, ["visit_district", "訪視行政區", "district", "行政區", "區域"]);
 
   if (!caseCode || !name || !visitAddress || !visitDistrict) {
     return null;
@@ -191,21 +245,21 @@ function normalizeImportRow(
     rowNumber: index + 2,
     sourceFile,
     caseCode,
-    caseType: getCell(row, ["個案類型"]) ?? "",
+    caseType: getCell(row, ["case_type", "個案類型"]) ?? "",
     name,
-    age: parseAge(getCell(row, ["年齡"])),
-    nationalId: getCell(row, ["身分證號", "身分證字號", "身分證"]),
-    householdDistrict: getCell(row, ["戶籍行政區", "戶籍區"]),
-    householdVillage: getCell(row, ["戶籍里"]),
+    age: parseAge(getCell(row, ["age", "年齡"])),
+    nationalId: getCell(row, ["id_number", "身分證號", "身分證字號", "身分證"]),
+    householdDistrict: getCell(row, ["household_district", "戶籍行政區", "戶籍區", "district"]),
+    householdVillage: getCell(row, ["village", "household_village", "戶籍里"]),
     visitDistrict,
     visitAddress,
-    primaryPhone: getCell(row, ["主要電話", "電話", "手機"]),
-    backupPhone: getCell(row, ["備用電話"]),
-    contactNote: getCell(row, ["聯絡人備註"]),
-    visitStatus: getCell(row, ["訪視狀態"]),
-    assignmentPriority: getCell(row, ["派案優先級", "風險等級"]),
-    note: getCell(row, ["備註"]),
-    dataQualityFlag: getCell(row, ["資料品質標記"]),
+    primaryPhone: getCell(row, ["primary_phone", "主要電話", "電話", "手機"]),
+    backupPhone: getCell(row, ["secondary_phone", "備用電話"]),
+    contactNote: getCell(row, ["contact_note", "聯絡人備註"]),
+    visitStatus: getCell(row, ["visit_status", "訪視狀態"]),
+    assignmentPriority: getCell(row, ["dispatch_priority", "派案優先級", "風險等級"]),
+    note: getCell(row, ["remark", "備註"]),
+    dataQualityFlag: getCell(row, ["data_quality_tag", "資料品質標記"]),
     raw: row,
   };
 }
@@ -308,22 +362,24 @@ function deriveBirthDate(age: number | null) {
 }
 
 function mapPriorityToRiskLevel(priority: string | null) {
-  if (priority === "緊急" || priority === "高") return "high";
-  if (priority === "中高" || priority === "中") return "medium";
-  if (priority === "一般" || priority === "低") return "low";
+  if (priority === "緊急" || priority === "高" || priority === "urgent") return "high";
+  if (priority === "中高" || priority === "中" || priority === "medium_high") return "medium";
+  if (priority === "一般" || priority === "低" || priority === "low") return "low";
   return priority ?? "medium";
 }
 
 function mapVisitStatus(status: string | null) {
-  if (!status || status === "待派案") return "pending";
+  if (!status || status === "待派案" || status === "pending_dispatch") return "pending";
   if (status.includes("已派")) return "assigned";
   if (status.includes("完成")) return "completed";
   return "pending";
 }
 
 function mapSolitaryStatus(caseType: string, note: string | null) {
-  if (caseType === "獨老") return note?.includes("獨居資格") ? "獨居資格待確認" : "獨居";
-  if (caseType === "中老") return "中老訪視候選";
+  if (caseType === "獨老" || caseType === "solitary_elder") {
+    return note?.includes("獨居資格") ? "獨居資格待確認" : "獨居";
+  }
+  if (caseType === "中老" || caseType === "middle_elder") return "中老訪視候選";
   return caseType || null;
 }
 

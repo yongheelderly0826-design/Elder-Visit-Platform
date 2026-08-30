@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 
 const publicRoutes = ["/", "/login", "/register", "/offline"];
 const supabaseCookiePrefixes = ["sb-", "supabase-auth-token"];
@@ -19,11 +20,12 @@ export function middleware(request: NextRequest) {
   }
 
   const hasDemoSession = Boolean(request.cookies.get("demo_role")?.value);
+  const hasManagerSession = Boolean(decodeManagerSession(request.cookies.get(SESSION_COOKIE)?.value));
   const hasSupabaseSession = request.cookies
     .getAll()
     .some((cookie) => supabaseCookiePrefixes.some((prefix) => cookie.name.startsWith(prefix)));
 
-  if (!hasDemoSession && !hasSupabaseSession) {
+  if (!hasDemoSession && !hasManagerSession && !hasSupabaseSession) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);

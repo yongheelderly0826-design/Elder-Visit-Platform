@@ -21,7 +21,8 @@
     "gas:push": "cd gas && npx clasp push",
     "gas:deploy": "cd gas && npx clasp deploy --description v1",
     "gas:bootstrap": "cd gas && npx clasp run bootstrapPlatform",
-    "setup:google": "bash scripts/setup-google.sh"
+    "setup:google": "bash scripts/setup-google.sh",
+    "import:60": "node scripts/import-60-cases-to-gas.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
