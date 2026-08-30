@@ -19,6 +19,13 @@ The product source of truth is:
 - `docs/spec-v2.4.pdf`
 - `docs/spec-v2.4-extracted.md`
 
+The **operational architecture** for 永和區落地 is:
+
+- `docs/architecture/README.md` — GitHub + Google Sheets + GAS stack
+- `docs/sheets/schema-overview.md` — spreadsheet column definitions
+- `gas/` — Apps Script backend (clasp-deployed)
+- `lib/gas-client.ts` — Next.js → GAS API client
+
 ## Standard Roles
 
 - **Planner / Lead** — frame the goal, affected workflow, acceptance criteria, and risks.
@@ -83,8 +90,21 @@ npm run task:close -- --file docs/tasks/YYYY-MM-DD-short-task-slug.md
 
 這會產生 `.closeout.md`，協助檢查是否還有未完成項目、空白佔位內容，或需要回寫的經驗。
 
+## Architecture Rules (永和區)
+
+- **Operational data** lives in Google Sheets; do not duplicate master data in Supabase unless Phase 2 migration is active.
+- **Business logic** for import, validation, encoding, and MOHW export belongs in `gas/src/modules/`.
+- **GitHub account** `yongheelderly0826-design` owns the repo; GAS deploys via clasp from `gas/`.
+- Use **訪查員** (not 志工/訪員) in user-facing copy and sheet names.
+- Deploy GAS with `bash scripts/deploy-gas.sh`; never commit `gas/.clasp.json`.
+
 ## Key Project References
 
+- `docs/architecture/README.md`
+- `docs/architecture/gas-api.md`
+- `docs/architecture/deployment.md`
+- `docs/sheets/schema-overview.md`
+- `gas/README.md`
 - `docs/development-plan-v2.4.md`
 - `docs/rbac-auth-plan.md`
 - `docs/new-taipei-care-form-workflow.md`

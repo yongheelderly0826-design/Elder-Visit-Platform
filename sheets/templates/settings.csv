@@ -1,0 +1,7 @@
+key,value,description
+workspace_id,WS-YH-115,工作區ID
+district,永和區,行政區
+fiscal_year,115,年度
+encode_prefix,YH-115,去識別化前綴
+mohw_account,,衛福部平台帳號
+gas_version,1.0.0,GAS版本

@@ -1,0 +1,1 @@
+attendance_id,visitor_id,assignment_id,session_date,checkin_at,checkout_at,checkin_lat,checkin_lng,checkout_lat,checkout_lng,session_type,duration_minutes

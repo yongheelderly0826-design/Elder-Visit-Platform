@@ -40,3 +40,7 @@ tsconfig.tsbuildinfo
 .open-next/
 .wrangler/
 cloudflare-env.d.ts
+
+# Google Apps Script (clasp)
+gas/.clasp.json
+gas/.claspignore

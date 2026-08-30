@@ -1,70 +1,111 @@
-# Elder Visit Platform
+# Elder Visit Platform — 永和區獨居長者訪查管理平台
 
-## 繁體中文說明
+> **GitHub**：[`yongheelderly0826-design/Elder-Visit-Platform`](https://github.com/yongheelderly0826-design/Elder-Visit-Platform)  
+> **第一落地**：新北市永和區公所 · 115 年獨居長者訪查
 
-這個專案目前不只是一個老人訪視系統，也已經內建一套可重複使用的 AI 協作開發流程。  
-如果你要開始新任務，建議先從 `task:new`、`task:orchestrate`、`task:close` 這三個指令開始。
+---
 
-獨居長者訪查管理平台 v2.4
+## 管理架構
 
-This project follows the stored system specification in `docs/spec-v2.4.pdf` and `docs/spec-v2.4-extracted.md`.
+本專案以 **GitHub + Google Sheets + Google Apps Script（GAS）** 為核心管理架構：
 
-## Stack
+```
+GitHub（規格 · 原始碼 · 版本控管）
+    ↓ clasp push
+Google Apps Script（API · 檢核 · 匯出 · 自動化）
+    ↓ SpreadsheetApp
+Google Sheets（營運資料庫 · 承辦可直接管理）
+    ↓ fetch API
+Next.js PWA（訪查員行動端 + 管理後台）
+```
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- shadcn/ui-compatible components
-- Supabase
-- PostgreSQL
-- PWA-ready structure
+| 層級 | 目錄 | 說明 |
+|------|------|------|
+| 架構文件 | [`docs/architecture/`](docs/architecture/README.md) | 三層架構、API、部署 |
+| 試算表定義 | [`docs/sheets/`](docs/sheets/schema-overview.md) | 12 個工作表欄位 |
+| GAS 後端 | [`gas/`](gas/README.md) | Web App API 原始碼 |
+| 試算表範本 | [`sheets/templates/`](sheets/templates/) | CSV 欄位範本 |
+| 前端 | [`app/`](app/) | Next.js PWA |
 
-## Development
+---
 
-Install dependencies after Node.js and npm are available:
+## 業務流程
+
+```
+訪查員建檔／發證 → 派案 → 簽到 → 關懷表登打／空訪 → 簽退
+    → 稽核 → 匯出衛福部 xlsx → 車馬費核銷
+```
+
+---
+
+## 快速開始
+
+### 1. 前端開發
 
 ```bash
 npm install
+cp .env.example .env.local
+# 填入 GAS_WEB_APP_URL、GAS_API_TOKEN
 npm run dev
 ```
 
-Create `.env.local` from `.env.example` before connecting Supabase.
-
-## Deployment
-
-See `DEPLOYMENT.md` for the Vercel + Supabase publishing checklist.
-
-## Project Operating Documents
-
-- `AGENTS.md` — agentic development workflow and role rules
-- `LESSONS.md` — durable project lessons
-- `DESIGN-SYSTEM.md` — current visual language and review criteria
-- `RELEASE-CHECKLIST.md` — release verification and deployment boundary checks
-- `docs/task-brief-template.md` — standard task kickoff brief
-- `docs/pwa-home-screen-review.md` — mobile home-screen icon and installability review
-
-## Start a New Task
-
-Generate a fresh task brief:
+### 2. GAS 部署
 
 ```bash
-npm run task:new -- --title "Improve missed-visit flow" --slug improve-missed-visit-flow --ui
+npm install -g @google/clasp
+cd gas && cp .clasp.json.example .clasp.json
+# 編輯 scriptId → clasp login → clasp push
+bash scripts/deploy-gas.sh
 ```
 
-Useful flags:
+詳見 [`docs/architecture/deployment.md`](docs/architecture/deployment.md)。
 
-- `--ui` — include Design / UX review
-- `--pwa` — include App Icon / PWA review
-- `--release` — include release-state checks
-
-Then generate the companion orchestration plan:
+### 3. 初始化試算表
 
 ```bash
-npm run task:orchestrate -- --file docs/tasks/2026-05-17-roll-out-v6-workflow.md
+bash scripts/init-sheets.sh
 ```
 
-任務完成前，產生收尾檢查：
+---
+
+## Stack
+
+| 元件 | 技術 |
+|------|------|
+| 版本控管 | GitHub (`yongheelderly0826-design`) |
+| 營運資料 | Google Sheets |
+| 業務邏輯 | Google Apps Script |
+| 前端 | Next.js App Router + TypeScript + Tailwind |
+| 選用 DB | Supabase PostgreSQL（Phase 2） |
+
+---
+
+## 專案文件
+
+| 文件 | 說明 |
+|------|------|
+| [`docs/architecture/README.md`](docs/architecture/README.md) | 架構總覽 |
+| [`docs/spec-v2.4-extracted.md`](docs/spec-v2.4-extracted.md) | 產品規格 v2.4 |
+| [`docs/new-taipei-care-form-workflow.md`](docs/new-taipei-care-form-workflow.md) | 關懷表流程 |
+| [`AGENTS.md`](AGENTS.md) | AI 協作開發手冊 |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Vercel 部署 |
+
+---
+
+## 開發任務
 
 ```bash
-npm run task:close -- --file docs/tasks/2026-05-17-roll-out-v6-workflow.md
+npm run task:new -- --title "任務標題" --slug task-slug --ui
+npm run task:orchestrate -- --file docs/tasks/YYYY-MM-DD-task-slug.md
+npm run task:close -- --file docs/tasks/YYYY-MM-DD-task-slug.md
 ```
+
+---
+
+## 帳號
+
+| 用途 | 帳號 |
+|------|------|
+| GitHub 管理 | `yongheelderly0826-design` |
+| Google 部署 | 同上綁定之 Google 帳號 |
+| 衛福部 SFAA 測試 | 區公所指定（測試後請換密碼） |
