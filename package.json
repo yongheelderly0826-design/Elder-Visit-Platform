@@ -16,7 +16,12 @@
     "db:bundle": "node scripts/build-supabase-sql-bundle.mjs",
     "task:new": "node scripts/create-task-brief.mjs",
     "task:orchestrate": "node scripts/orchestrate-task.mjs",
-    "task:close": "node scripts/close-task.mjs"
+    "task:close": "node scripts/close-task.mjs",
+    "gas:login": "cd gas && npx clasp login",
+    "gas:push": "cd gas && npx clasp push",
+    "gas:deploy": "cd gas && npx clasp deploy --description v1",
+    "gas:bootstrap": "cd gas && npx clasp run bootstrapPlatform",
+    "setup:google": "bash scripts/setup-google.sh"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
@@ -38,6 +43,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
+    "@google/clasp": "^3.4.1",
     "@opennextjs/cloudflare": "^1.19.11",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",

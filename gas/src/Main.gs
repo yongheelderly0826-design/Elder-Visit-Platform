@@ -39,11 +39,3 @@ function jsonResponse_(payload) {
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
 }
-
-/**
- * 初始化試算表結構（clasp run initSpreadsheet）
- */
-function initSpreadsheet() {
-  SheetHelper.initAllSheets();
-  Logger.log('Spreadsheet initialized.');
-}
