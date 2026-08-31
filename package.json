@@ -22,6 +22,7 @@
     "gas:deploy": "cd gas && npx clasp deploy --description v1",
     "gas:bootstrap": "cd gas && npx clasp run bootstrapPlatform",
     "setup:google": "bash scripts/setup-google.sh",
+    "install:client": "node scripts/installer/install.mjs",
     "import:60": "node scripts/import-60-cases-to-gas.mjs"
   },
   "dependencies": {

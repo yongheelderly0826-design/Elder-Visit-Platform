@@ -44,6 +44,10 @@ cloudflare-env.d.ts
 # Google Apps Script (clasp)
 gas/.clasp.json
 gas/.claspignore
+
+# Client installer output (credentials, handoff)
+installer/output/
+installer/clients/*.local.json
 gas/.local-config.json
 gas/src/LocalConfig.gs
 gas/*.xlsx

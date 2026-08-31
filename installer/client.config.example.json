@@ -1,0 +1,38 @@
+{
+  "$schema": "./client.config.schema.json",
+  "clientId": "yonghe-115",
+  "clientName": "新北市永和區公所",
+  "clientCode": "YH",
+  "district": "永和區",
+  "fiscalYear": "115",
+  "workspaceId": "WS-YH-115",
+  "encodePrefix": "YH-115",
+  "spreadsheetName": "永和區_115年_獨居長者訪查_主檔",
+  "google": {
+    "accountEmail": "yongheelderly0826@gmail.com",
+    "gasProjectTitle": "永和區訪查平台 GAS"
+  },
+  "access": {
+    "allowedEmails": ["yongheelderly0826@gmail.com"],
+    "ownerEmails": ["yongheelderly0826@gmail.com"]
+  },
+  "vercel": {
+    "enabled": true,
+    "teamSlug": "yongheelderly0826-design",
+    "projectName": "elder-visit-platform",
+    "productionUrl": "https://elder-visit-platform-ruby.vercel.app"
+  },
+  "github": {
+    "enabled": false,
+    "org": "yongheelderly0826-design",
+    "repoName": "Elder-Visit-Platform",
+    "private": true
+  },
+  "handoff": {
+    "contactName": "承辦人姓名",
+    "contactEmail": "yongheelderly0826@gmail.com",
+    "contractRef": "合約編號（選填）",
+    "supportUntil": "2026-12-31"
+  },
+  "notes": "複製為 installer/clients/<clientId>.json 後執行 npm run install:client"
+}
