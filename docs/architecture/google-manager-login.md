@@ -1,18 +1,23 @@
-# 永和區管理者登入（不需 OAuth）
+# 永和區管理者登入（不需 OAuth、不需 Vercel）
 
-永和區承辦人用 **指定 Google 帳號（Gmail）** 進入管理後台。  
-營運資料存在同一 Google 帳號的試算表，**不需要** Google Cloud OAuth Client ID / Secret。
+兩位同事都使用同一組帳號：
+
+- GitHub：`yongheelderly0826-design`
+- Google／登入：`yongheelderly0826@gmail.com`
+
+營運資料只有一份（Google 試算表）；網站各自本機跑。完整步驟見：  
+[`shared-local-team.md`](./shared-local-team.md)
 
 ---
 
 ## 管理者怎麼用
 
-1. 開啟 `/login`
-2. 在「永和區管理者登入」輸入允許的 Gmail（預設 `yongheelderly0826@gmail.com`）
-3. 按 **以管理者進入**
+1. 本機執行 `npm run dev`
+2. 開啟 http://localhost:3000/login
+3. 輸入 `yongheelderly0826@gmail.com` → **以管理者進入**
 4. 進入 `/dashboard` 管理個案、派案、匯入、報表
 
-同一 Google 帳號也可直接開啟試算表檢視／編輯：  
+同一 Google 帳號也可直接開啟試算表：  
 https://docs.google.com/spreadsheets/d/17obWeUCT6HXSBD59Hnb2fsrCZdXHzZE0cT0jykjuquY/edit
 
 ---
@@ -26,7 +31,7 @@ GOOGLE_ALLOWED_EMAILS=yongheelderly0826@gmail.com
 GOOGLE_OWNER_EMAILS=yongheelderly0826@gmail.com
 ```
 
-新增承辦人：在 `GOOGLE_ALLOWED_EMAILS` 用逗號加上其 Gmail，重新啟動即可。
+兩人共用同一帳號時，不必再加其他 Gmail。
 
 ---
 
