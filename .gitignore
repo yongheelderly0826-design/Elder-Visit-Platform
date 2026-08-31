@@ -47,3 +47,4 @@ gas/.claspignore
 gas/.local-config.json
 gas/src/LocalConfig.gs
 gas/*.xlsx
+.vercel

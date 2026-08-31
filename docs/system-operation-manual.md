@@ -204,7 +204,7 @@
 
 | 文件 | 路徑／位置 |
 |------|------------|
-| 本操作說明書 | `docs/系統操作說明書.md` |
+| 本操作說明書 | `docs/system-operation-manual.md` |
 | 架構總覽 | `docs/architecture/README.md` |
 | 試算表欄位 | `docs/sheets/schema-overview.md` |
 | 管理者登入 | `docs/architecture/google-manager-login.md` |

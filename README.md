@@ -21,7 +21,7 @@ Next.js PWA（訪查員行動端 + 管理後台）
 
 | 層級 | 目錄 | 說明 |
 |------|------|------|
-| **操作說明書** | [`docs/系統操作說明書.md`](docs/系統操作說明書.md) | 承辦／訪員日常操作（私有倉庫） |
+| **操作說明書** | [`docs/system-operation-manual.md`](docs/system-operation-manual.md) | 承辦／訪員日常操作（私有倉庫） |
 | 架構文件 | [`docs/architecture/`](docs/architecture/README.md) | 三層架構、API、部署 |
 | 試算表定義 | [`docs/sheets/`](docs/sheets/schema-overview.md) | 12 個工作表欄位 |
 | GAS 後端 | [`gas/`](gas/README.md) | Web App API 原始碼 |

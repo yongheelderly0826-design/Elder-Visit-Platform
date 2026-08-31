@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-cp "$ROOT/docs/系統操作說明書.md" "$TMP/README.md"
+cp "$ROOT/docs/system-operation-manual.md" "$TMP/README.md"
 cd "$TMP"
 git init -b main
 git add README.md
