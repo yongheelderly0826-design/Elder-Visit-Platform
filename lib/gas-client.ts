@@ -27,6 +27,10 @@ async function gasFetch<T>(
 
   const url = new URL(GAS_URL);
   url.searchParams.set("action", action);
+  // GAS Web App GET 無法可靠讀取自訂 HTTP headers，需以 query 傳 token。
+  if (GAS_TOKEN) {
+    url.searchParams.set("token", GAS_TOKEN);
+  }
   if (options.params) {
     Object.entries(options.params).forEach(([k, v]) => {
       url.searchParams.set(k, v);
