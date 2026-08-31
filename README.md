@@ -23,7 +23,7 @@ Next.js PWA（訪查員行動端 + 管理後台）
 |------|------|------|
 | **操作說明書** | [`docs/system-operation-manual.md`](docs/system-operation-manual.md) | 承辦／訪員日常操作（私有倉庫） |
 | **架構說明書** | [`docs/system-architecture.md`](docs/system-architecture.md) | 運作架構圖與部署拓撲 |
-| **一鍵安裝包** | [`docs/product/installer-kit.md`](docs/product/installer-kit.md) | 客戶架站 SOP · `npm run install:client` |
+| **一鍵安裝包** | [`docs/product/installer-kit.md`](docs/product/installer-kit.md) | 客戶架站 SOP · [`/installer`](http://localhost:3000/installer) Web 精靈 |
 | 架構文件 | [`docs/architecture/`](docs/architecture/README.md) | 三層架構、API、部署 |
 | 試算表定義 | [`docs/sheets/`](docs/sheets/schema-overview.md) | 12 個工作表欄位 |
 | GAS 後端 | [`gas/`](gas/README.md) | Web App API 原始碼 |

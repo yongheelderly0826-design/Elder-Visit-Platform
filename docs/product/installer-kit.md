@@ -126,9 +126,9 @@ flowchart LR
 
 | 階段 | 能力 |
 |------|------|
-| **v1（現在）** | 一客戶一組 Sheet + GAS + Vercel 專案 |
-| **v2** | 安裝腳本 + GitHub Template 自動 fork 私有倉庫 |
-| **v3** | 安裝精靈 Web UI（填表 → 背景跑 install） |
+| **v1** | 一客戶一組 Sheet + GAS + Vercel 專案 |
+| **v2（已完成）** | `GH_TOKEN` 自動建立私有 GitHub 倉庫 |
+| **v3（已完成）** | `/installer` Web 精靈填表 → 背景安裝 |
 | **v4** | 多工作區 SaaS（單一 GAS，多 `workspace_id`） |
 
 ---
@@ -144,6 +144,14 @@ npm run install:client -- --config installer/clients/<id>.json --resume
 
 # 預覽步驟（不實際執行）
 npm run install:client -- --config installer/clients/<id>.json --dry-run
+
+# Web 安裝精靈（本機 npm run dev）
+open http://localhost:3000/installer
+
+# 環境變數（.env.local）
+# GH_TOKEN=ghp_xxx          # v2 GitHub 私有倉庫
+# INSTALLER_ENABLED=true    # 正式環境啟用精靈
+# INSTALLER_RUNNER=local    # 允許背景 spawn（Vercel 請設 disabled）
 
 # 僅更新 GAS
 npm run gas:push && npm run gas:deploy

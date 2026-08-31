@@ -23,9 +23,10 @@
     "productionUrl": "https://elder-visit-platform-ruby.vercel.app"
   },
   "github": {
-    "enabled": false,
+    "enabled": true,
     "org": "yongheelderly0826-design",
-    "repoName": "Elder-Visit-Platform",
+    "templateRepo": "yongheelderly0826-design/Elder-Visit-Platform",
+    "repoName": "elder-visit-yonghe-115",
     "private": true
   },
   "handoff": {
