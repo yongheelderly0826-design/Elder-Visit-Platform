@@ -8,8 +8,11 @@
 | Google 試算表／GAS | `yongheelderly0826@gmail.com` |
 | 網站登入 | `yongheelderly0826@gmail.com` |
 
+**公開入口（GitHub Pages）**  
+https://yongheelderly0826-design.github.io/Elder-Visit-Platform/
+
 **資料只有一份**：Google 試算表  
-**網站**：各自電腦本機跑（不部署到 Vercel）
+**完整後台**：各自電腦本機跑 `npm run dev`（不部署 Vercel）
 
 ```
 同事 A 本機 npm run dev  ──┐

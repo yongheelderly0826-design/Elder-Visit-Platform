@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>永和區獨居長者訪查</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&family=Noto+Serif+TC:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="login-view" class="stage">
+      <section class="hero">
+        <p class="brand">永和區<br />獨居長者訪查</p>
+        <p class="lede">承辦人入口。資料寫在同一份 Google 試算表。</p>
+        <div class="panel">
+          <label>
+            Google 帳號
+            <input id="email" type="email" autocomplete="username" />
+          </label>
+          <label>
+            GAS API Token
+            <input id="token" type="password" autocomplete="current-password" placeholder="與 .env.local 相同" />
+          </label>
+          <button class="cta" id="enter" type="button">進入管理</button>
+          <p class="msg" id="login-msg"></p>
+        </div>
+      </section>
+    </main>
+
+    <section id="app-view" class="app hidden">
+      <div class="top">
+        <div>
+          <p class="brand" style="font-size: 1.8rem">永和區獨居長者訪查</p>
+          <p class="lede" id="who"></p>
+        </div>
+        <div>
+          <a class="ghost" id="sheet-link" href="#" target="_blank" rel="noreferrer">開啟試算表</a>
+          ·
+          <button class="ghost" id="logout" type="button">登出</button>
+        </div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><b id="m-cases">—</b><span>個案</span></div>
+        <div class="metric"><b id="m-assign">—</b><span>派案</span></div>
+        <div class="metric"><b id="m-rate">—</b><span>完成率</span></div>
+        <div class="metric"><b id="m-miss">—</b><span>空訪</span></div>
+      </div>
+      <p class="msg" id="app-msg"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>編號</th>
+              <th>姓名</th>
+              <th>類型</th>
+              <th>訪視里</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="case-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

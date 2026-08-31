@@ -38,7 +38,16 @@ Next.js PWA（訪查員行動端 + 管理後台）
 
 ---
 
-## 快速開始
+## 登入入口
+
+| 入口 | 網址 |
+|------|------|
+| **GitHub Pages（給兩位同事）** | https://yongheelderly0826-design.github.io/Elder-Visit-Platform/ |
+| 本機完整後台 | http://localhost:3000/login |
+
+Pages 是靜態入口，經 GAS 讀同一份試算表。第一次請貼上 `GAS_API_TOKEN`。
+
+---
 
 ### 1. 前端開發
 

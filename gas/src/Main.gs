@@ -23,19 +23,26 @@ function handleRequest_(e, method) {
     }
 
     var result = ApiRouter.dispatch(action, e.parameter || {}, body);
-    return jsonResponse_({ ok: true, data: result, error: null });
+    return jsonResponse_({ ok: true, data: result, error: null }, e);
   } catch (err) {
     var code = err.code || 'INTERNAL_ERROR';
     return jsonResponse_({
       ok: false,
       data: null,
       error: { code: code, message: err.message || String(err) },
-    });
+    }, e);
   }
 }
 
-function jsonResponse_(payload) {
+function jsonResponse_(payload, e) {
+  var json = JSON.stringify(payload);
+  var callback = e && e.parameter && e.parameter.callback;
+  if (callback && /^[A-Za-z0-9_]+$/.test(callback)) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
   return ContentService
-    .createTextOutput(JSON.stringify(payload))
+    .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
 }
