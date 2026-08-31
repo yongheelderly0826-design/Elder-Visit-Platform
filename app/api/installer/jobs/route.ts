@@ -42,9 +42,9 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = (await request.json()) as CreateInstallerJobPayload;
-  if (!payload.clientId || !payload.clientName || !payload.district) {
+  if (!payload.district || !payload.googleAccountEmail) {
     return NextResponse.json(
-      { error: { code: "VALIDATION", message: "請填寫 clientId、clientName、district" } },
+      { error: { code: "VALIDATION", message: "請填寫行政區與承辦 Gmail" } },
       { status: 400 },
     );
   }

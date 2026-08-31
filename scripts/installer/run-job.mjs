@@ -23,6 +23,7 @@ import {
   preflight,
   phaseGithub,
   phaseGas,
+  phaseGasWebApp,
   resolveGasWebAppUrl,
   writeEnvLocal,
   loadEnvLocal,
@@ -99,16 +100,24 @@ async function runInstall(cfg, options) {
 
     let gasWebAppUrl = resolveGasWebAppUrl(state) || job?.gasWebAppUrl || "";
     if (!gasWebAppUrl) {
-      if (job) {
-        updateJob(job, {
-          status: "waiting_gas",
-          phase: "gas_webapp",
-          message:
-            "請在 script.google.com 部署 Web App，然後在安裝精靈填入 URL 並按「繼續安裝」",
-        });
+      if (job) updateJob(job, { phase: "gas_webapp", message: "自動部署 GAS Web App" });
+      try {
+        gasWebAppUrl = await phaseGasWebApp(logLine, dryRun);
+        state = { ...state, bootstrap, gasWebAppUrl };
+        saveState(clientId, state);
+        if (job) updateJob(job, { gasWebAppUrl });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (job) {
+          updateJob(job, {
+            status: "waiting_gas",
+            phase: "gas_webapp",
+            message: `自動部署失敗：${message}。請手動貼上 Web App URL 後繼續。`,
+          });
+        }
+        logLine(`⏸ 自動部署失敗，改為等待手動 URL：${message}`);
+        return { status: "waiting_gas", bootstrap, github };
       }
-      logLine("⏸ 等待 GAS Web App URL（--resume 或 Web 精靈繼續）");
-      return { status: "waiting_gas", bootstrap, github };
     }
 
     if (job) updateJob(job, { phase: "env", gasWebAppUrl });

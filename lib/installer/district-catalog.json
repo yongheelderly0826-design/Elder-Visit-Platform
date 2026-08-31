@@ -1,0 +1,20 @@
+{
+  "永和區": { "slug": "yonghe", "code": "YH" },
+  "中和區": { "slug": "zhonghe", "code": "ZH" },
+  "板橋區": { "slug": "banqiao", "code": "BQ" },
+  "新莊區": { "slug": "xinzhuang", "code": "XZ" },
+  "三重區": { "slug": "sanchong", "code": "SC" },
+  "新店區": { "slug": "xindian", "code": "XD" },
+  "土城區": { "slug": "tucheng", "code": "TC" },
+  "蘆洲區": { "slug": "luzhou", "code": "LZ" },
+  "樹林區": { "slug": "shulin", "code": "SL" },
+  "鶯歌區": { "slug": "yingge", "code": "YG" },
+  "三峽區": { "slug": "sanxia", "code": "SX" },
+  "淡水區": { "slug": "tamsui", "code": "TS" },
+  "汐止區": { "slug": "xizhi", "code": "XZHI" },
+  "林口區": { "slug": "linkou", "code": "LK" },
+  "五股區": { "slug": "wugu", "code": "WG" },
+  "泰山區": { "slug": "taishan", "code": "TA" },
+  "八里區": { "slug": "bali", "code": "BL" },
+  "瑞芳區": { "slug": "ruifang", "code": "RF" }
+}

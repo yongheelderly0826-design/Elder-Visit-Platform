@@ -1,45 +1,37 @@
-# 客戶一鍵安裝包（Installer Kit）
+# 客戶一鍵安裝包（懶人包）
+
+## 最快用法（一次到位）
+
+第一次在這台電腦：
+
+```bash
+npm run gas:login
+npx vercel login
+```
+
+`.env.local` 放好 `GH_TOKEN`。之後每案只要：
+
+```bash
+npm run install:oneclick -- --district 板橋區 --email office@gmail.com
+```
+
+或開 Web 精靈（只需行政區 + Gmail）：
+
+```bash
+npm run dev
+# http://localhost:3000/installer
+```
+
+會自動完成：私有 GitHub 倉庫、試算表、GAS Web App、Vercel、交接包。
 
 ## v2 · GitHub 私有倉庫
 
-在 `.env.local` 設定：
+`.env.local`：
 
 ```env
 GH_TOKEN=ghp_xxxxxxxx
 ```
 
-在 `client.config.json` 啟用：
-
-```json
-"github": {
-  "enabled": true,
-  "org": "yongheelderly0826-design",
-  "templateRepo": "yongheelderly0826-design/Elder-Visit-Platform",
-  "repoName": "elder-visit-banqiao-115",
-  "private": true
-}
-```
-
-> 樣板倉庫需在 GitHub Settings → 勾選 **Template repository**。
-
-## v3 · Web 安裝精靈
-
-```bash
-# .env.local
-INSTALLER_ENABLED=true
-INSTALLER_RUNNER=local
-GH_TOKEN=ghp_xxx
-
-npm run dev
-# 開啟 http://localhost:3000/installer
-```
-
-流程：填表 → 自動建 GitHub 私有 repo → GAS + 試算表 → 等待貼 GAS Web App URL → Vercel + 交接包。
-
-## CLI（仍可用）
-
-```bash
-npm run install:client -- --config installer/clients/demo.json
-```
+樣板倉庫請勾選 **Template repository**。
 
 詳見 [`docs/product/installer-kit.md`](../docs/product/installer-kit.md)。

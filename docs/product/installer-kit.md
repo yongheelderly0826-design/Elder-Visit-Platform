@@ -20,24 +20,28 @@
 
 ```mermaid
 flowchart LR
-  A["① 簽約收款"] --> B["② 填 client.config"]
-  B --> C["③ npm run install:client"]
-  C --> D["④ GAS Web App 部署"]
-  D --> E["⑤ --resume 完成 Vercel"]
-  E --> F["⑥ 交付 handoff.md"]
-  F --> G["⑦ 驗收簽收"]
+  A["① 簽約"] --> B["② 行政區 + Gmail"]
+  B --> C["③ npm run install:oneclick"]
+  C --> D["④ 自動完成 GitHub / Sheet / GAS / Vercel"]
+  D --> E["⑤ 交付 handoff.md"]
+  E --> F["⑥ 驗收收款"]
 ```
 
 | 階段 | 你做的事 | 耗時（估） |
 |------|----------|------------|
-| 簽約 | 確認行政區、年度、承辦 Gmail、網域偏好 | 商務 |
-| 設定 | 複製 `installer/clients/<id>.json` | 10 分鐘 |
-| 安裝 | `install:client` 自動建 Sheet + GAS | 15 分鐘 |
-| Web App | 瀏覽器點 3 下部署 GAS | 5 分鐘 |
-| 上線 | `--resume` 寫入 Vercel 環境變數 + 部署 | 10 分鐘 |
-| 交接 | 寄 `handoff.md`、操作／架構說明書連結 | 5 分鐘 |
+| 簽約 | 確認行政區、年度、承辦 Gmail | 商務 |
+| 一鍵安裝 | `install:oneclick --district 板橋區 --email …` | 10–20 分鐘 |
+| 交接 | 寄 `handoff.md` | 5 分鐘 |
 
-**合計技術時間：約 45 分鐘／案**（不含客戶提供 Gmail 帳號等待）。
+**合計技術時間：約 15–25 分鐘／案。**
+
+第一次在這台電腦需先登入一次（之後都不用）：
+
+```bash
+npm run gas:login
+npx vercel login
+# .env.local 放入 GH_TOKEN
+```
 
 ---
 
@@ -45,16 +49,18 @@ flowchart LR
 
 | 步驟 | 自動 | 說明 |
 |------|------|------|
+| 從行政區推導客戶 ID | ✅ | `suggestClientFromDistrict` |
+| 建立私有 GitHub 倉庫 | ✅ | `GH_TOKEN` + Template |
 | 建立試算表 12 Tab | ✅ | `bootstrapForClient` |
 | 產生 API Token | ✅ | GAS Script Properties |
 | 推送 GAS 程式碼 | ✅ | `clasp push` |
-| GAS Web App 部署 | ⚠️ | Google 需瀏覽器授權，約 2 分鐘人工 |
-| Vercel 環境變數 + 部署 | ✅ | 需先 `vercel login` |
-| GitHub 私有倉庫 | 🔜 | 需 `GH_TOKEN`（Phase 2） |
+| 部署 GAS Web App | ✅ | Script API / `clasp deploy`（失敗才改手動） |
+| Vercel 環境變數 + 部署 | ✅ | 需已 `vercel login` |
 | 交接文件 | ✅ | `handoff.md` |
+| Google / Vercel 第一次登入 | 一次性 | 每台電腦做一次 |
 | 收款／合約 | — | 商務流程 |
 
-> **無法 100% 零點擊的原因**：Google OAuth、GAS Web App 首次部署需帳號持有人授權，這是 Google 安全政策，無法用腳本完全繞過。
+> **第一次**在這台電腦要登入 Google（`npm run gas:login`）與 Vercel。之後每案只需行政區 + Gmail。若 GAS 自動部署因權限失敗，精靈會停在「貼 URL」當備援。
 
 ---
 
@@ -129,6 +135,7 @@ flowchart LR
 | **v1** | 一客戶一組 Sheet + GAS + Vercel 專案 |
 | **v2（已完成）** | `GH_TOKEN` 自動建立私有 GitHub 倉庫 |
 | **v3（已完成）** | `/installer` Web 精靈填表 → 背景安裝 |
+| **懶人包** | 行政區 + Gmail → `install:oneclick` 自動部署 GAS Web App |
 | **v4** | 多工作區 SaaS（單一 GAS，多 `workspace_id`） |
 
 ---
@@ -136,7 +143,13 @@ flowchart LR
 ## 8. 指令參考
 
 ```bash
-# 安裝（首次）
+# 安裝（懶人包，只需兩個參數）
+npm run install:oneclick -- --district 板橋區 --email office@gmail.com
+
+# Web 精靈
+open http://localhost:3000/installer
+
+# 進階：完整設定檔
 npm run install:client -- --config installer/clients/<id>.json
 
 # 完成 GAS Web App 後續跑
@@ -175,4 +188,5 @@ bash scripts/setup-vercel-ruby-env.sh
 
 | 日期 | 版本 |
 |------|------|
+| 2026-08-31 | 1.1 懶人包：自動部署 GAS Web App + `install:oneclick` |
 | 2026-08-31 | 1.0 初版 Installer Kit |

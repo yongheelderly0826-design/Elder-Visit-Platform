@@ -23,6 +23,7 @@
     "gas:bootstrap": "cd gas && npx clasp run bootstrapPlatform",
     "setup:google": "bash scripts/setup-google.sh",
     "install:client": "node scripts/installer/install.mjs",
+    "install:oneclick": "node scripts/installer/oneclick.mjs",
     "import:60": "node scripts/import-60-cases-to-gas.mjs"
   },
   "dependencies": {

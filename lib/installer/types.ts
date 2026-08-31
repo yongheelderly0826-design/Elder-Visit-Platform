@@ -75,13 +75,13 @@ export type InstallerJob = {
 };
 
 export type CreateInstallerJobPayload = {
-  clientId: string;
-  clientName: string;
+  clientId?: string;
+  clientName?: string;
   clientCode?: string;
   district: string;
-  fiscalYear: string;
+  fiscalYear?: string;
   googleAccountEmail: string;
-  allowedEmails: string[];
+  allowedEmails?: string[];
   ownerEmails?: string[];
   vercelTeamSlug?: string;
   vercelProjectName?: string;

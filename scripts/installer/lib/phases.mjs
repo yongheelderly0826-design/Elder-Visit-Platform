@@ -3,6 +3,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { ROOT, outputDir, statePath, ensureDir } from "./paths.mjs";
 import { setupGithubRepo } from "./github.mjs";
+import { deployGasWebApp } from "./gas-webapp.mjs";
 
 export function loadState(clientId) {
   const p = statePath(clientId);
@@ -65,7 +66,7 @@ export function phaseGas(cfg, log, dryRun) {
     const title = cfg.google?.gasProjectTitle || `${cfg.clientName} GAS`;
     appendLog(log, `建立 GAS 專案：${title}`);
     execSync(
-      `npx clasp create --type standalone --title ${JSON.stringify(title)} --rootDir src`,
+      `npx clasp create --type webapp --title ${JSON.stringify(title)} --rootDir src`,
       { cwd: gasDir, stdio: "inherit" },
     );
   } else {
@@ -105,6 +106,10 @@ export function phaseGas(cfg, log, dryRun) {
   }
 
   return bootstrapResult;
+}
+
+export async function phaseGasWebApp(log, dryRun) {
+  return deployGasWebApp((msg) => appendLog(log, msg), dryRun);
 }
 
 export function needsGasWebAppUrl(state, gasWebAppUrl) {
@@ -267,7 +272,7 @@ export function normalizeConfig(raw) {
       raw.spreadsheetName ||
       `${raw.district}_${fiscalYear}年_獨居長者訪查_主檔`,
     github: {
-      enabled: raw.github?.enabled ?? false,
+      enabled: raw.github?.enabled ?? true,
       org: raw.github?.org || "yongheelderly0826-design",
       templateRepo:
         raw.github?.templateRepo || "yongheelderly0826-design/Elder-Visit-Platform",

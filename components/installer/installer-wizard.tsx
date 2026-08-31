@@ -8,17 +8,11 @@ import { Button } from "@/components/ui/button";
 import type { CreateInstallerJobPayload, InstallerJob } from "@/lib/installer/types";
 
 const defaultForm: CreateInstallerJobPayload = {
-  clientId: "",
-  clientName: "",
-  clientCode: "",
   district: "",
   fiscalYear: "115",
   googleAccountEmail: "",
-  allowedEmails: [""],
   enableGithub: true,
   enableVercel: true,
-  githubOrg: "yongheelderly0826-design",
-  vercelTeamSlug: "yongheelderly0826-design",
 };
 
 export function InstallerWizard() {
@@ -58,13 +52,12 @@ export function InstallerWizard() {
 
     try {
       const payload: CreateInstallerJobPayload = {
-        ...form,
-        allowedEmails: form.allowedEmails.filter(Boolean),
-        ownerEmails: form.ownerEmails?.filter(Boolean),
-        vercelProjectName: form.vercelProjectName || `elder-visit-${form.clientId}`,
-        githubRepoName: form.githubRepoName || `elder-visit-${form.clientId}`,
-        productionUrl:
-          form.productionUrl || `https://elder-visit-${form.clientId}.vercel.app`,
+        district: form.district,
+        fiscalYear: form.fiscalYear,
+        googleAccountEmail: form.googleAccountEmail,
+        allowedEmails: [form.googleAccountEmail],
+        enableGithub: form.enableGithub,
+        enableVercel: form.enableVercel,
       };
 
       const res = await fetch("/api/installer/jobs", {
@@ -121,41 +114,15 @@ export function InstallerWizard() {
         </div>
 
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">客戶一鍵安裝精靈</h1>
+          <h1 className="text-2xl font-semibold">客戶一鍵安裝（懶人包）</h1>
           <p className="text-sm text-muted-foreground">
-            填寫客戶資料 → 自動建立 GitHub 私有倉庫、Google 試算表 + GAS、Vercel 部署與交接包。
+            只要填行政區與承辦 Gmail。系統會自動完成 GitHub 私有倉庫、試算表、GAS Web App、Vercel 與交接包。
           </p>
         </header>
 
         {!job ? (
           <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border bg-background p-6 shadow-sm">
             <section className="grid gap-4 sm:grid-cols-2">
-              <Field label="客戶 ID（英文）" required>
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="banqiao-115"
-                  value={form.clientId}
-                  onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-                  required
-                />
-              </Field>
-              <Field label="客戶代碼" >
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="BQ"
-                  value={form.clientCode}
-                  onChange={(e) => setForm({ ...form, clientCode: e.target.value })}
-                />
-              </Field>
-              <Field label="客戶名稱" required>
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="新北市板橋區公所"
-                  value={form.clientName}
-                  onChange={(e) => setForm({ ...form, clientName: e.target.value })}
-                  required
-                />
-              </Field>
               <Field label="行政區" required>
                 <input
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -172,30 +139,14 @@ export function InstallerWizard() {
                   onChange={(e) => setForm({ ...form, fiscalYear: e.target.value })}
                 />
               </Field>
-              <Field label="Google 帳號" required>
+              <Field label="承辦 Gmail" required>
                 <input
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   type="email"
-                  placeholder="client@gmail.com"
+                  placeholder="office@gmail.com"
                   value={form.googleAccountEmail}
                   onChange={(e) => setForm({ ...form, googleAccountEmail: e.target.value })}
                   required
-                />
-              </Field>
-              <Field label="允許登入 Gmail" required>
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="承辦@gmail.com"
-                  value={form.allowedEmails[0] || ""}
-                  onChange={(e) => setForm({ ...form, allowedEmails: [e.target.value] })}
-                  required
-                />
-              </Field>
-              <Field label="GitHub 組織">
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={form.githubOrg || ""}
-                  onChange={(e) => setForm({ ...form, githubOrg: e.target.value })}
                 />
               </Field>
             </section>
@@ -223,7 +174,7 @@ export function InstallerWizard() {
 
             <Button type="submit" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              開始安裝
+              開始一鍵安裝
             </Button>
           </form>
         ) : (
