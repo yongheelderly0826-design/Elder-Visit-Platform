@@ -15,6 +15,8 @@ import {
   SlidersHorizontal,
   ServerCog,
   Map,
+  QrCode,
+  Timer,
   UserCog,
   UserRound,
   Workflow,
@@ -40,7 +42,9 @@ export type NavKey =
   | "system"
   | "workspace"
   | "users"
-  | "settings";
+  | "settings"
+  | "clock"
+  | "attendance";
 
 export type NavItem = {
   key: NavKey;
@@ -77,6 +81,14 @@ export const navItems: NavItem[] = [
     group: "daily",
   },
   {
+    key: "clock",
+    label: "出勤簽到",
+    href: "/volunteer/clock",
+    icon: Timer,
+    requiredCapabilities: ["attendance.clock"],
+    group: "daily",
+  },
+  {
     key: "profile",
     label: "我的資料",
     href: "/visitor/profile",
@@ -106,6 +118,14 @@ export const navItems: NavItem[] = [
     href: "/manager/assignments",
     icon: ClipboardList,
     requiredCapabilities: ["assignment.manage"],
+    group: "operations",
+  },
+  {
+    key: "attendance",
+    label: "志工出勤",
+    href: "/manager/attendance",
+    icon: QrCode,
+    requiredCapabilities: ["attendance.manage"],
     group: "operations",
   },
   {

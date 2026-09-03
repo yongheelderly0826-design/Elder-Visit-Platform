@@ -47,7 +47,9 @@ export type Capability =
   | "sponsors.update"
   | "sponsors.delete"
   | "system.read"
-  | "onboarding.publish";
+  | "onboarding.publish"
+  | "attendance.clock"
+  | "attendance.manage";
 
 export type Account = {
   id: string;
@@ -552,6 +554,16 @@ export type AuditQueueItem = {
   submittedAt: string;
   auditState: "ready" | "blocked" | "approved" | "rejected";
   checks: AuditCheck[];
+  careformId?: string;
+  assignmentId?: string;
+  encodedId?: string;
+  caseId?: string;
+  village?: string;
+  visitResult?: string;
+  careformStatus?: string;
+  completionPct?: number;
+  errorLines?: string[];
+  exportReady?: boolean;
 };
 
 export type AuditDecision = {

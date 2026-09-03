@@ -16,6 +16,8 @@ flowchart TB
   subgraph Users["使用者"]
     MGR["承辦管理者<br/>yongheelderly0826@gmail.com"]
     VIS["訪查員<br/>Email 密碼登入"]
+    VOL["外勤志工<br/>身分證登入＋掃 QR"]
+    KSK["公所內勤<br/>刷身分證條碼"]
   end
 
   subgraph Frontend["前端層 · Vercel"]
@@ -25,7 +27,7 @@ flowchart TB
 
   subgraph Backend["邏輯層 · Google Apps Script"]
     GAS["GAS Web App<br/>doGet / doPost + Token 驗證"]
-    MOD["業務模組<br/>Case · Assignment · Audit · Export …"]
+    MOD["業務模組<br/>Case · Assignment · Attendance · Audit · Export …"]
   end
 
   subgraph Data["資料層 · Google Sheets"]
@@ -39,6 +41,8 @@ flowchart TB
 
   MGR --> PWA
   VIS --> PWA
+  VOL --> PWA
+  KSK --> PWA
   PWA --> API
   API --> GAS
   GAS --> MOD
@@ -142,27 +146,66 @@ sequenceDiagram
 
 ## 5. 業務流程架構
 
+平台有兩條並行業務線：
+
+### 5.1 獨居長者訪查
+
 ```mermaid
 flowchart LR
   A["訪查員建檔／發證"] --> B["個案匯入／名冊"]
   B --> C["派案"]
-  C --> D["簽到"]
-  D --> E["關懷表登打<br/>或空訪"]
-  E --> F["簽退"]
-  F --> G["稽核"]
-  G --> H["衛福部 xlsx 匯出"]
-  H --> I["車馬費核銷"]
+  C --> D["關懷表登打<br/>或空訪"]
+  D --> E["稽核"]
+  E --> F["衛福部 xlsx 匯出"]
+  F --> G["車馬費核銷"]
+```
+
+### 5.2 12 組志工出勤
+
+```mermaid
+flowchart LR
+  R["志工名冊建檔<br/>身分證＋組別"] --> P["列印集合點 QR"]
+  P --> F1["外勤：手機掃 QR"]
+  P --> F2["公所：刷身分證條碼"]
+  F1 --> S["簽到退紀錄<br/>時戳＋組別＋地點"]
+  F2 --> S
+  S --> X["月結 Excel"]
+  X --> Y["匯入既有出勤系統"]
+```
+
+```mermaid
+sequenceDiagram
+  participant V as 外勤志工手機
+  participant N as Next.js
+  participant G as GAS AttendanceModule
+  participant S as 簽到退紀錄 Sheet
+
+  V->>N: 身分證 identify
+  N->>G: attendance.identify
+  G->>S: 讀訪查員主檔
+  G-->>N: 姓名＋組別
+  N-->>V: 設定出勤 Cookie
+  V->>N: 掃 QR 後 clock（site_id）
+  N->>G: attendance.clock
+  alt 當日尚無未簽退
+    G->>S: append 簽到
+  else 已有未簽退
+    G->>S: update 簽退＋時數
+  end
+  G-->>N: action + record
+  N-->>V: 顯示簽到／簽退成功
 ```
 
 | 流程節點 | 試算表 Tab | GAS 模組 | 前端路徑 |
 |----------|-----------|----------|----------|
-| 訪查員建檔 | `訪查員主檔` | `VisitorModule` | `/workspace/users` |
+| 訪查員／志工建檔 | `訪查員主檔`（含 `volunteer_group`） | `VisitorModule` | `/workspace/users`、`/manager/attendance` |
 | 個案名冊 | `個案名冊` | `CaseModule` | `/manager/cases` |
 | 派案 | `派案紀錄` | `AssignmentModule` | `/manager/assignments` |
-| 簽到退 | `簽到退紀錄` | `AttendanceModule` | `/visitor/tasks` |
+| 志工出勤簽到退 | `簽到退紀錄` | `AttendanceModule` | `/volunteer/clock`、`/office/kiosk` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | `匯出紀錄` | `ExportModule` | `/manager/exports` |
+| 出勤月結 | Drive「志工出勤月結」＋本機 xlsx | `AttendanceModule.monthlyExport` | `/manager/attendance` |
 | KPI | `報表快照` | `ReportModule` | `/manager/kpi` |
 | 車馬費 | `車馬費核銷` | `PaymentModule` | `/manager/pricing` |
 
@@ -205,7 +248,7 @@ flowchart TB
   AUTH --> VM["VisitorModule"]
   AUTH --> CM["CaseModule"]
   AUTH --> AM["AssignmentModule"]
-  AUTH --> AT["AttendanceModule"]
+  AUTH --> AT["AttendanceModule<br/>identify · clock · monthlyExport"]
   AUTH --> CF["CareFormModule"]
   AUTH --> AU["AuditModule"]
   AUTH --> EX["ExportModule"]
@@ -213,6 +256,7 @@ flowchart TB
   AUTH --> PM["PaymentModule"]
 
   VM & CM & AM & AT & CF & AU & EX & RP & PM --> SH["SheetHelper.gs"]
+  AT --> CAT["VolunteerAttendanceCatalog.gs<br/>12 組＋集合點"]
   SH --> SS[("Google Sheets")]
 ```
 
@@ -228,22 +272,24 @@ flowchart TB
 
   LOGIN --> MGR["承辦管理者<br/>輸入 Gmail"]
   LOGIN --> VIS["訪員<br/>Email + 密碼"]
+  LOGIN --> VOL["外勤出勤<br/>/volunteer/clock<br/>身分證 identify"]
 
   MGR --> ALLOW{"GOOGLE_ALLOWED_EMAILS<br/>允許清單？"}
   ALLOW -->|是| ROLE{"GOOGLE_OWNER_EMAILS<br/>擁有者清單？"}
   ROLE -->|是| OWNER["workspace_owner"]
-  ROLE -->|否| MANAGER["workspace_manager"]
+  ROLE -->|否| MANAGER["workspace_manager<br/>含 attendance.manage"]
   ALLOW -->|否| DENY["拒絕登入"]
 
   VIS --> SUPA["訪員帳號驗證<br/>（註冊審核後）"]
+  VOL --> COOKIE["volunteer_clock Cookie<br/>＋ attendance.clock"]
 ```
 
 | 角色 | 權限範圍 |
 |------|----------|
 | `workspace_owner` | 全部功能（成員、權限、設定） |
-| `workspace_manager` | 名冊、派案、匯入、稽核、匯出 |
-| `supervisor` | 稽核覆核 |
-| `visitor` | 任務、簽到、關懷表、簽退 |
+| `workspace_manager` | 名冊、派案、匯入、稽核、匯出、志工出勤月結／刷證 |
+| `supervisor` | 稽核覆核、出勤月結查閱 |
+| `visitor` | 任務、關懷表、外勤掃 QR 簽到退（`attendance.clock`） |
 
 ---
 
@@ -297,9 +343,10 @@ flowchart TB
 ```
 
 1. **GAS Token** 僅存於 Vercel 環境變數與本機 `.env.local`，不提交 GitHub。  
-2. **個資最小化**：關懷表使用去識別化編碼（`YH-115-A001`），不存姓名／身分證。  
+2. **個資最小化**：關懷表使用去識別化編碼（`YH-115-A001`）；出勤月結含身分證，僅承辦下載。  
 3. **試算表共用** 僅授予必要 Gmail 編輯權限。  
-4. **操作日誌** 由 GAS 自動寫入 `_操作日誌`，人工不可刪改。
+4. **操作日誌** 由 GAS 自動寫入 `_操作日誌`，人工不可刪改。  
+5. **公所刷證** 需承辦登入；外勤僅能對自己身分證 identify 後打卡。
 
 ---
 
@@ -339,3 +386,4 @@ flowchart LR
 | 日期 | 版本 | 說明 |
 |------|------|------|
 | 2026-08-31 | 1.0 | 初版：四層架構、正式環境拓撲、資料流與業務流程圖 |
+| 2026-09-03 | 1.1 | 新增 12 組志工出勤架構圖、AttendanceModule 與權限 |

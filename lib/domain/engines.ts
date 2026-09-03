@@ -1,3 +1,4 @@
+import { MOHW_LIFE_CARE_COLUMNS } from "@/lib/domain/mohw-life-care-form";
 import type {
   ExportTemplateSummary,
   FormTemplateSummary,
@@ -93,19 +94,14 @@ export const exportTemplates: ExportTemplateSummary[] = [
   },
   {
     id: "export_central_system_excel_v1",
-    name: "社會局中央系統匯入 Excel",
+    name: "社會局中央系統匯入 Excel（102 欄）",
     exportType: "xlsx",
     entityType: "visit_record",
-    columns: [
-      { key: "case_code", label: "案號", sourcePath: "elder_cases.case_code" },
-      { key: "name", label: "姓名", sourcePath: "elder_cases.name" },
-      { key: "national_id", label: "身分證字號", sourcePath: "elder_cases.id_number" },
-      { key: "birth_date", label: "出生年月日", sourcePath: "elder_cases.birth_date" },
-      { key: "district", label: "行政區", sourcePath: "elder_cases.district" },
-      { key: "village", label: "村里", sourcePath: "elder_cases.village" },
-      { key: "visit_result", label: "訪查結果", sourcePath: "visit_records.visit_result" },
-      { key: "audit_result", label: "審核結果", sourcePath: "audit_records.audit_result" },
-    ],
+    columns: MOHW_LIFE_CARE_COLUMNS.map((column) => ({
+      key: column.key,
+      label: column.header,
+      sourcePath: `mohw_life_care.${column.key}`,
+    })),
   },
   {
     id: "export_payment_v1",

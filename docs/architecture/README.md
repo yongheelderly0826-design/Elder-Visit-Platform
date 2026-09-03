@@ -41,22 +41,17 @@
 ## 二、業務流程對應
 
 ```
-訪查員建檔／發證
-    → 派案（志願區域／確認／發放編碼名單）
-        → 到場視訊或表單簽到
-            → 在宅登打關懷表 ／ 空訪拍照註記
-                → 簽退
-                    → 關懷表檢核
-                        → 匯出衛福部 xlsx ＋ 區內報表
-                            → 車馬費核銷
+【訪查】訪查員建檔 → 個案匯入 → 派案 → 關懷表／空訪 → 稽核 → 衛福部 xlsx → 車馬費
+
+【出勤】志工名冊（身分＋組別）→ 外勤掃 QR／公所刷證 → 簽到退紀錄 → 月結 Excel
 ```
 
 | 流程節點 | Sheet 工作表 | GAS 模組 | 前端路由 |
 |----------|-------------|----------|----------|
-| 訪查員建檔 | `訪查員主檔` | `VisitorModule` | `/workspace/users` |
+| 訪查員／志工建檔 | `訪查員主檔` | `VisitorModule` | `/workspace/users`、`/manager/attendance` |
 | 個案名冊 | `個案名冊` | `CaseModule` | `/manager/cases` |
 | 派案 | `派案紀錄` | `AssignmentModule` | `/manager/assignments` |
-| 簽到退 | `簽到退紀錄` | `AttendanceModule` | `/visitor/tasks` |
+| 志工出勤 | `簽到退紀錄` | `AttendanceModule` | `/volunteer/clock`、`/office/kiosk`、`/manager/attendance` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | — | `ExportModule` | `/manager/exports` |
@@ -72,10 +67,10 @@
 ```
 永和區_115年_獨居長者訪查_主檔.gsheet
 ├── _設定          ← 工作區參數、編碼前綴、衛福部帳號（遮罩）
-├── 訪查員主檔      ← 訪查員基本資料、證件、服務區域
+├── 訪查員主檔      ← 訪查員／志工基本資料、證件、服務區域、volunteer_group
 ├── 個案名冊        ← 獨老/中老、戶籍里、訪視里、電話
 ├── 派案紀錄        ← 派案批次、訪查員、編碼名單
-├── 簽到退紀錄      ← 簽到/簽退時間、GPS、視訊連結
+├── 簽到退紀錄      ← 志工出勤（組別／地點 QR／刷證）＋時數
 ├── 關懷表登打      ← 去識別化編碼對應之表單答案
 ├── 空訪紀錄        ← 未遇拍照、備註
 ├── 稽核佇列        ← 待覆核、退回、通過
@@ -102,7 +97,7 @@ gas/src/
 │   ├── VisitorModule.gs
 │   ├── CaseModule.gs
 │   ├── AssignmentModule.gs
-│   ├── AttendanceModule.gs
+│   ├── AttendanceModule.gs   ← identify / clock / monthlyExport
 │   ├── CareFormModule.gs
 │   ├── AuditModule.gs
 │   ├── ExportModule.gs   ← 衛福部生活關懷表 .xlsx
@@ -111,7 +106,9 @@ gas/src/
 ├── utils/
 │   ├── SheetHelper.gs
 │   ├── IdEncoder.gs      ← 去識別化編碼
-│   └── Validation.gs
+│   ├── Validation.gs
+│   ├── VolunteerAttendanceCatalog.gs  ← 12 組＋集合點
+│   └── MohwLifeCareExporter.gs
 └── triggers/
     └── OnEditTriggers.gs
 ```

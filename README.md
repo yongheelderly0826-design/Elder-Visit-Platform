@@ -35,9 +35,12 @@ Next.js PWA（訪查員行動端 + 管理後台）
 ## 業務流程
 
 ```
-訪查員建檔／發證 → 派案 → 簽到 → 關懷表登打／空訪 → 簽退
-    → 稽核 → 匯出衛福部 xlsx → 車馬費核銷
+【訪查】訪查員建檔 → 派案 → 關懷表／空訪 → 稽核 → 衛福部 xlsx → 車馬費核銷
+
+【出勤】志工名冊 → 外勤掃 QR／公所刷證 → 月結 Excel（匯入既有系統）
 ```
+
+詳見 [`docs/system-operation-manual.md`](docs/system-operation-manual.md) §5.7、[`docs/system-architecture.md`](docs/system-architecture.md) §5.2。
 
 ---
 

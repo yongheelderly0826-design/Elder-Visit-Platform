@@ -1,29 +1,312 @@
 var AttendanceModule = (function () {
   var SHEET = Config.SHEET_NAMES.ATTENDANCE;
+  var EXTRA_HEADERS = [
+    'channel',
+    'site_id',
+    'site_name',
+    'group_id',
+    'group_name',
+    'worker_name',
+    'id_number',
+    'source',
+  ];
+
+  function ensureSchema_() {
+    SheetHelper.ensureColumns(Config.SHEET_NAMES.VISITORS, ['volunteer_group']);
+    SheetHelper.ensureColumns(SHEET, EXTRA_HEADERS);
+  }
+
+  function todayTaipei_() {
+    return Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+
+  function nowIso_() {
+    return new Date().toISOString();
+  }
+
+  function asDateText_(value) {
+    if (!value && value !== 0) return '';
+    if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+      return Utilities.formatDate(value, 'Asia/Taipei', 'yyyy-MM-dd');
+    }
+    return String(value).slice(0, 10);
+  }
+
+  function asTimeText_(value) {
+    if (!value && value !== 0) return '';
+    var date = value;
+    if (Object.prototype.toString.call(value) !== '[object Date]') {
+      date = new Date(value);
+    }
+    if (isNaN(date.getTime())) return String(value);
+    return Utilities.formatDate(date, 'Asia/Taipei', 'HH:mm');
+  }
+
+  function hoursText_(minutes) {
+    var n = parseInt(minutes, 10);
+    if (!n && n !== 0) return '';
+    return String(Math.round((n / 60) * 10) / 10);
+  }
+
+  function durationMinutes_(checkinAt, checkoutAt) {
+    var start = new Date(checkinAt).getTime();
+    var end = new Date(checkoutAt).getTime();
+    if (!isFinite(start) || !isFinite(end) || end < start) return 0;
+    return Math.round((end - start) / 60000);
+  }
+
+  function channelLabel_(channel, source) {
+    if (source === 'office_kiosk' || channel === 'barcode') return '公所刷證';
+    if (channel === 'qr') return '外勤QR';
+    return channel || source || '';
+  }
+
+  function throwError_(code, message) {
+    var err = new Error(message);
+    err.code = code;
+    throw err;
+  }
+
+  function resolveVisitor_(data) {
+    var visitor = null;
+    if (data.visitor_id) visitor = VisitorModule.get(data.visitor_id);
+    if (!visitor && data.id_number) visitor = VisitorModule.getByIdNumber(data.id_number);
+    if (!visitor) throwError_('NOT_FOUND', '找不到志工資料，請確認身分證或先建檔');
+    return visitor;
+  }
+
+  function resolveSite_(siteId, fallbackKiosk) {
+    if (!siteId && fallbackKiosk) return VolunteerAttendanceCatalog.getSite('SITE-KIOSK');
+    var site = VolunteerAttendanceCatalog.getSite(siteId);
+    if (!site) throwError_('VALIDATION_ERROR', '無效的出勤地點 QR，請重新掃描海報');
+    return site;
+  }
+
+  function findOpen_(visitorId, sessionDate) {
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    for (var i = rows.length - 1; i >= 0; i--) {
+      var row = rows[i];
+      if (String(row.visitor_id) !== String(visitorId)) continue;
+      if (asDateText_(row.session_date) !== sessionDate) continue;
+      if (!row.checkout_at) return row;
+    }
+    return null;
+  }
+
+  function enrichVisitor_(visitor) {
+    var group = VolunteerAttendanceCatalog.getGroup(visitor.volunteer_group);
+    return {
+      visitor_id: visitor.visitor_id,
+      name: visitor.name || '',
+      phone: visitor.phone || '',
+      id_number: visitor.id_number || '',
+      volunteer_group: visitor.volunteer_group || '',
+      group_name: group ? group.name : (visitor.volunteer_group || ''),
+      status: visitor.status || '',
+      badge_no: visitor.badge_no || '',
+    };
+  }
 
   function checkin(data) {
-    Validation.requireFields(data, ['visitor_id']);
+    ensureSchema_();
+    var visitor = resolveVisitor_(data);
+    var sessionDate = data.session_date || todayTaipei_();
+    var open = findOpen_(visitor.visitor_id, sessionDate);
+    if (open) throwError_('ALREADY_CHECKED_IN', '今日已簽到尚未簽退');
+
+    var isKiosk = data.channel === 'barcode' || data.source === 'office_kiosk';
+    var site = resolveSite_(data.site_id, isKiosk);
+    var groupId = visitor.volunteer_group || site.group_id || '';
+    var group = VolunteerAttendanceCatalog.getGroup(groupId);
+
     var record = {
       attendance_id: 'ATT-' + Utilities.getUuid().slice(0, 8),
-      visitor_id: data.visitor_id,
+      visitor_id: visitor.visitor_id,
       assignment_id: data.assignment_id || '',
-      session_date: data.session_date || Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd'),
-      checkin_at: new Date().toISOString(),
+      session_date: sessionDate,
+      checkin_at: nowIso_(),
+      checkout_at: '',
       checkin_lat: data.lat || '',
       checkin_lng: data.lng || '',
-      session_type: data.session_type || '現場',
+      checkout_lat: '',
+      checkout_lng: '',
+      session_type: data.session_type || '志工出勤',
+      duration_minutes: '',
+      channel: data.channel || (isKiosk ? 'barcode' : 'qr'),
+      site_id: site.id,
+      site_name: site.name,
+      group_id: groupId,
+      group_name: group ? group.name : groupId,
+      worker_name: visitor.name || '',
+      id_number: visitor.id_number || '',
+      source: data.source || (isKiosk ? 'office_kiosk' : 'field_qr'),
     };
     return SheetHelper.appendRow(SHEET, record);
   }
 
   function checkout(data) {
-    Validation.requireFields(data, ['attendance_id']);
-    data.checkout_at = new Date().toISOString();
-    data.checkout_lat = data.lat || '';
-    data.checkout_lng = data.lng || '';
-    // TODO: calculate duration_minutes from checkin_at
-    return data;
+    ensureSchema_();
+    var record = null;
+    if (data.attendance_id) {
+      record = SheetHelper.findByKey(SHEET, 'attendance_id', data.attendance_id)[0] || null;
+    }
+    if (!record && (data.visitor_id || data.id_number)) {
+      var visitor = resolveVisitor_(data);
+      record = findOpen_(visitor.visitor_id, data.session_date || todayTaipei_());
+    }
+    if (!record) throwError_('NOT_FOUND', '沒有可簽退的出勤紀錄');
+    if (record.checkout_at) throwError_('ALREADY_CHECKED_OUT', '此筆已簽退');
+
+    var checkoutAt = nowIso_();
+    return SheetHelper.updateByKey(SHEET, 'attendance_id', record.attendance_id, {
+      checkout_at: checkoutAt,
+      checkout_lat: data.lat || '',
+      checkout_lng: data.lng || '',
+      duration_minutes: durationMinutes_(record.checkin_at, checkoutAt),
+    });
   }
 
-  return { checkin: checkin, checkout: checkout };
+  function clock(data) {
+    ensureSchema_();
+    var visitor = resolveVisitor_(data);
+    var sessionDate = data.session_date || todayTaipei_();
+    var open = findOpen_(visitor.visitor_id, sessionDate);
+    if (open) {
+      return {
+        action: 'checkout',
+        record: checkout({
+          attendance_id: open.attendance_id,
+          lat: data.lat,
+          lng: data.lng,
+        }),
+        visitor: enrichVisitor_(visitor),
+      };
+    }
+    return {
+      action: 'checkin',
+      record: checkin(data),
+      visitor: enrichVisitor_(visitor),
+    };
+  }
+
+  function identify(data) {
+    ensureSchema_();
+    Validation.requireFields(data || {}, ['id_number']);
+    var visitor = VisitorModule.getByIdNumber(data.id_number);
+    if (!visitor) throwError_('NOT_FOUND', '找不到志工資料，請確認身分證或請承辦先建檔');
+    var status = String(visitor.status || '');
+    if (status === '停用' || status === '駁回') {
+      throwError_('FORBIDDEN', '此志工帳號已停用，無法出勤');
+    }
+    return {
+      visitor: enrichVisitor_(visitor),
+      today: todayTaipei_(),
+      open: findOpen_(visitor.visitor_id, todayTaipei_()),
+    };
+  }
+
+  function status(params) {
+    ensureSchema_();
+    var visitor = resolveVisitor_(params || {});
+    var sessionDate = (params && params.session_date) || todayTaipei_();
+    return {
+      visitor: enrichVisitor_(visitor),
+      today: sessionDate,
+      open: findOpen_(visitor.visitor_id, sessionDate),
+    };
+  }
+
+  function list(params) {
+    ensureSchema_();
+    params = params || {};
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var period = params.period || '';
+    if (period) {
+      rows = rows.filter(function (row) {
+        return asDateText_(row.session_date).indexOf(period) === 0;
+      });
+    }
+    if (params.group_id) {
+      rows = rows.filter(function (row) {
+        return String(row.group_id) === String(params.group_id);
+      });
+    }
+    if (params.visitor_id) {
+      rows = rows.filter(function (row) {
+        return String(row.visitor_id) === String(params.visitor_id);
+      });
+    }
+    return rows.map(function (row) {
+      row.session_date = asDateText_(row.session_date);
+      return row;
+    });
+  }
+
+  function monthlyExport(params) {
+    Validation.requireFields(params || {}, ['period']);
+    var rows = list(params);
+    var table = [[
+      '年月',
+      '組別',
+      '姓名',
+      '身分證字號',
+      '志工編號',
+      '日期',
+      '簽到時間',
+      '簽退時間',
+      '出勤時數',
+      '簽到方式',
+      '地點',
+      '出勤編號',
+    ]];
+    rows.forEach(function (row) {
+      table.push([
+        params.period,
+        row.group_name || '',
+        row.worker_name || '',
+        row.id_number || '',
+        row.visitor_id || '',
+        asDateText_(row.session_date),
+        asTimeText_(row.checkin_at),
+        asTimeText_(row.checkout_at),
+        hoursText_(row.duration_minutes),
+        channelLabel_(row.channel, row.source),
+        row.site_name || '',
+        row.attendance_id || '',
+      ]);
+    });
+
+    var file = MohwLifeCareExporter.createNamedXlsxFile(
+      table,
+      '志工出勤_' + params.period + '.xlsx',
+      '志工出勤 ' + params.period,
+      { propertyKey: 'VOLUNTEER_ATTENDANCE_FOLDER_ID', folderName: '志工出勤月結' }
+    );
+
+    return {
+      period: params.period,
+      row_count: rows.length,
+      file_name: file.fileName,
+      file_url: file.fileUrl,
+      file_id: file.fileId,
+    };
+  }
+
+  function catalog() {
+    return {
+      groups: VolunteerAttendanceCatalog.listGroups(),
+      sites: VolunteerAttendanceCatalog.listSites(),
+    };
+  }
+
+  return {
+    checkin: checkin,
+    checkout: checkout,
+    clock: clock,
+    identify: identify,
+    status: status,
+    list: list,
+    monthlyExport: monthlyExport,
+    catalog: catalog,
+  };
 })();

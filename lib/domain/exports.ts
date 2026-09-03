@@ -3,41 +3,54 @@ import {
   evaluateExportConsent,
   redactExportCell,
 } from "@/lib/domain/consent";
+import { buildMohwLifeCareExportRow } from "@/lib/domain/mohw-life-care-export";
+import { mohwLifeCareSampleAnswers } from "@/lib/domain/mohw-life-care-ui";
 import type { ConsentScope } from "@/lib/domain/types";
 
 const mockRows: Record<string, string>[] = [
-  {
-    case_code: "EV-115-0001",
-    name: "林阿梅",
-    national_id: "A123****89",
-    birth_date: "1944-05-12",
-    district: "北區",
-    village: "錦村里",
-    visit_time: "2026-04-26 10:00",
-    visit_result: "訪視成功",
-    audit_result: "通過",
-    health_self_rating: "普通",
-    living_status: "1人獨自居住",
-    special_color_result: "黃色",
-    visit_fee: "600",
-    total_fee: "750",
-  },
-  {
-    case_code: "EV-115-0002",
-    name: "陳水木",
-    national_id: "B234****12",
-    birth_date: "1948-11-03",
-    district: "北區",
-    village: "賴厝里",
-    visit_time: "2026-04-26 14:00",
-    visit_result: "未遇",
-    audit_result: "需補件",
-    health_self_rating: "",
-    living_status: "",
-    special_color_result: "未觸發",
-    visit_fee: "200",
-    total_fee: "0",
-  },
+  buildMohwLifeCareExportRow({
+    mohwAnswers: mohwLifeCareSampleAnswers,
+    visitMeta: {
+      visitDate: "2026-05-22",
+      visitStartTime: "09:30",
+      visitEndTime: "10:30",
+      visitStatus: "已完成",
+      notes: "首訪",
+      consentPersonalData: true,
+      consentHealthDb: true,
+      consentSignature: true,
+    },
+    caseRegistry: {
+      name: "吳秀枝",
+      nationalId: "F123456789",
+      birthDate: "1942-03-18",
+      householdCity: "新北市",
+      householdDistrict: "板橋區",
+      householdVillage: "文化里",
+      householdAddress: "文化路一段 100 號",
+      livingCity: "新北市",
+      livingDistrict: "板橋區",
+      livingVillage: "文化里",
+      livingAddress: "文化路一段 100 號",
+    },
+  }).keyed,
+  buildMohwLifeCareExportRow({
+    visitMeta: {
+      visitDate: "2026-05-23",
+      visitStartTime: "14:00",
+      visitStatus: "查無此人",
+      notes: "未遇三次",
+    },
+    caseRegistry: {
+      name: "陳水木",
+      nationalId: "B234567890",
+      birthDate: "1948-11-03",
+      householdCity: "新北市",
+      householdDistrict: "永和區",
+      householdVillage: "保平里",
+      householdAddress: "保平路 20 號",
+    },
+  }).keyed,
 ];
 
 export function getExportTemplate(templateId: string) {

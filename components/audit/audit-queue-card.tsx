@@ -9,37 +9,39 @@ import {
   RotateCcw,
   Stamp,
 } from "lucide-react";
+import { useCan } from "@/components/auth/permission-provider";
 import { Button } from "@/components/ui/button";
 import { getAuditFormReviewItems } from "@/lib/domain/visit-form-flow";
 import type {
   AuditDecisionResult,
   AuditQueueItem,
-  Capability,
   PaymentLockResult,
 } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
 export function AuditQueueCard({
   item,
-  capabilities,
+  onDecided,
 }: {
   item: AuditQueueItem;
-  capabilities: Capability[];
+  onDecided?: () => void;
 }) {
   const isBlocked = item.auditState === "blocked";
-  const canApproveAudit = capabilities.includes("audit.approve");
-  const canRejectAudit = capabilities.includes("audit.reject");
-  const canLockPayment = capabilities.includes("payments.lock");
+  const canApproveAudit = useCan("audit.approve");
+  const canRejectAudit = useCan("audit.reject");
+  const canLockPayment = useCan("payments.lock");
   const hasWarnings = item.checks.some((check) => check.severity === "warning" && !check.passed);
   const formReviewItems = getAuditFormReviewItems(item);
   const [supervisorNote, setSupervisorNote] = useState("");
   const [overrideWarnings, setOverrideWarnings] = useState(false);
   const [decisionResult, setDecisionResult] = useState<AuditDecisionResult | null>(null);
   const [paymentLockResult, setPaymentLockResult] = useState<PaymentLockResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function submitDecision(decision: "approve" | "request_changes") {
     setSubmitting(true);
+    setErrorMessage(null);
     const response = await fetch("/api/audit/decision", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -50,10 +52,22 @@ export function AuditQueueCard({
         overrideWarnings,
       }),
     });
-    const result = (await response.json()) as { data?: AuditDecisionResult };
+    const result = (await response.json()) as {
+      data?: AuditDecisionResult;
+      error?: { message?: string; errorLines?: string[] };
+    };
+    if (!response.ok) {
+      const extra = result.error?.errorLines?.length
+        ? `：${result.error.errorLines.slice(0, 3).join("；")}`
+        : "";
+      setErrorMessage(`${result.error?.message ?? "稽核決策失敗"}${extra}`);
+      setSubmitting(false);
+      return;
+    }
     setDecisionResult(result.data ?? null);
     setPaymentLockResult(null);
     setSubmitting(false);
+    onDecided?.();
   }
 
   async function lockPayment() {
@@ -81,6 +95,9 @@ export function AuditQueueCard({
         <div>
           <h2 className="font-semibold">{item.elderName}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{item.caseCode}</p>
+          {item.village ? (
+            <p className="mt-1 text-xs text-muted-foreground">{item.village}</p>
+          ) : null}
         </div>
         <span
           className={cn(
@@ -91,6 +108,12 @@ export function AuditQueueCard({
           {isBlocked ? "阻擋" : "可稽核"}
         </span>
       </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        {item.careformStatus ? `關懷表：${item.careformStatus}` : "關懷表：—"}
+        {item.visitResult ? ` · ${item.visitResult}` : ""}
+        {item.completionPct ? ` · 完成 ${item.completionPct}%` : ""}
+      </p>
 
       <div className="mt-4 space-y-2">
         {item.checks.map((check) => (
@@ -107,6 +130,17 @@ export function AuditQueueCard({
           </div>
         ))}
       </div>
+
+      {item.errorLines && item.errorLines.length > 0 ? (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+          <p className="font-medium">驗證錯誤（前 {item.errorLines.length} 筆）</p>
+          <ul className="mt-2 max-h-28 list-disc space-y-1 overflow-auto pl-4 font-mono">
+            {item.errorLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <section className="mt-4 rounded-md border bg-background p-3">
         <div className="flex items-center gap-2">
@@ -145,7 +179,7 @@ export function AuditQueueCard({
 
       <div className="mt-4 flex items-center gap-2 rounded-md bg-secondary p-2 text-sm">
         <CircleDollarSign className="h-4 w-4" />
-        {isBlocked ? "阻擋項目未通過，暫不核銷" : "可進入核銷計算"}
+        {isBlocked ? "阻擋項目未通過，暫不核銷／匯出" : "可核准後進入匯出批次"}
       </div>
 
       <div className="mt-4 grid gap-3">
@@ -193,6 +227,11 @@ export function AuditQueueCard({
             目前角色缺少部分稽核決策權限，只能執行允許的操作。
           </p>
         )}
+        {errorMessage ? (
+          <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            {errorMessage}
+          </p>
+        ) : null}
       </div>
 
       {decisionResult && (

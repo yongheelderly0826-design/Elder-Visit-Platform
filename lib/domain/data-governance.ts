@@ -210,6 +210,21 @@ export const featureDataGovernance: FeatureDataGovernance[] = [
     },
     governanceNote: "對外通知屬代表性溝通，正式發送前需明確授權。",
   },
+  {
+    key: "attendance",
+    group: "訪查營運",
+    feature: "志工出勤簽到",
+    dataScope: "志工姓名、身分證字號、組別、簽到退時間、地點、出勤時數",
+    editableFields: ["組別", "志工名冊", "出勤地點 QR"],
+    restrictedFields: ["身分證字號", "出勤原始時間戳"],
+    operations: {
+      read: ["attendance.manage"],
+      create: ["attendance.clock", "attendance.manage"],
+      update: ["attendance.manage"],
+      export: ["attendance.manage"],
+    },
+    governanceNote: "月結 Excel 含身分證字號，僅供承辦匯入既有出勤系統，不得外流。",
+  },
 ];
 
 export const governanceOperationLabels: Record<GovernanceOperation, string> = {

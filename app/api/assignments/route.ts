@@ -18,11 +18,17 @@ export async function POST(request: NextRequest) {
   const forbidden = requireCapability(request, "assignment.confirm");
   if (forbidden) return forbidden;
 
-  const body = (await request.json()) as { recommendationId?: string };
+  const body = (await request.json()) as {
+    recommendationId?: string;
+    visitorId?: string;
+  };
 
   const repository = getRepository();
 
   return NextResponse.json({
-    data: await repository.confirmAssignment(body.recommendationId ?? ""),
+    data: await repository.confirmAssignment(
+      body.recommendationId ?? "",
+      body.visitorId,
+    ),
   });
 }

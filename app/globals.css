@@ -58,3 +58,19 @@ select {
     transform: translateX(-50%);
   }
 }
+
+@media print {
+  aside,
+  header,
+  nav {
+    display: none !important;
+  }
+
+  .lg\:pl-72 {
+    padding-left: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+}

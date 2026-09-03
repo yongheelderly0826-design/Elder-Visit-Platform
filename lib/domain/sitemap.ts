@@ -213,4 +213,29 @@ export const sitemapSections = [
     ],
     href: "/manager/notifications",
   },
+  {
+    title: "志工出勤簽到",
+    description: "12 組志工：外勤掃集合點 QR，公所內勤刷身分證條碼，月底匯出 Excel。",
+    roles: ["承辦管理者", "督導", "訪員"],
+    entryCondition: "志工已建檔（姓名、身分證、組別）。外勤無電腦，公所有掃描器。",
+    completionResult: "每筆出勤有簽到/簽退時間，可下載月結 Excel 再匯入既有系統。",
+    steps: [
+      "承辦先在志工出勤頁建立名冊，指定 12 組之一",
+      "列印各組集合點 QR 海報張貼現場",
+      "外勤志工用手機開啟簽到頁，輸入身分證登入（記錄身分與組別）",
+      "掃描集合點 QR，系統記錄簽到或簽退時間",
+      "公所內勤由承辦登入刷證櫃台，掃描身分證條碼完成簽到退",
+      "月底下載出勤 Excel，再匯入公所既有系統",
+    ],
+    commonQuestions: [
+      "這與訪查到宅簽到不同；訪查簽到仍綁派案，志工出勤綁組別與地點 QR。",
+      "官方月結欄位若與下載檔不同，把範本給承辦即可對欄。",
+    ],
+    relatedLinks: [
+      { label: "志工出勤", href: "/manager/attendance" },
+      { label: "外勤掃碼", href: "/volunteer/clock" },
+      { label: "公所刷證", href: "/office/kiosk" },
+    ],
+    href: "/manager/attendance",
+  },
 ];

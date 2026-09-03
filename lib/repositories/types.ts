@@ -38,6 +38,7 @@ export type CaseRegistrySummary = {
 export type AssignmentDashboardData = {
   visitors: VisitorProfile[];
   recommendations: AssignmentRecommendation[];
+  cases: ElderCase[];
 };
 
 export type PaymentBatchData = {
@@ -50,11 +51,15 @@ export type AppRepository = {
   getWorkspaces(): Promise<WorkspaceWithUnit[]>;
   getDashboardMetrics(): Promise<DashboardMetric[]>;
   getActivityItems(): Promise<ActivityItem[]>;
-  getVisitorTasks(): Promise<VisitorTask[]>;
+  getVisitorTasks(visitorId?: string): Promise<VisitorTask[]>;
+  getVisitTask(scheduleId: string): Promise<VisitorTask | null>;
   getCaseRegistry(): Promise<CaseRegistryItem[]>;
   getCaseRegistrySummary(): Promise<CaseRegistrySummary>;
   getAssignmentDashboard(): Promise<AssignmentDashboardData>;
-  confirmAssignment(recommendationId: string): Promise<AssignmentDecisionResult>;
+  confirmAssignment(
+    recommendationId: string,
+    visitorId?: string,
+  ): Promise<AssignmentDecisionResult>;
   getPaymentBatchPreview(): Promise<PaymentBatchData>;
   createPaymentBatch(): Promise<PaymentBatchData>;
 };

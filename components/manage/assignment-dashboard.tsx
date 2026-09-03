@@ -16,11 +16,11 @@ import { useCan } from "@/components/auth/permission-provider";
 import { Button } from "@/components/ui/button";
 import { PageIntro } from "@/components/ui/page-intro";
 import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
-import { elderCases, visitSchedules } from "@/lib/domain/mock-data";
 import { getAssignmentFormChecklist } from "@/lib/domain/visit-form-flow";
 import type {
   AssignmentDecisionResult,
   AssignmentRecommendation,
+  ElderCase,
   VisitorWorkerType,
   VisitorProfile,
 } from "@/lib/domain/types";
@@ -28,6 +28,7 @@ import type {
 type AssignmentPayload = {
   visitors: VisitorProfile[];
   recommendations: AssignmentRecommendation[];
+  cases: ElderCase[];
 };
 
 const workerTypeLabels: Record<VisitorWorkerType, string> = {
@@ -48,12 +49,8 @@ export function AssignmentDashboard() {
   const [decision, setDecision] = useState<AssignmentDecisionResult | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const caseMap = useMemo(
-    () => new Map(elderCases.map((elderCase) => [elderCase.id, elderCase])),
-    [],
-  );
-  const scheduleMap = useMemo(
-    () => new Map(visitSchedules.map((schedule) => [schedule.id, schedule])),
-    [],
+    () => new Map((data?.cases ?? []).map((elderCase) => [elderCase.id, elderCase])),
+    [data?.cases],
   );
   const formChecklist = useMemo(() => getAssignmentFormChecklist(), []);
   const selectedRecommendation =
@@ -72,14 +69,17 @@ export function AssignmentDashboard() {
     setSelectedRecommendationId(result.data?.recommendations[0]?.id ?? null);
   }
 
-  async function confirm(recommendationId: string) {
+  async function confirm(recommendationId: string, visitorId: string) {
     const response = await fetch("/api/assignments", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ recommendationId }),
+      body: JSON.stringify({ recommendationId, visitorId }),
     });
     const result = (await response.json()) as { data?: AssignmentDecisionResult };
     setDecision(result.data ?? null);
+    if (result.data?.status === "confirmed") {
+      await loadAssignments();
+    }
   }
 
   return (
@@ -181,7 +181,6 @@ export function AssignmentDashboard() {
             <div className="mt-4 grid gap-2">
               {data.recommendations.map((recommendation) => {
                 const elderCase = caseMap.get(recommendation.caseId);
-                const schedule = scheduleMap.get(recommendation.scheduleId);
                 const selected = recommendation.id === selectedRecommendation.id;
 
                 return (
@@ -197,8 +196,7 @@ export function AssignmentDashboard() {
                       <div>
                         <p className="font-semibold">{elderCase?.name ?? "未知個案"}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {elderCase?.caseCode ?? recommendation.caseId} · 第{" "}
-                          {schedule?.visitAttempt ?? "-"} 次訪視
+                          {elderCase?.caseCode ?? recommendation.caseId} · 待派案
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {elderCase?.district} · {elderCase?.village} ·{" "}
@@ -297,7 +295,7 @@ export function AssignmentDashboard() {
                       className="mt-3 w-full"
                       variant={matched ? "default" : "outline"}
                       disabled={!canConfirmAssignment}
-                      onClick={() => confirm(selectedRecommendation.id)}
+                      onClick={() => confirm(selectedRecommendation.id, visitor.id)}
                     >
                       {selectedRecommendation.warnings.length > 0 ? "送主管覆核" : "確認分配給此訪員"}
                     </Button>

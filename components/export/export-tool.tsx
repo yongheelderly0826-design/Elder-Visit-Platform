@@ -127,7 +127,7 @@ export function ExportTool() {
         <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">中央系統 Excel</p>
           <p className="mt-1">
-            已建立社會局中央系統匯入 Excel 欄位模板；正式欄位順序需依社會局提供格式再鎖定。
+            請使用上方「衛福部中央系統匯出」面板：勾選個案後由 GAS 產生 xlsx，並顯示 Drive 連結與錯誤座標。
           </p>
         </div>
       </div>

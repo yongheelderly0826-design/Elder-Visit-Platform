@@ -41,6 +41,9 @@ export const supabaseRepository: AppRepository = {
   async getVisitorTasks() {
     return mockRepository.getVisitorTasks();
   },
+  async getVisitTask(scheduleId: string) {
+    return mockRepository.getVisitTask(scheduleId);
+  },
   async getCaseRegistry() {
     const cases = await getSupabaseCaseRegistry();
     return cases.length > 0 ? cases : mockRepository.getCaseRegistry();
@@ -59,8 +62,8 @@ export const supabaseRepository: AppRepository = {
     const data = await getSupabaseAssignmentDashboard();
     return data ?? mockRepository.getAssignmentDashboard();
   },
-  async confirmAssignment(recommendationId: string) {
-    return mockRepository.confirmAssignment(recommendationId);
+  async confirmAssignment(recommendationId: string, visitorId?: string) {
+    return mockRepository.confirmAssignment(recommendationId, visitorId);
   },
   async getPaymentBatchPreview() {
     const feeRule = await getSupabasePaymentFeeRule();
@@ -332,6 +335,7 @@ async function getSupabaseAssignmentDashboard() {
     return {
       visitors,
       recommendations: createAssignmentRecommendations(schedules, cases, visitors),
+      cases,
     };
   } catch {
     return null;

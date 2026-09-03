@@ -8,14 +8,21 @@ import { visitQuestions } from "@/lib/domain/mock-data";
 import { createVisitDraft, getVisitDraftKey, type VisitDraft } from "@/lib/domain/offline-drafts";
 import { getVisitRequiredForms } from "@/lib/domain/visit-form-flow";
 import {
-  calculateCareFormCompletion,
-  createInitialCareFormAnswers,
-  newTaipeiCareFormSections,
-  newTaipeiCareFormSampleAnswers,
-  type CareFormAnswers,
-  type CareFormAnswerValue,
-} from "@/lib/domain/new-taipei-care-form";
-import type { GovernmentFormField } from "@/lib/domain/government-forms";
+  calculateMohwCareFormCompletion,
+  createInitialMohwAnswers,
+  isMohwFieldVisible,
+  mohwLifeCareSampleAnswers,
+  mohwLifeCareSections,
+  syncMohwConsentFromSubmission,
+  syncMohwVisitMetaFromSubmission,
+  type MohwFormField,
+} from "@/lib/domain/mohw-life-care-ui";
+import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
+import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import {
+  validateMohwLifeCareRow,
+  type MohwValidationError,
+} from "@/lib/domain/mohw-life-care-validation";
 import {
   getMissedVisitPolicy,
   getPaymentEligibility,
@@ -54,17 +61,14 @@ export function VisitDialogueForm({
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [mohwErrors, setMohwErrors] = useState<MohwValidationError[]>([]);
   const [exportResult, setExportResult] = useState<string | null>(null);
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "captured" | "unavailable">("idle");
-  const [careFormAnswers, setCareFormAnswers] = useState<CareFormAnswers>(() => ({
-    ...createInitialCareFormAnswers(),
-    name: elderCase.name,
-    phone: elderCase.phone,
-    household_address: elderCase.address,
-    living_address: elderCase.address,
-  }));
+  const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() =>
+    createInitialMohwAnswers(elderCase, schedule),
+  );
   const draftKey = getVisitDraftKey(schedule.id);
-  const careFormDraftKey = `${draftKey}:new_taipei_care_form`;
+  const careFormDraftKey = `${draftKey}:mohw_life_care_form`;
   const validation = useMemo(
     () => validateVisitSubmission({ scheduleId: schedule.id, ...submission }),
     [schedule.id, submission],
@@ -79,8 +83,25 @@ export function VisitDialogueForm({
   );
   const requiredForms = useMemo(() => getVisitRequiredForms(schedule), [schedule]);
   const careFormCompletion = useMemo(
-    () => calculateCareFormCompletion(careFormAnswers),
-    [careFormAnswers],
+    () =>
+      calculateMohwCareFormCompletion(
+        syncMohwConsentFromSubmission(
+          syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
+          submission,
+        ),
+      ),
+    [careFormAnswers, submission],
+  );
+  const mohwValidation = useMemo(
+    () =>
+      validateMohwLifeCareRow(
+        syncMohwConsentFromSubmission(
+          syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
+          submission,
+        ),
+        { row: 2 },
+      ),
+    [careFormAnswers, submission],
   );
   const isMissedVisit = submission.visitResult === "未遇";
   const activePhotoCategories = isMissedVisit ? missedVisitPhotoCategories : optionalPhotoCategories;
@@ -118,9 +139,9 @@ export function VisitDialogueForm({
 
     const storedCareForm = window.localStorage.getItem(careFormDraftKey);
     if (storedCareForm) {
-      setCareFormAnswers(JSON.parse(storedCareForm) as CareFormAnswers);
+      setCareFormAnswers(JSON.parse(storedCareForm) as MohwLifeCareAnswers);
     } else if (schedule.id === "schedule_ntpc_demo") {
-      setCareFormAnswers(newTaipeiCareFormSampleAnswers);
+      setCareFormAnswers(mohwLifeCareSampleAnswers);
     }
   }, [careFormDraftKey, draftKey, schedule.id]);
 
@@ -134,13 +155,58 @@ export function VisitDialogueForm({
   async function submitVisit() {
     setIsSubmitting(true);
     setResult(null);
+    setMohwErrors([]);
+
+    const mohwAnswers = normalizeMohwAnswersOptions(
+      syncMohwConsentFromSubmission(
+        syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
+        submission,
+      ),
+    );
+
+    const localCheck = validateMohwLifeCareRow(mohwAnswers, { row: 2 });
+    if (!localCheck.ok) {
+      setMohwErrors(localCheck.errors);
+      setResult(
+        `驗證失敗：${localCheck.errorLines.slice(0, 3).join("；")}${
+          localCheck.errorLines.length > 3 ? "…" : ""
+        }`,
+      );
+      setIsSubmitting(false);
+      return;
+    }
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scheduleId: schedule.id, ...submission }),
+      body: JSON.stringify({
+        scheduleId: schedule.id,
+        assignmentId: schedule.id,
+        visitorId: schedule.visitorId,
+        encodedId: elderCase.caseCode,
+        caseCode: elderCase.caseCode,
+        careFormAnswers: mohwAnswers,
+        ...submission,
+      }),
     });
-    const data = (await response.json()) as { data?: { nextStep?: string } };
+    const data = (await response.json()) as {
+      data?: { nextStep?: string };
+      error?: {
+        code?: string;
+        message?: string;
+        errorLines?: string[];
+        errors?: MohwValidationError[];
+      };
+    };
+
+    if (!response.ok) {
+      if (data.error?.errors?.length) {
+        setMohwErrors(data.error.errors);
+      }
+      setResult(data.error?.message ?? "送出失敗");
+      setIsSubmitting(false);
+      return;
+    }
 
     setResult(data.data?.nextStep ?? "已送出");
     window.localStorage.removeItem(draftKey);
@@ -233,16 +299,23 @@ export function VisitDialogueForm({
             <div>
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold">新北市政府獨居老人生活關懷表</h2>
+                <h2 className="text-sm font-semibold">衛福部生活關懷表（102 欄）</h2>
               </div>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                依新北空白表分段填寫，系統會即時計算必填欄位完成度，完成後可送督導並進入 Word / PDF 匯出。
+                依中央系統匯入格式填寫，含條件欄位與訪視狀態分支；完成後可送稽核並匯出 xlsx。
               </p>
             </div>
             <div className="rounded-md border bg-card px-3 py-2 text-sm">
               <p className="font-semibold">完成度 {careFormCompletion.percent}%</p>
               <p className="mt-1 text-muted-foreground">
                 必填 {careFormCompletion.completed}/{careFormCompletion.required}
+              </p>
+              <p
+                className={`mt-1 text-xs ${
+                  mohwValidation.ok ? "text-emerald-700" : "text-amber-800"
+                }`}
+              >
+                MOHW 驗證 {mohwValidation.ok ? "通過" : `${mohwValidation.errors.length} 項錯誤`}
               </p>
             </div>
           </div>
@@ -256,6 +329,18 @@ export function VisitDialogueForm({
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
               尚缺必填：{careFormCompletion.missingLabels.join("、")}
             </p>
+          )}
+          {(mohwErrors.length > 0 || (!mohwValidation.ok && mohwValidation.errorLines.length > 0)) && (
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+              <p className="font-medium">MOHW 驗證錯誤（含儲存格座標）</p>
+              <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-4 font-mono">
+                {(mohwErrors.length ? mohwErrors.map((e) => e.display) : mohwValidation.errorLines)
+                  .slice(0, 20)
+                  .map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+              </ul>
+            </div>
           )}
 
           <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
@@ -289,7 +374,7 @@ export function VisitDialogueForm({
           <div className="mt-4 rounded-lg border bg-card p-3">
             <p className="text-sm font-semibold">快速查看區段</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {newTaipeiCareFormSections.map((section, index) => (
+              {mohwLifeCareSections.map((section, index) => (
                 <a
                   key={`jump-${section.title}`}
                   href={`#care-form-section-${index + 1}`}
@@ -302,7 +387,7 @@ export function VisitDialogueForm({
           </div>
 
           <div className="mt-4 grid gap-3">
-            {newTaipeiCareFormSections.map((section, index) => {
+            {mohwLifeCareSections.map((section, index) => {
               const sectionCompletion = careFormCompletion.sections.find(
                 (item) => item.title === section.title,
               );
@@ -320,7 +405,9 @@ export function VisitDialogueForm({
                     </span>
                   </summary>
                   <div className="grid gap-3 border-t p-3 md:grid-cols-2 xl:grid-cols-3">
-                    {section.fields.map((field) => (
+                    {section.fields
+                      .filter((field) => isMohwFieldVisible(field, careFormAnswers))
+                      .map((field) => (
                       <CareFormInput
                         key={field.key}
                         field={field}
@@ -508,7 +595,7 @@ export function VisitDialogueForm({
           result={result}
         />
         <SubmitVisitButton
-          disabled={!validation.ok || careFormCompletion.percent < 100 || isSubmitting}
+          disabled={!validation.ok || careFormCompletion.percent < 100 || !mohwValidation.ok || isSubmitting}
           isSubmitting={isSubmitting}
           onClick={submitVisit}
         />
@@ -544,7 +631,7 @@ export function VisitDialogueForm({
           />
           <SubmitVisitButton
             className="w-full"
-            disabled={!validation.ok || careFormCompletion.percent < 100 || isSubmitting}
+            disabled={!validation.ok || careFormCompletion.percent < 100 || !mohwValidation.ok || isSubmitting}
             isSubmitting={isSubmitting}
             onClick={submitVisit}
           />
@@ -655,11 +742,12 @@ function CareFormInput({
   value,
   onChange,
 }: {
-  field: GovernmentFormField;
-  value: CareFormAnswerValue | undefined;
-  onChange: (value: CareFormAnswerValue) => void;
+  field: MohwFormField;
+  value: MohwLifeCareAnswers[string];
+  onChange: (value: MohwLifeCareAnswers[string]) => void;
 }) {
   const requiredMark = field.required ? <span className="text-destructive"> *</span> : null;
+  const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];
@@ -670,8 +758,9 @@ function CareFormInput({
           {requiredMark}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {field.options?.map((option) => {
+          {field.options?.map((option, index) => {
             const selected = selectedValues.includes(option);
+            const label = field.optionLabels?.[index] ?? option;
             return (
               <button
                 key={`${field.key}-${option}`}
@@ -687,7 +776,7 @@ function CareFormInput({
                   )
                 }
               >
-                {option}
+                {label}
               </button>
             );
           })}
@@ -707,9 +796,9 @@ function CareFormInput({
           onChange={(event) => onChange(event.target.value)}
         >
           <option value="">請選擇</option>
-          {field.options?.map((option) => (
+          {field.options?.map((option, index) => (
             <option key={`${field.key}-${option}`} value={option}>
-              {option}
+              {field.optionLabels?.[index] ?? option}
             </option>
           ))}
         </select>
@@ -724,7 +813,8 @@ function CareFormInput({
       <input
         className="h-10 rounded-md border bg-card px-3 text-sm"
         type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
-        value={typeof value === "string" ? value : ""}
+        placeholder={isTimeField ? "HH:mm（24小時制）" : undefined}
+        value={typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : ""}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -752,7 +842,7 @@ function SubmissionStatus({
         <p className="text-destructive">尚缺：{validationMissing.join("、")}</p>
       )}
       {careFormPercent < 100 && (
-        <p className="text-destructive">新北關懷表尚缺必填：{careFormMissing.join("、")}</p>
+        <p className="text-destructive">衛福部關懷表尚缺必填：{careFormMissing.join("、")}</p>
       )}
       {result && (
         <p className="flex items-center gap-2 font-medium text-primary">

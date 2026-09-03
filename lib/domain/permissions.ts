@@ -53,6 +53,8 @@ export const capabilityLabels: Record<Capability, string> = {
   "sponsors.delete": "刪除贊助企業",
   "system.read": "查看系統狀態",
   "onboarding.publish": "發布初始化設定",
+  "attendance.clock": "志工掃碼簽到退",
+  "attendance.manage": "管理志工出勤與月結",
 };
 
 export const workspaceRoles: WorkspaceRole[] = [
@@ -111,6 +113,8 @@ export const workspaceRoles: WorkspaceRole[] = [
       "sponsors.delete",
       "system.read",
       "onboarding.publish",
+      "attendance.clock",
+      "attendance.manage",
     ],
   },
   {
@@ -127,13 +131,20 @@ export const workspaceRoles: WorkspaceRole[] = [
       "audit.reject",
       "payments.calculate",
       "exports.create",
+      "attendance.manage",
     ],
   },
   {
     key: "visitor",
     label: "訪員",
-    description: "查看自己的訪查任務並送出訪查表。",
-    capabilities: ["dashboard.read", "visits.read", "visits.submit", "visits.update"],
+    description: "查看自己的訪查任務並送出訪查表，外勤可掃 QR 簽到退。",
+    capabilities: [
+      "dashboard.read",
+      "visits.read",
+      "visits.submit",
+      "visits.update",
+      "attendance.clock",
+    ],
   },
   {
     key: "auditor",

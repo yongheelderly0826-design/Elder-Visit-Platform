@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
-import type { CareFormAnswers } from "@/lib/domain/new-taipei-care-form";
+import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 
 export async function POST(request: NextRequest) {
   const forbidden = requireCapability(request, "exports.create");
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     format?: "word" | "pdf";
     elderName?: string;
     caseCode?: string;
-    answers?: CareFormAnswers;
+    answers?: MohwLifeCareAnswers;
   };
   const format = body.format ?? "word";
   const rows = Object.entries(body.answers ?? {}).map(([key, value]) => ({
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     value: Array.isArray(value) ? value.join("、") : value,
   }));
   const content = [
-    `新北市政府獨居老人生活關懷表（${format === "word" ? "Word 套版內容" : "PDF 預覽內容"}）`,
+    `衛福部生活關懷表（102 欄 · ${format === "word" ? "Word 套版內容" : "PDF 預覽內容"}）`,
     `案號：${body.caseCode ?? ""}`,
     `姓名：${body.elderName ?? ""}`,
     "",

@@ -7,7 +7,7 @@ import { getVisibleNavItems, navGroups, type NavItem, type NavKey } from "@/lib/
 import type { Capability } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
-const primaryNavOrder: NavKey[] = ["dashboard", "tasks", "assignments", "cases"];
+const primaryNavOrder: NavKey[] = ["dashboard", "tasks", "clock", "assignments", "cases"];
 
 function isNavItem(item: NavItem | undefined): item is NavItem {
   return Boolean(item);

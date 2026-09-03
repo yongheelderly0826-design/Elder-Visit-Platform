@@ -6,6 +6,7 @@ import type {
   AssignmentDecisionResult,
   DashboardMetric,
   ElderCase,
+  VisitSchedule,
   Workspace,
 } from "@/lib/domain/types";
 import type {
@@ -19,6 +20,7 @@ import type {
 } from "@/lib/repositories/types";
 
 type GasCaseRow = Record<string, string | number>;
+type GasAssignmentRow = Record<string, string | number>;
 
 function mapPriorityToRisk(priority: string): ElderCase["riskLevel"] {
   if (priority === "高" || priority === "urgent") return "high";
@@ -32,6 +34,13 @@ function mapVisitStatus(status: string): ElderCase["status"] {
   if (status === "已完成") return "visited";
   if (status === "已稽核") return "auditing";
   if (status === "結案") return "closed";
+  return "pending";
+}
+
+function mapAssignmentStatus(status: string): VisitSchedule["status"] {
+  if (status === "進行中") return "in_progress";
+  if (status === "已完成" || status === "已送出") return "submitted";
+  if (status === "空訪續訪") return "needs_follow_up";
   return "pending";
 }
 
@@ -77,6 +86,31 @@ function toElderCase(row: GasCaseRow): ElderCase {
   };
 }
 
+function toVisitSchedule(
+  row: GasAssignmentRow,
+  attempt: number,
+  workspaceId: string,
+): VisitSchedule {
+  const due = String(row.due_date ?? "").trim();
+  const visitDate =
+    due ||
+    String(row.dispatched_at ?? "").slice(0, 10) ||
+    new Date().toISOString().slice(0, 10);
+
+  return {
+    id: String(row.assignment_id ?? ""),
+    workspaceId,
+    caseId: String(row.case_id ?? ""),
+    visitorId: String(row.visitor_id ?? ""),
+    coVisitorId: null,
+    visitDate,
+    visitAttempt: attempt > 0 ? attempt : 1,
+    status: mapAssignmentStatus(String(row.status ?? "待接案")),
+    assignmentReason: String(row.notes ?? row.visit_village ?? "GAS 派案"),
+    requiredFormTemplateIds: ["mohw_life_care_v1"],
+  };
+}
+
 function toRegistryItem(row: GasCaseRow): CaseRegistryItem {
   const elderCase = toElderCase(row);
   return {
@@ -95,6 +129,42 @@ function summarizeCases(cases: CaseRegistryItem[]): CaseRegistrySummary {
     assigned: cases.filter((c) => c.status === "assigned").length,
     closed: cases.filter((c) => c.status === "closed").length,
   };
+}
+
+async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
+  const workspaceId = process.env.GAS_WORKSPACE_ID ?? "WS-YH-115";
+  const assignmentParams: { active_only: string; visitor_id?: string } = {
+    active_only: "true",
+  };
+  const resolvedVisitorId = visitorId || process.env.GAS_DEFAULT_VISITOR_ID;
+  if (resolvedVisitorId) {
+    assignmentParams.visitor_id = resolvedVisitorId;
+  }
+
+  const [assignments, cases, allAssignments] = await Promise.all([
+    gasClient.assignments.list(assignmentParams) as Promise<GasAssignmentRow[]>,
+    gasClient.cases.list({ district: "永和區" }) as Promise<GasCaseRow[]>,
+    gasClient.assignments.list() as Promise<GasAssignmentRow[]>,
+  ]);
+
+  const caseMap = new Map(cases.map((row) => [String(row.case_id ?? ""), toElderCase(row)]));
+  const historyCount = new Map<string, number>();
+  for (const row of allAssignments) {
+    const caseId = String(row.case_id ?? "");
+    historyCount.set(caseId, (historyCount.get(caseId) ?? 0) + 1);
+  }
+
+  return assignments.flatMap((row) => {
+    const caseId = String(row.case_id ?? "");
+    const elderCase = caseMap.get(caseId);
+    if (!elderCase) return [];
+    return [
+      {
+        schedule: toVisitSchedule(row, historyCount.get(caseId) ?? 1, workspaceId),
+        elderCase,
+      },
+    ];
+  });
 }
 
 const yongheWorkspace: Workspace = {
@@ -180,8 +250,31 @@ export const gasRepository: AppRepository = {
     return [] satisfies ActivityItem[];
   },
 
-  async getVisitorTasks() {
-    return [] satisfies VisitorTask[];
+  async getVisitorTasks(visitorId?: string) {
+    try {
+      return await buildVisitorTasks(visitorId);
+    } catch {
+      return [] satisfies VisitorTask[];
+    }
+  },
+
+  async getVisitTask(scheduleId: string) {
+    const workspaceId = process.env.GAS_WORKSPACE_ID ?? "WS-YH-115";
+    try {
+      const row = (await gasClient.assignments.get(scheduleId)) as GasAssignmentRow | null;
+      if (!row || !row.assignment_id) return null;
+      const caseRow = (await gasClient.cases.get(String(row.case_id))) as GasCaseRow | null;
+      if (!caseRow) return null;
+      const allForCase = ((await gasClient.assignments.list()) as GasAssignmentRow[]).filter(
+        (item) => String(item.case_id) === String(row.case_id),
+      );
+      return {
+        schedule: toVisitSchedule(row, allForCase.length || 1, workspaceId),
+        elderCase: toElderCase(caseRow),
+      } satisfies VisitorTask;
+    } catch {
+      return null;
+    }
   },
 
   async getCaseRegistry() {
@@ -195,52 +288,130 @@ export const gasRepository: AppRepository = {
   },
 
   async getAssignmentDashboard() {
-    const rows = (await gasClient.cases.list({ district: "永和區", visit_status: "待訪" })) as GasCaseRow[];
-    const visitors = (await gasClient.visitors.list()) as GasCaseRow[];
+    const [caseRows, visitorRows, assignmentRows] = await Promise.all([
+      gasClient.cases.list({ district: "永和區" }) as Promise<GasCaseRow[]>,
+      gasClient.visitors.list() as Promise<GasCaseRow[]>,
+      gasClient.assignments.list({ active_only: "true" }) as Promise<GasAssignmentRow[]>,
+    ]);
+
+    const activeCountByVisitor = new Map<string, number>();
+    for (const row of assignmentRows) {
+      const visitorId = String(row.visitor_id ?? "");
+      if (!visitorId) continue;
+      activeCountByVisitor.set(visitorId, (activeCountByVisitor.get(visitorId) ?? 0) + 1);
+    }
+
+    const pendingRows = caseRows.filter((row) => {
+      const status = String(row.visit_status ?? "");
+      return status === "待訪" || status === "待派案" || status === "" || status === "pending";
+    });
+    const cases = pendingRows.map(toElderCase);
+
     return {
-      visitors: visitors.map((v) => ({
-        id: String(v.visitor_id ?? ""),
-        fullName: String(v.name ?? ""),
-        workerType: "general" as const,
-        districtCoverage: String(v.service_areas ?? "")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        villageCoverage: [],
-        activeTaskCount: 0,
-        maxDailyTasks: 8,
-        trainedModules: ["assignment", "visit_form"],
-        visitorCertificateNo: v.badge_no ? String(v.badge_no) : null,
-        certificateStatus: v.badge_no ? ("valid" as const) : ("missing" as const),
-        trainingDate: null,
-        bankAccountLast5: null,
-        remittanceReady: false,
-        status: v.status === "已核准" ? ("available" as const) : ("inactive" as const),
-      })),
-      recommendations: rows.slice(0, 20).map((row, index) => ({
-        id: `rec-${String(row.case_id ?? index)}`,
-        caseId: String(row.case_id ?? ""),
-        scheduleId: `sch-${String(row.case_id ?? index)}`,
+      cases,
+      visitors: visitorRows.map((v) => {
+        const visitorId = String(v.visitor_id ?? "");
+        return {
+          id: visitorId,
+          fullName: String(v.name ?? ""),
+          workerType: "general" as const,
+          districtCoverage: String(v.service_areas ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          villageCoverage: [],
+          activeTaskCount: activeCountByVisitor.get(visitorId) ?? 0,
+          maxDailyTasks: 8,
+          trainedModules: ["assignment", "visit_form"],
+          visitorCertificateNo: v.badge_no ? String(v.badge_no) : null,
+          certificateStatus: v.badge_no ? ("valid" as const) : ("missing" as const),
+          trainingDate: null,
+          bankAccountLast5: null,
+          remittanceReady: false,
+          status: v.status === "已核准" ? ("available" as const) : ("inactive" as const),
+        };
+      }),
+      recommendations: cases.slice(0, 40).map((elderCase, index) => ({
+        id: `rec-${elderCase.id}`,
+        caseId: elderCase.id,
+        scheduleId: `sch-${elderCase.id}`,
         visitorId: "",
         score: 80 - index,
         status: "recommended" as const,
-        reasons: [String(row.visit_village ?? ""), String(row.data_quality_tag ?? "待派案")].filter(Boolean),
-        warnings: row.data_quality_tag ? [String(row.data_quality_tag)] : [],
+        reasons: [
+          elderCase.village,
+          elderCase.riskLevel === "high" ? "高風險優先" : "待派案",
+        ].filter(Boolean),
+        warnings: [],
       })),
     } satisfies AssignmentDashboardData;
   },
 
-  async confirmAssignment(recommendationId: string) {
-    return {
-      recommendationId,
-      status: "confirmed",
-      assignedAt: new Date().toISOString(),
-      message: "派案確認（GAS 模式）",
-      activityLog: {
-        entityType: "visit_schedule",
-        action: "assignment_confirm",
-      },
-    } satisfies AssignmentDecisionResult;
+  async confirmAssignment(recommendationId: string, visitorId?: string) {
+    const caseId = recommendationId.replace(/^rec-/, "");
+    if (!caseId) {
+      return {
+        recommendationId,
+        status: "manual_review",
+        assignedAt: null,
+        message: "找不到派案建議，請重新整理派案佇列。",
+        activityLog: {
+          entityType: "visit_schedule",
+          action: "assignment_confirm",
+        },
+      } satisfies AssignmentDecisionResult;
+    }
+
+    let resolvedVisitorId = visitorId?.trim() || "";
+    if (!resolvedVisitorId) {
+      const visitors = (await gasClient.visitors.list({ status: "已核准" })) as GasCaseRow[];
+      resolvedVisitorId = String(visitors[0]?.visitor_id ?? "");
+    }
+
+    if (!resolvedVisitorId) {
+      return {
+        recommendationId,
+        status: "manual_review",
+        assignedAt: null,
+        message: "請先選擇訪員，或於訪查員主檔建立已核准訪員後再派案。",
+        activityLog: {
+          entityType: "visit_schedule",
+          action: "assignment_confirm",
+        },
+      } satisfies AssignmentDecisionResult;
+    }
+
+    try {
+      const saved = (await gasClient.assignments.dispatch({
+        case_id: caseId,
+        visitor_id: resolvedVisitorId,
+        notes: "由派案管理確認",
+        auto_confirm: true,
+      })) as GasAssignmentRow;
+
+      return {
+        recommendationId,
+        status: "confirmed",
+        assignedAt: new Date().toISOString(),
+        message: `派案已確認（${String(saved.assignment_id ?? "")}），訪員任務清單會顯示此訪查。`,
+        activityLog: {
+          entityType: "visit_schedule",
+          action: "assignment_confirm",
+        },
+      } satisfies AssignmentDecisionResult;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "派案失敗";
+      return {
+        recommendationId,
+        status: "manual_review",
+        assignedAt: null,
+        message,
+        activityLog: {
+          entityType: "visit_schedule",
+          action: "assignment_confirm",
+        },
+      } satisfies AssignmentDecisionResult;
+    }
   },
 
   async getPaymentBatchPreview() {

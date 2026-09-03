@@ -18,6 +18,14 @@ function handleRequest_(e, method) {
     var action = (e.parameter && e.parameter.action) || '';
     var body = {};
 
+    if (e.parameter && e.parameter.body) {
+      try {
+        body = JSON.parse(e.parameter.body);
+      } catch (parseErr) {
+        throw new Error('Invalid body JSON');
+      }
+    }
+
     if (method === 'POST' && e.postData && e.postData.contents) {
       body = JSON.parse(e.postData.contents);
     }
@@ -26,10 +34,13 @@ function handleRequest_(e, method) {
     return jsonResponse_({ ok: true, data: result, error: null }, e);
   } catch (err) {
     var code = err.code || 'INTERNAL_ERROR';
+    var errorPayload = { code: code, message: err.message || String(err) };
+    if (err.errorLines) errorPayload.errorLines = err.errorLines;
+    if (err.errors) errorPayload.errors = err.errors;
     return jsonResponse_({
       ok: false,
       data: null,
-      error: { code: code, message: err.message || String(err) },
+      error: errorPayload,
     }, e);
   }
 }

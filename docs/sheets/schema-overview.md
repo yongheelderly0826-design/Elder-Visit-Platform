@@ -47,6 +47,7 @@
 | phone | 手機 | text | ✅ | |
 | email | Email | text | | |
 | service_areas | 服務里別 | text | | 逗號分隔 |
+| volunteer_group | 志工組別 | text | | 如 meal／road／park（12 組 ID） |
 | status | 狀態 | enum | ✅ | 待審/已核准/停用 |
 | badge_no | 證件編號 | text | | |
 | photo_url | 照片 | url | | Drive 連結 |
@@ -107,20 +108,30 @@
 
 ## `簽到退紀錄`
 
+支援兩種用途：（1）訪查相關出勤；（2）**12 組志工出勤**（外勤 QR／公所刷證）。後者會寫入 `channel`、`site_*`、`group_*` 等欄位。
+
 | 英文 key | 中文 | 型別 | 必填 | 說明 |
 |----------|------|------|------|------|
 | attendance_id | 紀錄編號 | text | ✅ | |
-| visitor_id | 訪查員 | text | ✅ | |
-| assignment_id | 派案 | text | | |
-| session_date | 日期 | date | ✅ | |
+| visitor_id | 訪查員／志工 | text | ✅ | |
+| assignment_id | 派案 | text | | 訪查用；志工出勤可空 |
+| session_date | 日期 | date | ✅ | Asia/Taipei |
 | checkin_at | 簽到時間 | datetime | | |
 | checkout_at | 簽退時間 | datetime | | |
 | checkin_lat | 簽到緯度 | number | | |
 | checkin_lng | 簽到經度 | number | | |
 | checkout_lat | 簽退緯度 | number | | |
 | checkout_lng | 簽退經度 | number | | |
-| session_type | 類型 | enum | | 視訊/現場 |
-| duration_minutes | 時數(分) | number | | 自動計算 |
+| session_type | 類型 | enum | | 志工出勤／現場／視訊 |
+| duration_minutes | 時數(分) | number | | 簽退時自動計算 |
+| channel | 簽到通道 | enum | | qr／barcode |
+| site_id | 地點代碼 | text | | 如 SITE-MEAL、SITE-KIOSK |
+| site_name | 地點名稱 | text | | 集合點名稱 |
+| group_id | 組別 ID | text | | meal／road／park … |
+| group_name | 組別名稱 | text | | 送餐服務組 … |
+| worker_name | 姓名快照 | text | | 寫入當下姓名 |
+| id_number | 身分證快照 | text | | 月結匯出用 |
+| source | 來源 | enum | | field_qr／office_kiosk |
 
 ---
 

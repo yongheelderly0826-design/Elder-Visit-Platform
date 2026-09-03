@@ -30,6 +30,17 @@ var CareFormModule = (function () {
       err.code = 'VALIDATION_ERROR';
       throw err;
     }
+
+    var answers = data.answers || {};
+    var validation = MohwLifeCareValidator.validateRow(answers, data.row || 2);
+    if (!validation.ok) {
+      var verr = new Error(validation.errorLines.join('；'));
+      verr.code = 'MOHW_VALIDATION_ERROR';
+      verr.errors = validation.errors;
+      verr.errorLines = validation.errorLines;
+      throw verr;
+    }
+
     var record = {
       careform_id: 'CF-' + Utilities.getUuid().slice(0, 8),
       assignment_id: data.assignment_id,
@@ -37,7 +48,7 @@ var CareFormModule = (function () {
       visitor_id: data.visitor_id,
       visit_result: data.visit_result || '完成訪視',
       completion_pct: data.completion_pct || 100,
-      answers_json: JSON.stringify(data.answers),
+      answers_json: JSON.stringify(answers),
       consent_signed: data.consent_signed || false,
       photo_urls: JSON.stringify(data.photos || []),
       status: '已提交',
@@ -54,8 +65,15 @@ var CareFormModule = (function () {
     // 加入稽核佇列
     AuditModule.enqueue(record.careform_id);
 
-    return record;
+    return {
+      careform: record,
+      validation: { ok: true, errorLines: [] },
+    };
   }
 
-  return { get: get, saveDraft: saveDraft, submit: submit };
+  function validate(data) {
+    return MohwLifeCareValidator.validateRow((data && data.answers) || {}, (data && data.row) || 2);
+  }
+
+  return { get: get, saveDraft: saveDraft, submit: submit, validate: validate };
 })();

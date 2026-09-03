@@ -44,6 +44,27 @@ GAS ExportModule.exportLifeCareXlsx()
     └── 回傳下載連結 + 寫入「匯出紀錄」
 ```
 
+### 12 組志工出勤（外勤 QR／公所刷證）
+
+```
+外勤手機 /volunteer/clock
+    │ POST /api/attendance/identify  （身分證 → Cookie）
+    │ POST /api/attendance/clock     （site_id 來自 QR）
+    ▼
+GAS AttendanceModule.clock()
+    ├── identify：訪查員主檔 by id_number（含 volunteer_group）
+    ├── 當日無未簽退 → append 簽到（channel=qr）
+    └── 已有未簽退 → updateByKey 簽退＋duration_minutes
+    ▼
+公所 /office/kiosk（承辦登入）
+    │ POST /api/attendance/clock { id_number, channel=barcode }
+    ▼
+承辦 /manager/attendance 下載月結
+    │ GET /api/attendance/export?period=yyyy-MM
+    ├── Next.js 產本機 xlsx（立即下載）
+    └── GAS attendance.monthlyExport → Drive「志工出勤月結」
+```
+
 ---
 
 ## 2. 快取策略
@@ -72,7 +93,7 @@ GAS ExportModule.exportLifeCareXlsx()
 |------|------|
 | 同時編輯同一列 | Sheet 最後寫入為準；GAS 寫入前讀 `updated_at` |
 | 重複派案 | `assignment_id` 唯一鍵拒絕 |
-| 重複簽到 | 同 `visitor_id` + `date` 僅允許一筆簽到 |
+| 重複簽到（志工出勤） | 同 `visitor_id` + 當日僅允許一筆「未簽退」；再 clock 視為簽退 |
 
 ---
 

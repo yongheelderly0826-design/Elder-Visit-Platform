@@ -36,6 +36,10 @@ export const mockRepository: AppRepository = {
       return [{ schedule, elderCase }];
     });
   },
+  async getVisitTask(scheduleId: string) {
+    const tasks = await this.getVisitorTasks();
+    return tasks.find((task) => task.schedule.id === scheduleId) ?? null;
+  },
   async getCaseRegistry() {
     const { getCaseRegistry } = await import("@/lib/domain/cases");
     return getCaseRegistry();
@@ -46,12 +50,14 @@ export const mockRepository: AppRepository = {
   },
   async getAssignmentDashboard() {
     const { getAssignmentRecommendations, visitors } = await import("@/lib/domain/assignments");
+    const { elderCases } = await import("@/lib/domain/mock-data");
     return {
       visitors,
       recommendations: getAssignmentRecommendations(),
+      cases: elderCases,
     };
   },
-  async confirmAssignment(recommendationId: string) {
+  async confirmAssignment(recommendationId: string, _visitorId?: string) {
     const { confirmAssignment } = await import("@/lib/domain/assignments");
     return confirmAssignment(recommendationId);
   },
