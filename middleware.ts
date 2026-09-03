@@ -13,9 +13,23 @@ export function middleware(request: NextRequest) {
   const isPublicBadgeApi = pathname === "/api/badges/claim";
   const isPublicRegistrationApi =
     pathname === "/api/users/visitor-registration" || pathname === "/api/users/headshot-process";
+  // 外勤掃 QR 簽到：頁面與 identify/me/clock 需免登入（clock 仍靠身分 Cookie／刷證權限）
+  const isPublicVolunteerClock =
+    pathname === "/volunteer/clock" ||
+    pathname === "/api/attendance/identify" ||
+    pathname === "/api/attendance/me" ||
+    pathname === "/api/attendance/clock";
   const isAsset = pathname.startsWith("/_next/") || pathname.startsWith("/favicon");
 
-  if (isPublicRoute || isAuthApi || isPublicRegistrationApi || isPublicBadgeRoute || isPublicBadgeApi || isAsset) {
+  if (
+    isPublicRoute ||
+    isAuthApi ||
+    isPublicRegistrationApi ||
+    isPublicBadgeRoute ||
+    isPublicBadgeApi ||
+    isPublicVolunteerClock ||
+    isAsset
+  ) {
     return NextResponse.next();
   }
 
