@@ -47,6 +47,7 @@ export function AssignmentDashboard() {
   const canConfirmAssignment = useCan("assignment.confirm");
   const [data, setData] = useState<AssignmentPayload | null>(null);
   const [decision, setDecision] = useState<AssignmentDecisionResult | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const caseMap = useMemo(
     () => new Map((data?.cases ?? []).map((elderCase) => [elderCase.id, elderCase])),
@@ -70,15 +71,59 @@ export function AssignmentDashboard() {
   }
 
   async function confirm(recommendationId: string, visitorId: string) {
-    const response = await fetch("/api/assignments", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ recommendationId, visitorId }),
-    });
-    const result = (await response.json()) as { data?: AssignmentDecisionResult };
-    setDecision(result.data ?? null);
-    if (result.data?.status === "confirmed") {
-      await loadAssignments();
+    if (!visitorId) {
+      setDecision({
+        recommendationId,
+        status: "manual_review",
+        assignedAt: null,
+        message: "請先選擇有效的訪員（訪員編號空白）。",
+        activityLog: { entityType: "visit_schedule", action: "assignment_confirm" },
+      });
+      return;
+    }
+
+    setConfirmingId(`${recommendationId}:${visitorId}`);
+    setDecision(null);
+    try {
+      const response = await fetch("/api/assignments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ recommendationId, visitorId }),
+      });
+      const result = (await response.json()) as {
+        data?: AssignmentDecisionResult;
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !result.data) {
+        setDecision({
+          recommendationId,
+          status: "manual_review",
+          assignedAt: null,
+          message:
+            result.error?.message ||
+            (response.status === 403
+              ? "目前帳號沒有確認派案權限。"
+              : `派案失敗（HTTP ${response.status}），請稍後再試。`),
+          activityLog: { entityType: "visit_schedule", action: "assignment_confirm" },
+        });
+        return;
+      }
+
+      setDecision(result.data);
+      if (result.data.status === "confirmed") {
+        await loadAssignments();
+      }
+    } catch {
+      setDecision({
+        recommendationId,
+        status: "manual_review",
+        assignedAt: null,
+        message: "網路異常，派案未送出，請檢查連線後再試。",
+        activityLog: { entityType: "visit_schedule", action: "assignment_confirm" },
+      });
+    } finally {
+      setConfirmingId(null);
     }
   }
 
@@ -170,6 +215,21 @@ export function AssignmentDashboard() {
           </div>
         </div>
       </section>
+
+      {decision && (
+        <section
+          className={`rounded-lg border p-4 ${
+            decision.status === "confirmed"
+              ? "border-emerald-600/40 bg-emerald-50 text-emerald-950"
+              : "border-amber-600/40 bg-amber-50 text-amber-950"
+          }`}
+        >
+          <p className="font-semibold">
+            {decision.status === "confirmed" ? "派案成功" : "派案未完成"}
+          </p>
+          <p className="mt-1 text-sm leading-6">{decision.message}</p>
+        </section>
+      )}
 
       {data && selectedRecommendation && (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(24rem,1.05fr)]">
@@ -294,11 +354,20 @@ export function AssignmentDashboard() {
                     <Button
                       className="mt-3 w-full"
                       variant={matched ? "default" : "outline"}
-                      disabled={!canConfirmAssignment}
+                      disabled={!canConfirmAssignment || confirmingId !== null || !visitor.id}
                       onClick={() => confirm(selectedRecommendation.id, visitor.id)}
                     >
-                      {selectedRecommendation.warnings.length > 0 ? "送主管覆核" : "確認分配給此訪員"}
+                      {confirmingId === `${selectedRecommendation.id}:${visitor.id}`
+                        ? "派案處理中…"
+                        : selectedRecommendation.warnings.length > 0
+                          ? "送主管覆核"
+                          : "確認分配給此訪員"}
                     </Button>
+                    {visitor.status !== "available" ? (
+                      <p className="mt-2 text-xs text-amber-800">
+                        此訪員狀態為「{visitor.status}」（非已核准）。建議先到使用者／訪查員主檔審核通過再派案。
+                      </p>
+                    ) : null}
                   </article>
                 );
               })}
@@ -320,18 +389,6 @@ export function AssignmentDashboard() {
               </p>
             )}
           </div>
-        </section>
-      )}
-
-      {decision && (
-        <section className="rounded-lg border bg-card p-4">
-          <p className="font-semibold">{decision.message}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            狀態：{decision.status}
-            {decision.assignedAt
-              ? ` · ${new Date(decision.assignedAt).toLocaleString("zh-TW")}`
-              : ""}
-          </p>
         </section>
       )}
     </div>

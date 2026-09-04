@@ -7,6 +7,7 @@ import type {
   DashboardMetric,
   ElderCase,
   VisitSchedule,
+  VisitorProfile,
   Workspace,
 } from "@/lib/domain/types";
 import type {
@@ -301,15 +302,23 @@ export const gasRepository: AppRepository = {
       activeCountByVisitor.set(visitorId, (activeCountByVisitor.get(visitorId) ?? 0) + 1);
     }
 
+    const activeCaseIds = new Set(
+      assignmentRows
+        .map((row) => String(row.case_id ?? "").trim())
+        .filter(Boolean),
+    );
+
     const pendingRows = caseRows.filter((row) => {
+      const caseId = String(row.case_id ?? "");
+      if (activeCaseIds.has(caseId)) return false;
       const status = String(row.visit_status ?? "");
       return status === "待訪" || status === "待派案" || status === "" || status === "pending";
     });
     const cases = pendingRows.map(toElderCase);
 
-    return {
-      cases,
-      visitors: visitorRows.map((v) => {
+    // Prefer assignable visitors first; keep inactive visible but sorted later
+    const visitors = visitorRows
+      .map((v) => {
         const visitorId = String(v.visitor_id ?? "");
         return {
           id: visitorId,
@@ -322,7 +331,7 @@ export const gasRepository: AppRepository = {
           villageCoverage: [],
           activeTaskCount: activeCountByVisitor.get(visitorId) ?? 0,
           maxDailyTasks: 8,
-          trainedModules: ["assignment", "visit_form"],
+          trainedModules: ["assignment", "visit_form"] as VisitorProfile["trainedModules"],
           visitorCertificateNo: v.badge_no ? String(v.badge_no) : null,
           certificateStatus: v.badge_no ? ("valid" as const) : ("missing" as const),
           trainingDate: null,
@@ -330,7 +339,12 @@ export const gasRepository: AppRepository = {
           remittanceReady: false,
           status: v.status === "已核准" ? ("available" as const) : ("inactive" as const),
         };
-      }),
+      })
+      .sort((a, b) => Number(b.status === "available") - Number(a.status === "available"));
+
+    return {
+      cases,
+      visitors,
       recommendations: cases.slice(0, 40).map((elderCase, index) => ({
         id: `rec-${elderCase.id}`,
         caseId: elderCase.id,
@@ -400,7 +414,16 @@ export const gasRepository: AppRepository = {
         },
       } satisfies AssignmentDecisionResult;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "派案失敗";
+      const raw = error instanceof Error ? error.message : "派案失敗";
+      let message = raw;
+      if (/already has an active assignment|已有進行中的派案/i.test(raw)) {
+        const match = raw.match(/ASG-[A-Za-z0-9-]+/);
+        message = match
+          ? `此個案已有進行中的派案（${match[0]}），請改從訪員「任務」開啟，或先結束／改派該筆派案後再分配。`
+          : "此個案已有進行中的派案，無法重複分配。請從訪員任務進入或先處理既有派案。";
+      } else if (/Case not found|找不到個案/i.test(raw)) {
+        message = "找不到個案資料，請重新整理派案頁後再試。";
+      }
       return {
         recommendationId,
         status: "manual_review",

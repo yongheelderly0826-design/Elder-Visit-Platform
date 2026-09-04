@@ -34,7 +34,9 @@ var AssignmentModule = (function () {
       return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
     });
     if (existingActive.length > 0) {
-      var err = new Error('Case already has an active assignment: ' + existingActive[0].assignment_id);
+      var err = new Error(
+        '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
+      );
       err.code = 'CONFLICT';
       throw err;
     }
