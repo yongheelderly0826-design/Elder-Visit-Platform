@@ -197,6 +197,8 @@
 
 > 若貴單位有固定匯入範本欄位，請提供檔案給系統管理員對欄。
 
+> **給其他管理員的教育訓練**：請見本手冊 **§9**；列印勾選表見 [`volunteer-attendance-e2e-acceptance.md`](./volunteer-attendance-e2e-acceptance.md)。
+
 ---
 
 ## 6. 新訪員註冊流程
@@ -261,25 +263,156 @@
 
 ---
 
-## 9. 技術支援與文件索引
+## 9. 教育訓練手冊：12 組志工出勤
+
+> **對象**：另一位承辦／系統管理員（不需寫程式）  
+> **目標**：能獨立建檔、指導外勤掃 QR、操作公所刷證、下載月結 Excel，並用勾選表確認流程正確  
+> **時間**：約 40～60 分鐘（含實作）  
+> **正式站**：https://elder-visit-platform-ruby.vercel.app  
+> **詳細步驟勾選表**（可列印）：[`volunteer-attendance-e2e-acceptance.md`](./volunteer-attendance-e2e-acceptance.md)
+
+### 9.1 如何取得本手冊（給其他管理員電腦）
+
+倉庫為**私有**，對方須先被加入 GitHub 協作者後，在自己電腦用下列任一方式開啟：
+
+| 方式 | 作法 |
+|------|------|
+| A. 網頁閱讀（最快） | 開啟 https://github.com/yongheelderly0826-design/Elder-Visit-Platform → 進入 `docs/system-operation-manual.md` → 捲到 **§9**；出勤勾選表見同資料夾 `volunteer-attendance-e2e-acceptance.md` |
+| B. 下載 ZIP | GitHub 頁面綠色 **Code** → **Download ZIP** → 解壓後用任何 Markdown 檢視器／VS Code／Cursor 開啟上述檔案 |
+| C. Clone（進階） | `git clone https://github.com/yongheelderly0826-design/Elder-Visit-Platform.git` 後開啟同路徑 |
+
+**訓練實作請用正式網站瀏覽器**，不必在對方電腦安裝 Node／GAS。自動化腳本僅給技術管理員選用（見 §9.10）。
+
+邀請協作者：倉庫 **Settings → Collaborators** → 邀請對方 GitHub 帳號（或請 `yongheelderly0826@gmail.com` 代邀）。
+
+### 9.2 訓練前準備
+
+| 項目 | 說明 |
+|------|------|
+| 帳號 | 可登入正式站的承辦帳號（試運行：`yongheelderly0826@gmail.com`；若已開放其他 Gmail，用對方帳號） |
+| 手機 | 有相機、可上網（建議無痕視窗，模擬志工第一次登入） |
+| 電腦 | 瀏覽器；若有身分證條碼槍更好，沒有可手動輸入測試號 |
+| 測試志工（勿當正式名冊） | 見下表；身分證須通過檢查碼 |
+
+| 代號 | 姓名 | 身分證 | 組別 | 練習用途 |
+|------|------|--------|------|----------|
+| T-MEAL | 測試送餐甲 | `A123456789` | 送餐服務組 | 外勤掃 QR |
+| T-OFF | 測試內勤乙 | `B234567894` | 行政內勤組 | 公所刷證 |
+
+若上述號碼已在正式名冊，請改用其他通過檢查碼的測試號，並在訓練紀錄註明。
+
+### 9.3 課程大綱（建議順序）
+
+```
+① 兩條流程別混用（5 分）→ ② 承辦建檔＋QR 海報（10 分）
+→ ③ 手機外勤簽到／簽退（10 分）→ ④ 公所刷證（8 分）
+→ ⑤ 月結 Excel（7 分）→ ⑥ 常見錯誤與測驗勾選（10 分）
+```
+
+對照日常操作說明：§5.7；完整勾選案例編號 TC-00～TC-08 見驗收文件。
+
+### 9.4 實作一：觀念（講師講解）
+
+平台有兩條線，訓練時務必講清楚：
+
+| | 獨居長者訪查 | 12 組志工出勤 |
+|--|--------------|----------------|
+| 目的 | 關懷表／稽核／衛福部匯出 | 組別出缺勤、月結給既有系統 |
+| 入口 | 任務、名冊、派案 | `/volunteer/clock`、`/office/kiosk`、`/manager/attendance` |
+| 身分 | 訪員帳號 | 身分證字號＋組別 |
+
+### 9.5 實作二：承辦建檔與 QR（學員跟著做）
+
+1. 登入 https://elder-visit-platform-ruby.vercel.app/login  
+2. 開啟 **志工出勤** `/manager/attendance`  
+3. 新增 T-MEAL、T-OFF（姓名、身分證、電話、組別）  
+4. 確認名冊出現兩人；可至試算表「訪查員主檔」核對 `volunteer_group`  
+5. 在頁面找到「集合點 QR 海報」，確認有送餐組等海報；用手機掃「送餐服務組」QR，應開到帶 `site=SITE-MEAL` 的簽到頁  
+
+**通過標準**：兩筆建檔成功；掃 QR 可開外勤頁且顯示地點名稱或代碼。
+
+### 9.6 實作三：外勤掃 QR 簽到／簽退（學員用手機）
+
+1. 手機無痕開啟 `/volunteer/clock?site=SITE-MEAL`（或掃海報）  
+2. 故意輸入錯誤身分證 → 應提示找不到  
+3. 輸入 `A123456789` 登入 → 應顯示「測試送餐甲／送餐服務組」  
+4. 按簽到 → 成功；再操作一次同一地點 → 應為簽退  
+5. 回到 `/manager/attendance` 本月列表，可見「外勤QR」與簽退時間  
+
+**通過標準**：同一人完成一輪簽到＋簽退；列表看得到。
+
+### 9.7 實作四：公所刷證與月結（學員用電腦）
+
+1. 承辦登入後開 `/office/kiosk`（未登入應被導去登入）  
+2. 輸入或刷 `B234567894` + Enter → 簽到成功「測試內勤乙」  
+3. 再刷／再送同一號 → 簽退成功  
+4. 回 `/manager/attendance` 選本月 → **下載 Excel**，用 Excel／Numbers 開啟  
+5. 確認表頭含：年月、組別、姓名、身分證字號、志工編號、日期、簽到／退時間、時數、簽到方式、地點、出勤編號；內容至少有外勤與刷證各一筆  
+
+**通過標準**：刷證一輪完成；Excel 可開且欄位正確。提醒：檔案含身分證，僅供匯入既有系統，勿外流。
+
+### 9.8 實作五：結訓勾選（講師與學員共同勾）
+
+下列與驗收 P1–P8 相同；全部勾完即可認定「出勤模組可獨立操作」：
+
+| # | 能力 | 通過 |
+|---|------|------|
+| P1 | 外勤頁免登入可開啟 | ☐ |
+| P2 | 能建志工名冊（身分＋組別） | ☐ |
+| P3 | 外勤身分證登入後可掃 QR 簽到 | ☐ |
+| P4 | 同一天可簽退且列表有紀錄 | ☐ |
+| P5 | 公所刷證可簽到／簽退 | ☐ |
+| P6 | 月結 Excel 可下載且欄位正確 | ☐ |
+| P7 | （選）試算表「簽到退紀錄」看得到對應列 | ☐ |
+| P8 | （選）名冊／派案／衛福部匯出頁仍可進，與出勤分開 | ☐ |
+
+列印用完整步驟表、缺陷登錄、簽名欄：請開啟 [`volunteer-attendance-e2e-acceptance.md`](./volunteer-attendance-e2e-acceptance.md)。
+
+### 9.9 訓練常見狀況（講師速查）
+
+| 現象 | 處理 |
+|------|------|
+| 掃 QR 找不到志工 | 先完成 §9.5 建檔 |
+| 外勤被導去登入頁 | 通知系統管理員檢查 middleware／正式站部署 |
+| 刷證沒反應 | 確認已登入、游標在輸入框、掃描器為鍵盤模式（自動 Enter） |
+| 名冊像假資料、非 GAS | 開 `/system/status`，應為 `gas_ready`；否則查 Vercel 環境變數 |
+| 對方打不開 GitHub 文件 | 確認已邀為 Collaborator；或改傳本手冊 PDF／匯出副本（注意勿附 Token） |
+
+### 9.10 技術管理員選修：自動化驗收腳本
+
+僅在**已有專案與 `.env.local`** 的電腦執行（一般承辦訓練可跳過）：
+
+```bash
+cd /path/to/Elder-Visit-Platform
+node scripts/verify-volunteer-attendance-flow.mjs
+```
+
+終端機出現 `"ok": true` 表示 GAS 端建檔、外勤／刷證簽到退、列表、Drive 月結鏡像可用。此腳本**不取代**上面的網站實作訓練。
+
+---
+
+## 10. 技術支援與文件索引
 
 | 文件 | 路徑／位置 |
 |------|------------|
-| 本操作說明書 | `docs/system-operation-manual.md` |
+| 本操作說明書（含 §9 教育訓練） | `docs/system-operation-manual.md` |
 | 架構說明書 | `docs/system-architecture.md` |
 | 架構總覽 | `docs/architecture/README.md` |
 | 試算表欄位 | `docs/sheets/schema-overview.md` |
 | 管理者登入 | `docs/architecture/google-manager-login.md` |
 | 部署指南 | `docs/architecture/deployment.md` |
+| 志工出勤驗收／訓練勾選表 | `docs/volunteer-attendance-e2e-acceptance.md` |
+| 出勤自動驗收腳本 | `scripts/verify-volunteer-attendance-flow.mjs` |
 | 程式倉庫 | https://github.com/yongheelderly0826-design/Elder-Visit-Platform （私有） |
 
 ---
 
-## 10. 聯絡與修訂紀錄
+## 11. 聯絡與修訂紀錄
 
 | 日期 | 版本 | 說明 |
 |------|------|------|
 | 2026-08-31 | 1.0 | 初版：永和 115 年試運行、Ruby Vercel 正式站、56 筆 GAS 真實資料 |
 | 2026-09-03 | 1.1 | 新增 12 組志工出勤：外勤 QR、公所刷證、月結 Excel |
+| 2026-09-04 | 1.2 | 新增 §9 教育訓練手冊；驗收勾選表與腳本入庫供協作者訓練 |
 
 如有操作問題或需新增承辦／訪員帳號，請聯繫系統管理員（`yongheelderly0826@gmail.com`）。

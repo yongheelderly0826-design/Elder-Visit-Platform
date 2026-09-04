@@ -48,9 +48,24 @@ var MohwLifeCareExporter = (function () {
     sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
     SpreadsheetApp.flush();
 
-    var tempFile = DriveApp.getFileById(ss.getId());
-    var xlsxBlob = tempFile.getBlob().getAs('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    xlsxBlob.setName(fileName);
+    var spreadsheetId = ss.getId();
+    var tempFile = DriveApp.getFileById(spreadsheetId);
+    // getBlob().getAs(xlsx) 常失敗（PDF MIME）；改走 Sheets export API
+    var exportUrl =
+      'https://docs.google.com/spreadsheets/d/' +
+      spreadsheetId +
+      '/export?format=xlsx';
+    var response = UrlFetchApp.fetch(exportUrl, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+    });
+    if (response.getResponseCode() !== 200) {
+      tempFile.setTrashed(true);
+      throw new Error(
+        'xlsx export HTTP ' + response.getResponseCode() + ': ' + response.getContentText().slice(0, 200)
+      );
+    }
+    var xlsxBlob = response.getBlob().setName(fileName);
 
     var folder = folderOpts.folderName
       ? getOrCreateNamedFolder_(folderOpts.propertyKey, folderOpts.folderName)

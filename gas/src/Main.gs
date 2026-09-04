@@ -57,3 +57,13 @@ function jsonResponse_(payload, e) {
     .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+/**
+ * 手動授權 Drive／試算表權限用（在編輯器選此函式 → 執行）。
+ * 會觸發 OAuth 同意畫面；成功後執行紀錄應顯示 root 資料夾名稱。
+ */
+function authorizeDriveScopes() {
+  var root = DriveApp.getRootFolder();
+  Logger.log('Drive OK: ' + root.getName());
+  return root.getName();
+}

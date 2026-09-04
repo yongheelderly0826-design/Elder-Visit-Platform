@@ -21,7 +21,7 @@ Next.js PWA（訪查員行動端 + 管理後台）
 
 | 層級 | 目錄 | 說明 |
 |------|------|------|
-| **操作說明書** | [`docs/system-operation-manual.md`](docs/system-operation-manual.md) | 承辦／訪員日常操作（私有倉庫） |
+| **操作說明書** | [`docs/system-operation-manual.md`](docs/system-operation-manual.md) | 承辦／訪員日常操作；**§9 志工出勤教育訓練** |
 | **架構說明書** | [`docs/system-architecture.md`](docs/system-architecture.md) | 運作架構圖與部署拓撲 |
 | **一鍵安裝包** | [`docs/product/installer-kit.md`](docs/product/installer-kit.md) | 客戶架站 SOP · [`/installer`](http://localhost:3000/installer) Web 精靈 |
 | 架構文件 | [`docs/architecture/`](docs/architecture/README.md) | 三層架構、API、部署 |
@@ -40,7 +40,7 @@ Next.js PWA（訪查員行動端 + 管理後台）
 【出勤】志工名冊 → 外勤掃 QR／公所刷證 → 月結 Excel（匯入既有系統）
 ```
 
-詳見 [`docs/system-operation-manual.md`](docs/system-operation-manual.md) §5.7、[`docs/system-architecture.md`](docs/system-architecture.md) §5.2。
+詳見 [`docs/system-operation-manual.md`](docs/system-operation-manual.md) §5.7（日常操作）、**§9（教育訓練手冊）**、勾選表 [`docs/volunteer-attendance-e2e-acceptance.md`](docs/volunteer-attendance-e2e-acceptance.md)。
 
 ---
 
