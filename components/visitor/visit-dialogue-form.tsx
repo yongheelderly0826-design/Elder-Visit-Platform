@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
+import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
 import { Button } from "@/components/ui/button";
 import type { ElderCase, VisitSchedule, VisitSubmission } from "@/lib/domain/types";
 import { visitQuestions } from "@/lib/domain/mock-data";
@@ -293,6 +294,19 @@ export function VisitDialogueForm({
 
       <div className="mt-5 space-y-4">
         <VisitGuidePanel elderCase={elderCase} />
+
+        <VisitAssignmentClock
+          assignmentId={schedule.id}
+          visitorId={schedule.visitorId}
+          onTimesChange={({ visitDate, visitStartTime, visitEndTime }) => {
+            setCareFormAnswers((current) => ({
+              ...current,
+              ...(visitDate ? { visit_date: visitDate } : {}),
+              ...(visitStartTime ? { visit_start_time: visitStartTime } : {}),
+              ...(visitEndTime ? { visit_end_time: visitEndTime } : {}),
+            }));
+          }}
+        />
 
         <section className="rounded-lg border bg-background p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     let fileUrl = "";
 
     if (getSystemStatus().dataMode === "gas_ready") {
-      const rows = await gasClient.attendance.list({ period });
+      const rows = await gasClient.attendance.list({ period, session_type: "志工出勤" });
       items = rows.map(mapGasAttendanceRecord).filter((row): row is AttendanceRecord => Boolean(row));
       try {
         const exported = await gasClient.attendance.monthlyExport({ period });

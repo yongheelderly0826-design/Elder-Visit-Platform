@@ -12,9 +12,14 @@ export type VolunteerGroupId =
   | "office"
   | "other";
 
-export type AttendanceChannel = "qr" | "barcode" | "manual";
+export type AttendanceChannel = "qr" | "barcode" | "manual" | "gps";
 export type AttendanceSource = "field_qr" | "office_kiosk" | "visit";
 export type AttendanceAction = "checkin" | "checkout";
+export type AttendanceSessionType = "志工出勤" | "訪查";
+
+export const VISIT_SESSION_TYPE: AttendanceSessionType = "訪查";
+export const VOLUNTEER_SESSION_TYPE: AttendanceSessionType = "志工出勤";
+export const VISIT_SITE_ID = "SITE-VISIT";
 
 export type VolunteerGroup = {
   id: VolunteerGroupId;
@@ -43,6 +48,8 @@ export type VolunteerWorker = {
 export type AttendanceRecord = {
   attendanceId: string;
   visitorId: string;
+  assignmentId: string;
+  sessionType: string;
   workerName: string;
   idNumber: string;
   groupId: string;
@@ -166,6 +173,7 @@ export function hoursFromMinutes(minutes: number | string | null | undefined) {
 }
 
 export function attendanceChannelLabel(channel?: string, source?: string) {
+  if (source === "visit" || channel === "gps") return "到宅訪查";
   if (source === "office_kiosk" || channel === "barcode") return "公所刷證";
   if (channel === "qr") return "外勤QR";
   return channel || source || "";

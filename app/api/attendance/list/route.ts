@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (getSystemStatus().dataMode === "gas_ready") {
-      const rows = await gasClient.attendance.list({ period });
+      const rows = await gasClient.attendance.list({ period, session_type: "志工出勤" });
       const items = rows
         .map(mapGasAttendanceRecord)
         .filter((row): row is NonNullable<typeof row> => Boolean(row));

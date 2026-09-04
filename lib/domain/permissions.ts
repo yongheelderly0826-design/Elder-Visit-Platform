@@ -91,6 +91,7 @@ export const workspaceRoles: WorkspaceRole[] = [
       "assignment.delete",
       "assignment.confirm",
       "visits.read",
+      "visits.submit",
       "visits.update",
       "visits.delete",
       "audit.run",

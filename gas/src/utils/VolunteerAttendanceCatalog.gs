@@ -32,6 +32,7 @@ var VolunteerAttendanceCatalog = (function () {
     { id: 'SITE-EVENT', name: '活動支援組集合點', group_id: 'event', kind: 'field' },
     { id: 'SITE-OTHER', name: '其他支援組集合點', group_id: 'other', kind: 'field' },
     { id: 'SITE-KIOSK', name: '公所刷證櫃台', group_id: 'office', kind: 'office' },
+    { id: 'SITE-VISIT', name: '到宅訪查', group_id: 'elder_care', kind: 'visit' },
   ];
 
   function listGroups() {

@@ -76,10 +76,15 @@ function findVolunteer(input: { visitorId?: string; idNumber?: string }) {
   return null;
 }
 
-function findOpen(visitorId: string, sessionDate: string) {
+function findOpen(visitorId: string, sessionDate: string, sessionType = "志工出勤") {
   for (let i = records.length - 1; i >= 0; i -= 1) {
     const row = records[i];
-    if (row.visitorId === visitorId && row.sessionDate === sessionDate && !row.checkoutAt) {
+    if (
+      row.visitorId === visitorId &&
+      row.sessionDate === sessionDate &&
+      !row.checkoutAt &&
+      (row.sessionType || "志工出勤") === sessionType
+    ) {
       return row;
     }
   }
@@ -121,13 +126,16 @@ export function mockClockAttendance(input: {
   source?: string;
   lat?: string;
   lng?: string;
+  assignmentId?: string;
+  sessionType?: string;
 }): { action: AttendanceAction; record: AttendanceRecord; visitor: VolunteerWorker } {
   const visitor = findVolunteer(input);
   if (!visitor) {
     throw Object.assign(new Error("找不到志工資料，請確認身分證或先建檔"), { code: "NOT_FOUND" });
   }
   const today = taipeiToday();
-  const open = findOpen(visitor.visitorId, today);
+  const sessionType = input.sessionType || "志工出勤";
+  const open = findOpen(visitor.visitorId, today, sessionType);
   if (open) {
     const checkoutAt = new Date().toISOString();
     const durationMinutes = Math.max(
@@ -140,8 +148,11 @@ export function mockClockAttendance(input: {
     return { action: "checkout", record: { ...open }, visitor: cloneWorker(visitor) };
   }
 
+  const isVisit = sessionType === "訪查";
   const isKiosk = input.channel === "barcode" || input.source === "office_kiosk";
-  const site = getAttendanceSite(input.siteId || (isKiosk ? OFFICE_KIOSK_SITE_ID : ""));
+  const site = isVisit
+    ? { id: "SITE-VISIT", name: "到宅訪查", groupId: "elder_care" as const }
+    : getAttendanceSite(input.siteId || (isKiosk ? OFFICE_KIOSK_SITE_ID : ""));
   if (!site) {
     throw Object.assign(new Error("無效的出勤地點 QR，請重新掃描海報"), {
       code: "VALIDATION_ERROR",
@@ -151,6 +162,8 @@ export function mockClockAttendance(input: {
   const record: AttendanceRecord = {
     attendanceId: `ATT-${Math.random().toString(16).slice(2, 10)}`,
     visitorId: visitor.visitorId,
+    assignmentId: input.assignmentId || "",
+    sessionType,
     workerName: visitor.name,
     idNumber: visitor.idNumber,
     groupId: visitor.groupId || site.groupId,
@@ -160,17 +173,45 @@ export function mockClockAttendance(input: {
     checkoutAt: "",
     durationMinutes: null,
     hours: "",
-    channel: input.channel || (isKiosk ? "barcode" : "qr"),
+    channel: input.channel || (isVisit ? "gps" : isKiosk ? "barcode" : "qr"),
     channelLabel: attendanceChannelLabel(
-      input.channel || (isKiosk ? "barcode" : "qr"),
-      input.source || (isKiosk ? "office_kiosk" : "field_qr"),
+      input.channel || (isVisit ? "gps" : isKiosk ? "barcode" : "qr"),
+      input.source || (isVisit ? "visit" : isKiosk ? "office_kiosk" : "field_qr"),
     ),
     siteId: site.id,
     siteName: site.name,
-    source: input.source || (isKiosk ? "office_kiosk" : "field_qr"),
+    source: input.source || (isVisit ? "visit" : isKiosk ? "office_kiosk" : "field_qr"),
   };
   records.push(record);
   return { action: "checkin", record: { ...record }, visitor: cloneWorker(visitor) };
+}
+
+export function mockVisitClockStatus(assignmentId: string, visitorId?: string) {
+  const visitor =
+    findVolunteer({ visitorId: visitorId || "V-YH-MEAL01" }) ?? volunteers[0];
+  const today = taipeiToday();
+  const open =
+    records
+      .slice()
+      .reverse()
+      .find(
+        (row) =>
+          row.assignmentId === assignmentId &&
+          row.sessionType === "訪查" &&
+          !row.checkoutAt,
+      ) ?? null;
+  const latest =
+    records
+      .slice()
+      .reverse()
+      .find((row) => row.assignmentId === assignmentId && row.sessionType === "訪查") ?? null;
+  return {
+    visitor: cloneWorker(visitor),
+    today,
+    open: open ? { ...open } : null,
+    latest: latest ? { ...latest } : null,
+    sessionType: "訪查" as const,
+  };
 }
 
 export function mockListAttendance(period?: string) {

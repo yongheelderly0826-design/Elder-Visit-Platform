@@ -52,6 +52,8 @@ export function mapGasAttendanceRecord(
   return {
     attendanceId: text(row.attendance_id),
     visitorId: text(row.visitor_id),
+    assignmentId: text(row.assignment_id),
+    sessionType: text(row.session_type) || "志工出勤",
     workerName: text(row.worker_name) || text(row.name),
     idNumber: extractTaiwanId(text(row.id_number)),
     groupId: text(row.group_id),

@@ -169,7 +169,12 @@ export const gasClient = {
   attendance: {
     identify: (body: { id_number: string }) =>
       gasFetch<Record<string, unknown>>("attendance.identify", { method: "POST", body }),
-    status: (params: { visitor_id?: string; id_number?: string }) =>
+    status: (params: {
+      visitor_id?: string;
+      id_number?: string;
+      assignment_id?: string;
+      session_type?: string;
+    }) =>
       gasFetch<Record<string, unknown>>("attendance.status", {
         params: params as Record<string, string>,
       }),
@@ -181,8 +186,16 @@ export const gasClient = {
       source?: string;
       lat?: string;
       lng?: string;
+      assignment_id?: string;
+      session_type?: string;
     }) => gasFetch<Record<string, unknown>>("attendance.clock", { method: "POST", body }),
-    list: (params?: { period?: string; group_id?: string; visitor_id?: string }) =>
+    list: (params?: {
+      period?: string;
+      group_id?: string;
+      visitor_id?: string;
+      assignment_id?: string;
+      session_type?: string;
+    }) =>
       gasFetch<Array<Record<string, unknown>>>("attendance.list", {
         params: params as Record<string, string> | undefined,
       }),
