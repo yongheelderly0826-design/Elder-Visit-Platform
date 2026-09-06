@@ -102,7 +102,7 @@ export function AttendanceManagerPanel() {
         icon={QrCode}
         eyebrow="12 組志工出勤"
         title="掃 QR / 刷證簽到，月底匯出 Excel"
-        description="外勤組用手機登入後掃集合點 QR；公所內勤用電腦刷身分證條碼。每月可下載出勤表，再匯入既有系統。"
+        description="外勤組掃集合點 QR；公所可刷身分證或掃志工個人 QR。每月可下載出勤表，再匯入既有系統。"
         aside={
           <div className="grid gap-2 text-sm">
             <Link href="/office/kiosk" className="rounded-md border bg-background px-3 py-2">
@@ -110,6 +110,9 @@ export function AttendanceManagerPanel() {
             </Link>
             <Link href="/volunteer/clock" className="rounded-md border bg-background px-3 py-2">
               開啟外勤簽到頁
+            </Link>
+            <Link href="/volunteer/badge" className="rounded-md border bg-background px-3 py-2">
+              志工個人 QR
             </Link>
           </div>
         }

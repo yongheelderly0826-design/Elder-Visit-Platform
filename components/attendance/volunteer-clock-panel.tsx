@@ -293,6 +293,12 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
               <Camera className="h-4 w-4" />
               掃描組別 QR
             </Button>
+            <Link href="/volunteer/badge">
+              <Button type="button" variant="outline" className="w-full">
+                <QrCode className="h-4 w-4" />
+                出示個人 QR（給櫃台掃）
+              </Button>
+            </Link>
           </div>
 
           {scanning ? (
@@ -320,11 +326,15 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <QrCode className="h-4 w-4" />
-        海報 QR 會開啟此頁並帶入地點。公所內勤請用
-        <Link href="/office/kiosk" className="underline">
-          刷證櫃台
+        海報 QR 會開啟此頁並帶入地點。公所內勤可刷身分證或掃
+        <Link href="/volunteer/badge" className="mx-1 underline">
+          個人 QR
         </Link>
-        。
+        （櫃台
+        <Link href="/office/kiosk" className="mx-1 underline">
+          刷證頁
+        </Link>
+        ）。
       </p>
     </div>
   );

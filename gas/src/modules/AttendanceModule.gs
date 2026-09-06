@@ -60,6 +60,7 @@ var AttendanceModule = (function () {
 
   function channelLabel_(channel, source) {
     if (source === 'visit' || channel === 'gps') return '到宅訪查';
+    if (channel === 'badge_qr') return '個人QR刷證';
     if (source === 'office_kiosk' || channel === 'barcode') return '公所刷證';
     if (channel === 'qr') return '外勤QR';
     return channel || source || '';
