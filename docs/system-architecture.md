@@ -16,8 +16,9 @@ flowchart TB
   subgraph Users["使用者"]
     MGR["承辦管理者<br/>yongheelderly0826@gmail.com"]
     VIS["訪查員<br/>Email 密碼登入"]
-    VOL["外勤志工<br/>身分證登入＋掃 QR"]
-    KSK["公所內勤<br/>刷身分證條碼"]
+    VOL["外勤志工<br/>身分證＋掃集合點 QR"]
+    BADGE["志工出示個人 QR<br/>/volunteer/badge"]
+    KSK["公所櫃台<br/>掃槍：身分證或個人 QR"]
   end
 
   subgraph Frontend["前端層 · Vercel"]
@@ -42,6 +43,7 @@ flowchart TB
   MGR --> PWA
   VIS --> PWA
   VOL --> PWA
+  BADGE --> PWA
   KSK --> PWA
   PWA --> API
   API --> GAS
@@ -160,40 +162,64 @@ flowchart LR
   F --> G["車馬費核銷"]
 ```
 
-### 5.2 12 組志工出勤
+### 5.2 簽到退雙軌（訪查到宅／12 組志工出勤）
+
+兩條線共用 `AttendanceModule` 與「簽到退紀錄」，以 `session_type` 分流：
+
+| 線 | session_type | 誰 | 怎麼打卡 | 前端 |
+|----|--------------|----|----------|------|
+| 訪查到宅 | `訪查` | 被派案訪員 | 訪視頁按鈕＋GPS | `/visitor/visits/[派案ID]` |
+| 外勤集合點 | `志工出勤` | 外勤志工 | 手機掃**集合點 QR** | `/volunteer/clock` |
+| 公所櫃台 | `志工出勤` | 到公所的志工 | 櫃台掃槍：身分證**或個人 QR** | `/office/kiosk`＋`/volunteer/badge` |
 
 ```mermaid
-flowchart LR
-  R["志工名冊建檔<br/>身分證＋組別"] --> P["列印集合點 QR"]
-  P --> F1["外勤：手機掃 QR"]
-  P --> F2["公所：刷身分證條碼"]
-  F1 --> S["簽到退紀錄<br/>時戳＋組別＋地點"]
-  F2 --> S
-  S --> X["月結 Excel"]
+flowchart TB
+  R["志工名冊建檔<br/>身分證＋12 組組別"] --> P["列印集合點 QR 海報"]
+  R --> B["志工手機個人 QR<br/>EVVOL:V-…"]
+
+  P --> F1["外勤：手機掃集合點 QR"]
+  B --> K1["公所：櫃台掃槍掃個人 QR"]
+  R --> K2["公所：櫃台刷身分證條碼"]
+
+  F1 --> S["簽到退紀錄<br/>session_type=志工出勤"]
+  K1 --> S
+  K2 --> S
+
+  ASG["派案成功"] --> V1["訪視頁到宅簽到／簽退"]
+  V1 --> S2["簽到退紀錄<br/>session_type=訪查＋assignment_id"]
+
+  S --> X["月結 Excel<br/>僅志工出勤"]
   X --> Y["匯入既有出勤系統"]
 ```
 
 ```mermaid
 sequenceDiagram
   participant V as 外勤志工手機
+  participant B as 個人 QR 頁
+  participant K as 公所櫃台掃槍
   participant N as Next.js
   participant G as GAS AttendanceModule
   participant S as 簽到退紀錄 Sheet
 
-  V->>N: 身分證 identify
+  Note over V,S: 外勤集合點
+  V->>N: identify（身分證）
   N->>G: attendance.identify
-  G->>S: 讀訪查員主檔
-  G-->>N: 姓名＋組別
-  N-->>V: 設定出勤 Cookie
-  V->>N: 掃 QR 後 clock（site_id）
-  N->>G: attendance.clock
-  alt 當日尚無未簽退
-    G->>S: append 簽到
-  else 已有未簽退
-    G->>S: update 簽退＋時數
-  end
-  G-->>N: action + record
-  N-->>V: 顯示簽到／簽退成功
+  G-->>N: visitor＋volunteer_group
+  N-->>V: 出勤 Cookie
+  V->>N: clock（site_id 來自集合點 QR）
+  N->>G: attendance.clock channel=qr
+  G->>S: 簽到或簽退
+
+  Note over B,S: 公所個人 QR
+  B->>N: identify 後顯示 EVVOL QR
+  K->>N: clock scan=EVVOL:V-…（承辦已登入）
+  N->>G: attendance.clock channel=badge_qr
+  G->>S: 簽到或簽退
+
+  Note over K,S: 公所身分證條碼
+  K->>N: clock id_number（barcode）
+  N->>G: attendance.clock channel=barcode
+  G->>S: 簽到或簽退
 ```
 
 | 流程節點 | 試算表 Tab | GAS 模組 | 前端路徑 |
@@ -201,7 +227,8 @@ sequenceDiagram
 | 訪查員／志工建檔 | `訪查員主檔`（含 `volunteer_group`） | `VisitorModule` | `/workspace/users`、`/manager/attendance` |
 | 個案名冊 | `個案名冊` | `CaseModule` | `/manager/cases` |
 | 派案 | `派案紀錄` | `AssignmentModule` | `/manager/assignments` |
-| 志工出勤簽到退 | `簽到退紀錄` | `AttendanceModule` | `/volunteer/clock`、`/office/kiosk` |
+| 志工出勤（集合點／刷證／個人 QR） | `簽到退紀錄`（`志工出勤`） | `AttendanceModule` | `/volunteer/clock`、`/volunteer/badge`、`/office/kiosk` |
+| 訪查到宅簽到退 | `簽到退紀錄`（`訪查`） | `AttendanceModule` | `/visitor/visits/[id]`、`/api/visits/clock` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | `匯出紀錄` | `ExportModule` | `/manager/exports` |
@@ -272,7 +299,9 @@ flowchart TB
 
   LOGIN --> MGR["承辦管理者<br/>輸入 Gmail"]
   LOGIN --> VIS["訪員<br/>Email + 密碼"]
-  LOGIN --> VOL["外勤出勤<br/>/volunteer/clock<br/>身分證 identify"]
+  LOGIN --> VOL["外勤出勤<br/>/volunteer/clock<br/>掃集合點 QR"]
+  LOGIN --> BADGE["個人 QR<br/>/volunteer/badge<br/>出示給櫃台"]
+  LOGIN --> KIOSK["公所刷證<br/>/office/kiosk<br/>掃槍（需承辦）"]
 
   MGR --> ALLOW{"GOOGLE_ALLOWED_EMAILS<br/>允許清單？"}
   ALLOW -->|是| ROLE{"GOOGLE_OWNER_EMAILS<br/>擁有者清單？"}
@@ -282,14 +311,16 @@ flowchart TB
 
   VIS --> SUPA["訪員帳號驗證<br/>（註冊審核後）"]
   VOL --> COOKIE["volunteer_clock Cookie<br/>＋ attendance.clock"]
+  BADGE --> COOKIE
+  KIOSK --> MANAGER
 ```
 
 | 角色 | 權限範圍 |
 |------|----------|
 | `workspace_owner` | 全部功能（成員、權限、設定） |
-| `workspace_manager` | 名冊、派案、匯入、稽核、匯出、志工出勤月結／刷證 |
+| `workspace_manager` | 名冊、派案、匯入、稽核、匯出、志工出勤月結／刷證／掃個人 QR |
 | `supervisor` | 稽核覆核、出勤月結查閱 |
-| `visitor` | 任務、關懷表、外勤掃 QR 簽到退（`attendance.clock`） |
+| `visitor` | 任務、關懷表、外勤掃 QR／出示個人 QR（`attendance.clock`） |
 
 ---
 
@@ -387,3 +418,4 @@ flowchart LR
 |------|------|------|
 | 2026-08-31 | 1.0 | 初版：四層架構、正式環境拓撲、資料流與業務流程圖 |
 | 2026-09-03 | 1.1 | 新增 12 組志工出勤架構圖、AttendanceModule 與權限 |
+| 2026-09-06 | 1.2 | 簽到退雙軌圖：到宅訪查／集合點 QR／個人 QR＋櫃台掃槍 |

@@ -56,31 +56,44 @@ X-Workspace-Id: WS-YH-115
 | POST | `?action=assignments.dispatch` | 建立派案 |
 | POST | `?action=assignments.confirm` | 訪查員接案 |
 
-## 簽到退 Attendance（12 組志工出勤）
+## 簽到退 Attendance（志工出勤＋訪查到宅）
 
 | Method | Path | 說明 |
 |--------|------|------|
 | POST | `?action=attendance.identify` | 身分證確認身分＋組別 |
-| GET | `?action=attendance.status&visitor_id=` | 當日是否已簽到未簽退 |
+| GET | `?action=attendance.status&visitor_id=` | 當日是否已簽到未簽退（可帶 `session_type`、`assignment_id`） |
 | POST | `?action=attendance.clock` | 切換簽到／簽退（寫回 Sheet） |
 | POST | `?action=attendance.checkin` | 僅簽到 |
 | POST | `?action=attendance.checkout` | 僅簽退（計算時數） |
-| GET | `?action=attendance.list&period=yyyy-MM` | 月出勤列表 |
-| POST | `?action=attendance.monthlyExport` | 月結 xlsx → Drive |
+| GET | `?action=attendance.list&period=yyyy-MM` | 月出勤列表（可 `session_type`） |
+| POST | `?action=attendance.monthlyExport` | 月結 xlsx → Drive（**僅志工出勤**） |
 | GET | `?action=attendance.catalog` | 12 組與集合點清單 |
 
-`clock` body 範例：
+外勤集合點 `clock` body：
 
 ```json
 {
   "visitor_id": "V-YH-MEAL01",
   "site_id": "SITE-MEAL",
   "channel": "qr",
-  "source": "field_qr"
+  "source": "field_qr",
+  "session_type": "志工出勤"
 }
 ```
 
-公所刷證改傳 `id_number` + `channel: "barcode"` + `source: "office_kiosk"`。
+公所刷身分證：`id_number` + `channel: "barcode"` + `source: "office_kiosk"`。  
+公所掃個人 QR：`visitor_id`（由前端解析 `EVVOL:V-…`）+ `channel: "badge_qr"` + `source: "office_kiosk"`。  
+訪查到宅：`assignment_id` + `session_type: "訪查"` + `channel: "gps"` + `source: "visit"`。
+
+前端輔助：
+
+| 路徑 | 說明 |
+|------|------|
+| `/volunteer/clock` | 外勤掃集合點 QR |
+| `/volunteer/badge` | 志工出示個人 QR（`EVVOL:…`） |
+| `/office/kiosk` | 櫃台掃槍（身分證或個人 QR） |
+| `/api/attendance/badge-qr` | 產生個人 QR 圖 |
+| `/api/visits/clock` | 綁派案到宅簽到退 |
 
 ## 關懷表 Care Form
 

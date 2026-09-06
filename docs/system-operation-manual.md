@@ -71,7 +71,8 @@
 | 總覽 | `/dashboard` | 今日待辦、待派案、待補件、待稽核摘要 |
 | 任務 | `/visitor/tasks` | 訪員查看被派任務（訪員角色） |
 | 草稿 | `/visitor/drafts` | 尚未送出的訪查草稿 |
-| 出勤簽到 | `/volunteer/clock` | 外勤志工掃集合點 QR 簽到／簽退 |
+| 出勤簽到 | `/volunteer/clock` | 外勤掃集合點 QR |
+| 個人識別 QR | `/volunteer/badge` | 志工出示給櫃台掃 |
 
 ### 4.2 訪查營運（承辦主力）
 

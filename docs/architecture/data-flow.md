@@ -44,24 +44,51 @@ GAS ExportModule.exportLifeCareXlsx()
     └── 回傳下載連結 + 寫入「匯出紀錄」
 ```
 
-### 12 組志工出勤（外勤 QR／公所刷證）
+### 簽到退雙軌（訪查到宅／12 組志工出勤）
+
+#### A. 外勤集合點 QR
 
 ```
 外勤手機 /volunteer/clock
     │ POST /api/attendance/identify  （身分證 → Cookie）
-    │ POST /api/attendance/clock     （site_id 來自 QR）
+    │ POST /api/attendance/clock     （site_id 來自集合點 QR）
     ▼
 GAS AttendanceModule.clock()
-    ├── identify：訪查員主檔 by id_number（含 volunteer_group）
-    ├── 當日無未簽退 → append 簽到（channel=qr）
-    └── 已有未簽退 → updateByKey 簽退＋duration_minutes
+    ├── session_type = 志工出勤
+    ├── 當日無未簽退 → append 簽到（channel=qr, source=field_qr）
+    └── 已有未簽退 → update 簽退＋duration_minutes
+```
+
+#### B. 公所櫃台（身分證條碼或個人 QR）
+
+```
+志工手機 /volunteer/badge → 出示 EVVOL:V-… 個人 QR
+承辦電腦 /office/kiosk（需登入）
+    │ POST /api/attendance/clock
+    │   scan = 身分證條碼  → channel=barcode
+    │   scan = EVVOL:V-… → channel=badge_qr, visitor_id
     ▼
-公所 /office/kiosk（承辦登入）
-    │ POST /api/attendance/clock { id_number, channel=barcode }
+GAS AttendanceModule.clock()  （session_type=志工出勤, site=SITE-KIOSK）
+```
+
+#### C. 訪查到宅（綁派案）
+
+```
+訪員 /visitor/visits/[assignment_id]
+    │ POST /api/visits/clock { assignmentId }
     ▼
-承辦 /manager/attendance 下載月結
+GAS AttendanceModule.clock()
+    ├── session_type = 訪查
+    ├── assignment_id 必填
+    └── channel=gps, source=visit（可帶 lat/lng）
+```
+
+#### D. 月結（僅志工出勤）
+
+```
+承辦 /manager/attendance 下載
     │ GET /api/attendance/export?period=yyyy-MM
-    ├── Next.js 產本機 xlsx（立即下載）
+    ├── list session_type=志工出勤 → Next.js 本機 xlsx
     └── GAS attendance.monthlyExport → Drive「志工出勤月結」
 ```
 
@@ -93,7 +120,8 @@ GAS AttendanceModule.clock()
 |------|------|
 | 同時編輯同一列 | Sheet 最後寫入為準；GAS 寫入前讀 `updated_at` |
 | 重複派案 | `assignment_id` 唯一鍵拒絕 |
-| 重複簽到（志工出勤） | 同 `visitor_id` + 當日僅允許一筆「未簽退」；再 clock 視為簽退 |
+| 重複簽到（志工出勤） | 同 `visitor_id` + 當日 + `session_type=志工出勤` 僅一筆未簽退；再 clock 視為簽退 |
+| 重複簽到（訪查到宅） | 同 `assignment_id` + 當日 + `session_type=訪查` 分流；與志工出勤互不阻擋 |
 
 ---
 

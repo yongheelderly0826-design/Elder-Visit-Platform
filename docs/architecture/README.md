@@ -41,9 +41,12 @@
 ## 二、業務流程對應
 
 ```
-【訪查】訪查員建檔 → 個案匯入 → 派案 → 關懷表／空訪 → 稽核 → 衛福部 xlsx → 車馬費
+【訪查】訪查員建檔 → 個案匯入 → 派案 → 到宅簽到退 → 關懷表／空訪 → 稽核 → 衛福部 xlsx → 車馬費
 
-【出勤】志工名冊（身分＋組別）→ 外勤掃 QR／公所刷證 → 簽到退紀錄 → 月結 Excel
+【出勤】志工名冊（身分＋組別）
+        ├─ 外勤：掃集合點 QR（/volunteer/clock）
+        ├─ 公所：刷身分證或掃個人 QR（/office/kiosk ＋ /volunteer/badge）
+        └─ 月結 Excel（僅志工出勤）
 ```
 
 | 流程節點 | Sheet 工作表 | GAS 模組 | 前端路由 |
@@ -51,7 +54,8 @@
 | 訪查員／志工建檔 | `訪查員主檔` | `VisitorModule` | `/workspace/users`、`/manager/attendance` |
 | 個案名冊 | `個案名冊` | `CaseModule` | `/manager/cases` |
 | 派案 | `派案紀錄` | `AssignmentModule` | `/manager/assignments` |
-| 志工出勤 | `簽到退紀錄` | `AttendanceModule` | `/volunteer/clock`、`/office/kiosk`、`/manager/attendance` |
+| 志工出勤 | `簽到退紀錄`（`志工出勤`） | `AttendanceModule` | `/volunteer/clock`、`/volunteer/badge`、`/office/kiosk`、`/manager/attendance` |
+| 訪查到宅簽到 | 同上（`訪查`） | `AttendanceModule` | `/visitor/visits/[id]` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | — | `ExportModule` | `/manager/exports` |
@@ -70,7 +74,7 @@
 ├── 訪查員主檔      ← 訪查員／志工基本資料、證件、服務區域、volunteer_group
 ├── 個案名冊        ← 獨老/中老、戶籍里、訪視里、電話
 ├── 派案紀錄        ← 派案批次、訪查員、編碼名單
-├── 簽到退紀錄      ← 志工出勤（組別／地點 QR／刷證）＋時數
+├── 簽到退紀錄      ← 志工出勤（集合點 QR／個人 QR／刷證）＋訪查到宅（assignment_id）
 ├── 關懷表登打      ← 去識別化編碼對應之表單答案
 ├── 空訪紀錄        ← 未遇拍照、備註
 ├── 稽核佇列        ← 待覆核、退回、通過
