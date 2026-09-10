@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { VolunteerClockPanel } from "@/components/attendance/volunteer-clock-panel";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default async function VolunteerClockPage({
   searchParams,
@@ -6,5 +8,13 @@ export default async function VolunteerClockPage({
   searchParams: Promise<{ site?: string }>;
 }) {
   const params = await searchParams;
-  return <VolunteerClockPanel initialSiteId={params.site ?? ""} />;
+  const cookieStore = await cookies();
+  const isVisitor = cookieStore.get("demo_role")?.value === "visitor";
+  const panel = <VolunteerClockPanel initialSiteId={params.site ?? ""} />;
+
+  if (isVisitor) {
+    return <AppShell active="clock">{panel}</AppShell>;
+  }
+
+  return panel;
 }

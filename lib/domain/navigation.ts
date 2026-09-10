@@ -264,6 +264,9 @@ export function getVisibleNavItems(
   roleKey?: WorkspaceRoleKey | null,
 ) {
   return navItems.filter((item) => {
+    if (roleKey === "visitor" && !item.allowedRoles?.includes("visitor")) {
+      return false;
+    }
     if (item.allowedRoles?.length) {
       if (!roleKey || !item.allowedRoles.includes(roleKey)) {
         return false;

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setVolunteerClockCookie, clearVolunteerClockCookie } from "@/lib/attendance/session";
+import { SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
 import { authenticateDemoAccount, demoLoginAccounts } from "@/lib/domain/permissions";
 import type { WorkspaceRoleKey } from "@/lib/domain/types";
@@ -41,7 +42,12 @@ function inferRoleKey(email: string): WorkspaceRoleKey {
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as { email?: string; password?: string; next?: string };
+  const body = (await request.json()) as {
+    email?: string;
+    password?: string;
+    next?: string;
+    visitorOnly?: boolean;
+  };
   const email = body.email ?? "";
   const password = body.password ?? "";
   const demoAccount = authenticateDemoAccount(email, password);
@@ -52,6 +58,10 @@ export async function POST(request: NextRequest) {
 
     if (!error && data.user) {
       const roleKey = await getSupabaseRoleKey(data.user.id, demoAccount?.roleKey ?? inferRoleKey(email));
+      if (body.visitorOnly && roleKey !== "visitor") {
+        await supabase.auth.signOut();
+        return visitorOnlyError();
+      }
       await markSupabaseUserActivated(data.user.id, data.user.email ?? email);
       const response = NextResponse.json({
         data: {
@@ -69,8 +79,9 @@ export async function POST(request: NextRequest) {
       response.cookies.set("demo_role", roleKey, {
         path: "/",
         sameSite: "lax",
-        maxAge: 60 * 60 * 8,
+        maxAge: sessionMaxAge(roleKey),
       });
+      clearManagerSession(response);
       attachDemoVisitorSession(response, email, demoAccount?.fullName, roleKey);
 
       return response;
@@ -91,6 +102,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (body.visitorOnly && demoAccount.roleKey !== "visitor") {
+    return visitorOnlyError();
+  }
+
   const response = NextResponse.json({
     data: {
       ok: true,
@@ -104,8 +119,9 @@ export async function POST(request: NextRequest) {
   response.cookies.set("demo_role", demoAccount.roleKey, {
     path: "/",
     sameSite: "lax",
-    maxAge: 60 * 60 * 8,
+    maxAge: sessionMaxAge(demoAccount.roleKey),
   });
+  clearManagerSession(response);
   attachDemoVisitorSession(response, email, demoAccount.fullName, demoAccount.roleKey);
 
   return response;
@@ -117,16 +133,17 @@ function attachDemoVisitorSession(
   fullName?: string,
   roleKey?: WorkspaceRoleKey,
 ) {
+  const maxAge = sessionMaxAge(roleKey);
   response.cookies.set("demo_email", email.toLowerCase(), {
     path: "/",
     sameSite: "lax",
-    maxAge: 60 * 60 * 8,
+    maxAge,
   });
   if (fullName) {
     response.cookies.set("demo_name", fullName, {
       path: "/",
       sameSite: "lax",
-      maxAge: 60 * 60 * 8,
+      maxAge,
     });
   }
 
@@ -136,6 +153,30 @@ function attachDemoVisitorSession(
   } else {
     clearVolunteerClockCookie(response);
   }
+}
+
+function sessionMaxAge(roleKey?: WorkspaceRoleKey) {
+  return roleKey === "visitor" ? 60 * 60 * 24 * 30 : 60 * 60 * 8;
+}
+
+function clearManagerSession(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE, "", {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 0,
+  });
+}
+
+function visitorOnlyError() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "VISITOR_ACCOUNT_REQUIRED",
+        message: "此入口僅供訪員登入，管理者請使用管理後台入口。",
+      },
+    },
+    { status: 403 },
+  );
 }
 
 function getDefaultLandingPath(roleKey: WorkspaceRoleKey) {

@@ -1,0 +1,31 @@
+{
+  "id": "/visitor-app",
+  "name": "獨居長者訪查－訪員證",
+  "short_name": "訪員證",
+  "description": "訪員專用工作台：訪員證 QR、任務、核銷與出勤簽到。",
+  "start_url": "/visitor/home",
+  "display": "standalone",
+  "background_color": "#F6FAF7",
+  "theme_color": "#4FA878",
+  "lang": "zh-Hant",
+  "orientation": "portrait",
+  "scope": "/",
+  "categories": ["productivity", "government"],
+  "icons": [
+    {
+      "src": "/icons/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

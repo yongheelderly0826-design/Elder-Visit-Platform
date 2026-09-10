@@ -16,6 +16,11 @@ type BadgeData = {
   qrUrl: string;
 };
 
+type CachedBadge = {
+  badge: BadgeData;
+  cachedAt: string;
+};
+
 function parseSiteId(raw: string) {
   const trimmed = raw.trim();
   if (!trimmed) return "";
@@ -28,7 +33,7 @@ function parseSiteId(raw: string) {
   }
 }
 
-export function VisitorHomePanel() {
+export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
   const [badge, setBadge] = useState<BadgeData | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,29 +48,59 @@ export function VisitorHomePanel() {
     setScanning(false);
   }, []);
 
-  const loadBadge = useCallback(async () => {
-    setBusy(true);
-    setMessage(null);
+  const badgeCacheKey = `elder-visitor-badge-v1:${cacheIdentity.toLowerCase()}`;
+
+  const loadBadge = useCallback(async (background = false) => {
+    if (!background) {
+      setBusy(true);
+      setMessage(null);
+    }
     try {
       const response = await fetch("/api/attendance/badge-qr", { cache: "no-store" });
       const json = (await response.json()) as { data?: BadgeData; error?: { message?: string } };
       if (!response.ok || !json.data) {
-        setBadge(null);
         setMessage(json.error?.message ?? "無法載入訪員證 QR，請重新登入");
         return;
       }
       setBadge(json.data);
+      try {
+        const cached: CachedBadge = {
+          badge: json.data,
+          cachedAt: new Date().toISOString(),
+        };
+        window.localStorage.setItem(badgeCacheKey, JSON.stringify(cached));
+      } catch {
+        // Private browsing may disable storage; the live badge still works.
+      }
     } catch {
-      setBadge(null);
-      setMessage("網路異常，請稍後再試");
+      if (!background) {
+        setMessage("網路異常，已保留手機內的訪員證");
+      }
     } finally {
-      setBusy(false);
+      if (!background) {
+        setBusy(false);
+      }
     }
-  }, []);
+  }, [badgeCacheKey]);
 
   useEffect(() => {
-    void loadBadge();
-  }, [loadBadge]);
+    let hasCachedBadge = false;
+    try {
+      const raw = window.localStorage.getItem(badgeCacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw) as CachedBadge;
+        if (cached.badge?.visitorId && cached.badge?.qrUrl) {
+          setBadge(cached.badge);
+          hasCachedBadge = true;
+        }
+      }
+    } catch {
+      // Ignore invalid or unavailable storage.
+    }
+
+    // Cached QR is shown immediately; server verification refreshes silently.
+    void loadBadge(hasCachedBadge);
+  }, [badgeCacheKey, loadBadge]);
 
   useEffect(() => () => stopScan(), [stopScan]);
 
@@ -186,7 +221,7 @@ export function VisitorHomePanel() {
       {!badge ? (
         <section className="rounded-lg border bg-card p-4">
           <p className="text-sm text-muted-foreground">{message ?? (busy ? "載入訪員證中…" : "尚無訪員證")}</p>
-          <Button className="mt-3" type="button" onClick={() => void loadBadge()} disabled={busy}>
+          <Button className="mt-3" type="button" onClick={() => void loadBadge(false)} disabled={busy}>
             重新載入
           </Button>
         </section>
@@ -209,7 +244,7 @@ export function VisitorHomePanel() {
           </p>
           <p className="break-all font-mono text-[11px] text-muted-foreground">{badge.payload}</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button type="button" variant="secondary" onClick={() => void loadBadge()} disabled={busy}>
+            <Button type="button" variant="secondary" onClick={() => void loadBadge(false)} disabled={busy}>
               重新整理 QR
             </Button>
             <Button type="button" onClick={() => void startScan()} disabled={busy || scanning}>

@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
     // Demo-only sessions do not have a Supabase session to clear.
   }
 
-  const response = NextResponse.redirect(new URL("/login", request.url));
+  const requestedNext = request.nextUrl.searchParams.get("next");
+  const nextPath = requestedNext === "/visitor/login" ? requestedNext : "/login";
+  const response = NextResponse.redirect(new URL(nextPath, request.url));
 
   response.cookies.set("demo_role", "", {
     path: "/",

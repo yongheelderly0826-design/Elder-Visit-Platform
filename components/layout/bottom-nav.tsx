@@ -133,7 +133,11 @@ export function BottomNav({
               <p className="mt-0.5 text-sm font-semibold">{roleLabel}</p>
             </div>
             <a
-              href="/api/auth/logout"
+              href={
+                roleKey === "visitor"
+                  ? "/api/auth/logout?next=/visitor/login"
+                  : "/api/auth/logout"
+              }
               className="flex h-10 items-center justify-center gap-2 rounded-md border bg-background text-sm font-medium text-muted-foreground"
             >
               <LogOut className="h-4 w-4" />
