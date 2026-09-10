@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Camera, LogOut, QrCode, Timer } from "lucide-react";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
+import { isLikelyInAppBrowser, startQrScan, type QrScanHandle } from "@/lib/client/qr-scan";
 import {
   getAttendanceSite,
   isAttendanceSiteId,
@@ -54,11 +55,15 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
   const [now, setNow] = useState(() => taipeiTime(new Date()));
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scanRef = useRef<QrScanHandle | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const site = useMemo(() => getAttendanceSite(siteId), [siteId]);
 
   const stopScan = useCallback(() => {
+    scanRef.current?.stop();
+    scanRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setScanning(false);
@@ -161,58 +166,79 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
 
   async function startScan() {
     setMessage(null);
-    const Detector = (
-      window as Window & {
-        BarcodeDetector?: new (options: { formats: string[] }) => {
-          detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-        };
-      }
-    ).BarcodeDetector;
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) {
-      setMessage("此手機瀏覽器不支援鏡頭掃碼，請用相機直接掃描海報 QR。");
+    setScanning(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+    const video = videoRef.current;
+    if (!video) {
+      setScanning(false);
+      setMessage("無法準備相機畫面，請重新整理後再試。");
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-      });
-      streamRef.current = stream;
-      setScanning(true);
-      const detector = new Detector({ formats: ["qr_code"] });
-      requestAnimationFrame(async function loop() {
-        const video = videoRef.current;
-        if (!streamRef.current) return;
-        if (!video || video.readyState < 2) {
-          requestAnimationFrame(loop);
-          return;
-        }
-        try {
-          const codes = await detector.detect(video);
-          const value = codes[0]?.rawValue;
-          if (value) {
-            const parsed = parseSiteId(value);
-            if (isAttendanceSiteId(parsed)) {
-              setSiteId(parsed);
-              stopScan();
-              setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name ?? parsed}`);
-              return;
-            }
+      scanRef.current?.stop();
+      scanRef.current = await startQrScan({
+        video,
+        onCode: (raw) => {
+          const parsed = parseSiteId(raw);
+          if (isAttendanceSiteId(parsed)) {
+            setSiteId(parsed);
+            stopScan();
+            setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name ?? parsed}`);
+          } else {
+            setMessage("已掃到內容，但不是集合點 QR，請再對準海報。");
           }
-        } catch {
-          // keep scanning
-        }
-        if (streamRef.current) requestAnimationFrame(loop);
+        },
+        onError: (msg) => {
+          setMessage(
+            isLikelyInAppBrowser()
+              ? `${msg} 若在 LINE 內建瀏覽器，請點右上角「…」用 Safari 開啟。`
+              : msg,
+          );
+          setScanning(false);
+        },
       });
+      setMessage("請將鏡頭對準集合點 QR");
     } catch {
-      setMessage("無法開啟鏡頭，請改用手機相機掃描海報。");
+      setScanning(false);
+      setMessage(
+        isLikelyInAppBrowser()
+          ? "無法開啟相機。請點 LINE 右上角「…」→「在 Safari 開啟」，或改用下方「相簿／拍照掃碼」。"
+          : "無法開啟相機，請允許相機權限，或改用下方「相簿／拍照掃碼」。",
+      );
     }
   }
 
-  useEffect(() => {
-    if (!scanning || !videoRef.current || !streamRef.current) return;
-    videoRef.current.srcObject = streamRef.current;
-    void videoRef.current.play();
-  }, [scanning]);
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    setMessage("辨識中…");
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas");
+      ctx.drawImage(bitmap, 0, 0);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const jsQR = (await import("jsqr")).default;
+      const code = jsQR(image.data, image.width, image.height, {
+        inversionAttempts: "attemptBoth",
+      });
+      if (!code?.data) {
+        setMessage("相片中找不到 QR，請再拍清楚一點。");
+        return;
+      }
+      const parsed = parseSiteId(code.data);
+      if (!isAttendanceSiteId(parsed)) {
+        setMessage("相片不是集合點 QR，請再試。");
+        return;
+      }
+      setSiteId(parsed);
+      setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name ?? parsed}`);
+    } catch {
+      setMessage("讀取相片失敗，請再試一次。");
+    }
+  }
 
   const checkedIn = Boolean(status?.open);
 
@@ -295,6 +321,21 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
               <Camera className="h-4 w-4" />
               掃描組別 QR
             </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                void onPickImage(file);
+              }}
+            />
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+              相簿／拍照掃碼（相機打不開時用）
+            </Button>
             <Link href="/volunteer/badge">
               <Button type="button" variant="outline" className="w-full">
                 <QrCode className="h-4 w-4" />
@@ -303,14 +344,18 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
             </Link>
           </div>
 
-          {scanning ? (
-            <div className="grid gap-2">
-              <video ref={videoRef} className="h-48 w-full rounded-md bg-black object-cover" muted playsInline />
-              <Button type="button" variant="outline" onClick={stopScan}>
-                關閉鏡頭
-              </Button>
-            </div>
-          ) : null}
+          <div className={scanning ? "grid gap-2" : "hidden"}>
+            <video
+              ref={videoRef}
+              className="h-48 w-full rounded-md bg-black object-cover"
+              muted
+              playsInline
+              autoPlay
+            />
+            <Button type="button" variant="outline" onClick={stopScan}>
+              關閉鏡頭
+            </Button>
+          </div>
 
           <label className="grid gap-1 text-sm">
             地點代碼
