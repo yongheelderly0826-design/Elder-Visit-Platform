@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -28,6 +29,9 @@ import { getRepository } from "@/lib/repositories";
 export default async function DashboardPage() {
   const cookieStore = await cookies();
   const roleKey = (cookieStore.get("demo_role")?.value ?? "workspace_manager") as WorkspaceRoleKey;
+  if (roleKey === "visitor") {
+    redirect("/visitor/home");
+  }
   const role = getRoleByKey(roleKey);
   const roleDashboard = dashboardByRole[roleKey] ?? dashboardByRole.workspace_manager;
   const repository = getRepository();

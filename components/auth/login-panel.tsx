@@ -123,7 +123,17 @@ export function LoginPanel() {
   async function login() {
     setMessage(null);
 
-    const nextPath = getSafeNextPath("/dashboard");
+    // Only honor ?next= from URL; otherwise let the API return role landingPath
+    // (訪員預設 /visitor/home 訪員證 QR).
+    const nextFromUrl =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+    const safeNext =
+      nextFromUrl && nextFromUrl.startsWith("/") && !nextFromUrl.startsWith("//")
+        ? nextFromUrl
+        : undefined;
+
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: {
@@ -133,7 +143,7 @@ export function LoginPanel() {
       body: JSON.stringify({
         email,
         password,
-        next: nextPath,
+        ...(safeNext ? { next: safeNext } : {}),
       }),
     });
 
@@ -143,7 +153,7 @@ export function LoginPanel() {
     }
 
     const result = (await response.json()) as { data?: { nextPath?: string } };
-    window.location.href = result.data?.nextPath ?? nextPath;
+    window.location.href = result.data?.nextPath ?? "/dashboard";
   }
 
   async function setupPassword() {

@@ -106,22 +106,22 @@ const rolePriorities: Record<
     title: "訪員的 3 個任務",
     items: [
       {
-        title: "先看今日任務",
+        title: "先出示訪員證",
+        detail: "首頁顯示個人 QR，給櫃檯掃或自己掃櫃檯 QR。",
+        href: "/visitor/home",
+        icon: FileCheck2,
+      },
+      {
+        title: "再看今日任務",
         detail: "確認先訪哪幾案、是否有續訪案件。",
         href: "/visitor/tasks",
         icon: ClipboardCheck,
       },
       {
-        title: "再補草稿",
-        detail: "先完成尚未送出的離線填報紀錄。",
-        href: "/visitor/drafts",
+        title: "最後看核銷",
+        detail: "訪視通過後，可查看核銷是否鎖定通過。",
+        href: "/visitor/payments",
         icon: FileText,
-      },
-      {
-        title: "最後看公告",
-        detail: "確認督導提醒與最新作業要求。",
-        href: "/dashboard",
-        icon: FileCheck2,
       },
     ],
   },

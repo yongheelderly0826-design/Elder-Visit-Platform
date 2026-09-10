@@ -47,10 +47,11 @@ function mapAssignmentStatus(status: string): VisitSchedule["status"] {
 
 function toElderCase(row: GasCaseRow): ElderCase {
   const externalId = String(row.external_id ?? "");
+  const encodedId = String(row.encoded_id ?? "");
   const caseId = String(row.case_id ?? externalId);
   return {
     id: caseId,
-    caseCode: externalId || caseId,
+    caseCode: encodedId || externalId || caseId,
     name: String(row.name ?? ""),
     age: Number(row.age) || 0,
     gender: row.gender ? String(row.gender) : null,

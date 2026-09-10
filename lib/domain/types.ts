@@ -34,6 +34,7 @@ export type Capability =
   | "payments.calculate"
   | "payments.lock"
   | "payments.unlock"
+  | "payments.read"
   | "exports.create"
   | "exports.delete"
   | "forms.manage"

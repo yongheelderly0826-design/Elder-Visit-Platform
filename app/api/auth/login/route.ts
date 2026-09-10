@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { setVolunteerClockCookie } from "@/lib/attendance/session";
+import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
 import { authenticateDemoAccount, demoLoginAccounts } from "@/lib/domain/permissions";
 import type { WorkspaceRoleKey } from "@/lib/domain/types";
 
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
         sameSite: "lax",
         maxAge: 60 * 60 * 8,
       });
+      attachDemoVisitorSession(response, email, demoAccount?.fullName);
 
       return response;
     }
@@ -90,12 +93,37 @@ export async function POST(request: NextRequest) {
     sameSite: "lax",
     maxAge: 60 * 60 * 8,
   });
+  attachDemoVisitorSession(response, email, demoAccount.fullName);
 
   return response;
 }
 
+function attachDemoVisitorSession(
+  response: NextResponse,
+  email: string,
+  fullName?: string,
+) {
+  response.cookies.set("demo_email", email.toLowerCase(), {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 8,
+  });
+  if (fullName) {
+    response.cookies.set("demo_name", fullName, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 8,
+    });
+  }
+
+  const link = getDemoVisitorLink(email);
+  if (link?.visitorId) {
+    setVolunteerClockCookie(response, link.visitorId);
+  }
+}
+
 function getDefaultLandingPath(roleKey: WorkspaceRoleKey) {
-  if (roleKey === "visitor") return "/visitor/profile";
+  if (roleKey === "visitor") return "/visitor/home";
   if (roleKey === "supervisor" || roleKey === "auditor") return "/manager/audit";
   return "/dashboard";
 }

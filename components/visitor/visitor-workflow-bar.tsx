@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, ClipboardCheck, FilePenLine, Send, UserRound } from "lucide-react";
+import { ClipboardCheck, FilePenLine, IdCard, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getVisitDraftKey } from "@/lib/domain/offline-drafts";
 import { visitSchedules } from "@/lib/domain/mock-data";
 
-type WorkflowStep = "profile" | "tasks" | "visit" | "drafts" | "submitted";
+type WorkflowStep = "home" | "profile" | "tasks" | "visit" | "drafts" | "submitted" | "payments";
 
 export function VisitorWorkflowBar({
   active,
-  submitted = false,
 }: {
   active: WorkflowStep;
   submitted?: boolean;
@@ -27,11 +26,11 @@ export function VisitorWorkflowBar({
 
   const steps = [
     {
-      key: "profile" as const,
-      label: "資料",
-      detail: "補齊個人資料",
-      href: "/visitor/profile",
-      icon: UserRound,
+      key: "home" as const,
+      label: "訪員證",
+      detail: "出示 QR",
+      href: "/visitor/home",
+      icon: IdCard,
     },
     {
       key: "tasks" as const,
@@ -48,18 +47,18 @@ export function VisitorWorkflowBar({
       icon: FilePenLine,
     },
     {
+      key: "payments" as const,
+      label: "核銷",
+      detail: "查看通過狀態",
+      href: "/visitor/payments",
+      icon: Wallet,
+    },
+    {
       key: "drafts" as const,
       label: "草稿",
       detail: draftCount > 0 ? `${draftCount} 筆待續填` : "無待續填",
       href: "/visitor/drafts",
       icon: FilePenLine,
-    },
-    {
-      key: "submitted" as const,
-      label: "送出",
-      detail: submitted ? "已完成" : "待完成",
-      href: null,
-      icon: submitted ? CheckCircle2 : Send,
     },
   ];
 

@@ -7,6 +7,7 @@ import {
   Files,
   FormInput,
   Home,
+  IdCard,
   ListChecks,
   MessageSquareWarning,
   ShieldCheckIcon,
@@ -19,14 +20,17 @@ import {
   Timer,
   UserCog,
   UserRound,
+  Wallet,
   Workflow,
 } from "lucide-react";
 import type { Capability } from "@/lib/domain/types";
 
 export type NavKey =
   | "dashboard"
+  | "badge"
   | "tasks"
   | "drafts"
+  | "payments"
   | "profile"
   | "cases"
   | "assignments"
@@ -65,6 +69,14 @@ export const navItems: NavItem[] = [
     group: "daily",
   },
   {
+    key: "badge",
+    label: "訪員證",
+    href: "/visitor/home",
+    icon: IdCard,
+    requiredCapabilities: ["attendance.clock"],
+    group: "daily",
+  },
+  {
     key: "tasks",
     label: "任務",
     href: "/visitor/tasks",
@@ -78,6 +90,14 @@ export const navItems: NavItem[] = [
     href: "/visitor/drafts",
     icon: Files,
     requiredCapabilities: ["visits.submit"],
+    group: "daily",
+  },
+  {
+    key: "payments",
+    label: "核銷",
+    href: "/visitor/payments",
+    icon: Wallet,
+    requiredCapabilities: ["payments.read"],
     group: "daily",
   },
   {

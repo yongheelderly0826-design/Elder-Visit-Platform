@@ -234,6 +234,7 @@ export const sitemapSections = [
     ],
     relatedLinks: [
       { label: "志工出勤", href: "/manager/attendance" },
+      { label: "訪員證首頁", href: "/visitor/home" },
       { label: "外勤掃碼", href: "/volunteer/clock" },
       { label: "個人識別 QR", href: "/volunteer/badge" },
       { label: "公所刷證", href: "/office/kiosk" },

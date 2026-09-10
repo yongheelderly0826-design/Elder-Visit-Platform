@@ -18,6 +18,21 @@ export async function GET(request: NextRequest) {
     sameSite: "lax",
     maxAge: 0,
   });
+  response.cookies.set("demo_email", "", {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 0,
+  });
+  response.cookies.set("demo_name", "", {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 0,
+  });
+  response.cookies.set("volunteer_clock", "", {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 0,
+  });
   response.cookies.set(SESSION_COOKIE, "", {
     path: "/",
     sameSite: "lax",

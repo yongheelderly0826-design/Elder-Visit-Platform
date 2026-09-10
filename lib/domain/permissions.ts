@@ -39,6 +39,7 @@ export const capabilityLabels: Record<Capability, string> = {
   "payments.calculate": "計算核銷",
   "payments.lock": "鎖定核銷",
   "payments.unlock": "解鎖核銷",
+  "payments.read": "查看核銷狀態",
   "exports.create": "建立匯出",
   "exports.delete": "刪除匯出",
   "forms.manage": "管理政府表單",
@@ -145,6 +146,7 @@ export const workspaceRoles: WorkspaceRole[] = [
       "visits.submit",
       "visits.update",
       "attendance.clock",
+      "payments.read",
     ],
   },
   {
@@ -223,7 +225,14 @@ export const demoLoginAccounts: DemoLoginAccount[] = [
     password: "visitor123",
     fullName: "王訪員",
     roleKey: "visitor",
-    landingPath: "/visitor/tasks",
+    landingPath: "/visitor/home",
+  },
+  {
+    email: "joe@elder.org",
+    password: "123456",
+    fullName: "Joe訪員",
+    roleKey: "visitor",
+    landingPath: "/visitor/home",
   },
   {
     email: "auditor@eldervisit.org",

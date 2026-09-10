@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getHeadshotPreviewUrl } from "@/lib/domain/visitor-headshots";
 import { getPassbookPreviewUrl, uploadVisitorPassbook } from "@/lib/domain/visitor-documents";
+import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
 
 type VisitorSelfProfile = {
   id: string;
@@ -243,16 +244,24 @@ function getDemoVisitorProfile(request: NextRequest) {
     );
   }
 
+  const email = request.cookies.get("demo_email")?.value?.toLowerCase() ?? "visitor@eldervisit.org";
+  const link = getDemoVisitorLink(email);
+  const fullName =
+    request.cookies.get("demo_name")?.value ||
+    link?.name ||
+    (email === "joe@elder.org" ? "Joe訪員" : "王訪員");
+  const visitorCode = link?.visitorId || "EV-115-YH-CIV-0001";
+
   const data: VisitorSelfProfile = {
-    id: "demo_visitor_profile",
-    fullName: "王訪員",
-    displayName: "永和區公所民政課-王訪員-里幹事",
-    visitorCode: "EV-115-YH-CIV-0001",
-    officialEmail: "visitor@eldervisit.org",
-    phone: "0912-000-001",
+    id: link?.visitorId ? `demo_${link.visitorId}` : "demo_visitor_profile",
+    fullName,
+    displayName: `永和區公所民政課-${fullName}`,
+    visitorCode,
+    officialEmail: email,
+    phone: email === "joe@elder.org" ? "0912-000-888" : "0912-000-001",
     rootUnitName: "永和區公所",
     departmentName: "民政課",
-    jobTitle: "里幹事",
+    jobTitle: "訪員",
     workerType: "civil_affairs",
     headshotProcessedUrl: null,
     emergencyContactName: "",
@@ -261,13 +270,13 @@ function getDemoVisitorProfile(request: NextRequest) {
     bankName: "",
     bankCode: "",
     bankBranchName: "",
-    bankAccountName: "王訪員",
+    bankAccountName: fullName,
     passbookCoverUrl: null,
     passbookUploadedAt: null,
     remittanceReviewStatus: "pending",
     serviceAvailability: { weekday: "平日白天", villages: "可依派案調整" },
     profileCompletionStatus: "incomplete",
-    qrCodePayload: "https://elder-visit-platform.vercel.app/verify/visitor/EV-115-YH-CIV-0001",
+    qrCodePayload: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://elder-visit-platform-ruby.vercel.app"}/verify/visitor/${encodeURIComponent(visitorCode)}`,
   };
 
   return NextResponse.json({ data, source: "demo" });

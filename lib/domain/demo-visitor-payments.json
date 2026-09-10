@@ -1,0 +1,18 @@
+{
+  "joe@elder.org": [
+    {
+      "id": "pay_ASG-f13fa89b",
+      "caseId": "CASE-YH-732362b2",
+      "caseName": "蕭金芝",
+      "assignmentId": "ASG-f13fa89b",
+      "visitResult": "完成訪視",
+      "auditDecision": "通過",
+      "status": "locked",
+      "visitFee": 180,
+      "dataProcessingFee": 30,
+      "totalFee": 210,
+      "lockedAt": "2026-09-10T02:10:27.725Z",
+      "updatedAt": "2026-09-10T02:10:27.725Z"
+    }
+  ]
+}
