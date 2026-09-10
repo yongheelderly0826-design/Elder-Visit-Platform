@@ -130,6 +130,14 @@ export function getAttendanceSite(id: string | null | undefined) {
   return ATTENDANCE_SITES.find((site) => site.id === id.trim().toUpperCase()) ?? null;
 }
 
+/** Accept built-in or custom SITE-* codes (custom sites live in GAS sheet). */
+export function isAttendanceSiteId(id: string | null | undefined) {
+  if (!id) return false;
+  const key = id.trim().toUpperCase();
+  if (getAttendanceSite(key)) return true;
+  return /^SITE-[A-Z0-9-]{2,32}$/.test(key);
+}
+
 export function extractTaiwanId(raw: string | null | undefined) {
   const normalized = String(raw ?? "")
     .trim()

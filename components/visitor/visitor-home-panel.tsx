@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, ClipboardList, QrCode, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAttendanceSite, OFFICE_KIOSK_SITE_ID } from "@/lib/domain/volunteer-attendance";
+import { getAttendanceSite, isAttendanceSiteId, OFFICE_KIOSK_SITE_ID } from "@/lib/domain/volunteer-attendance";
 
 type BadgeData = {
   visitorId: string;
@@ -136,9 +136,9 @@ export function VisitorHomePanel() {
           const value = codes[0]?.rawValue;
           if (value) {
             const parsed = parseSiteId(value);
-            if (getAttendanceSite(parsed)) {
+            if (isAttendanceSiteId(parsed)) {
               stopScan();
-              setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name}`);
+              setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name ?? parsed}`);
               await punchAtSite(parsed);
               return;
             }

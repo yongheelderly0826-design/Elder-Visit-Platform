@@ -39,6 +39,7 @@ var Config = (function () {
       CASES: '個案名冊',
       ASSIGNMENTS: '派案紀錄',
       ATTENDANCE: '簽到退紀錄',
+      ATTENDANCE_SITES: '出勤集合點',
       CAREFORMS: '關懷表登打',
       MISSED: '空訪紀錄',
       AUDIT: '稽核佇列',

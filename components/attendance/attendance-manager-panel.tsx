@@ -18,6 +18,8 @@ type SiteItem = {
   name: string;
   groupId: string;
   kind: "field" | "office";
+  note?: string;
+  custom?: boolean;
   clockUrl: string;
   qrUrl: string;
 };
@@ -41,6 +43,13 @@ export function AttendanceManagerPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: "", idNumber: "", phone: "", groupId: "meal" });
+  const [siteForm, setSiteForm] = useState({
+    name: "",
+    groupId: "meal",
+    note: "",
+    siteId: "",
+  });
+  const [creatingSite, setCreatingSite] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +103,39 @@ export function AttendanceManagerPanel() {
     }
     setForm({ name: "", idNumber: "", phone: "", groupId: form.groupId });
     await load();
+  }
+
+  async function createSite(event: React.FormEvent) {
+    event.preventDefault();
+    setCreatingSite(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/attendance/sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: siteForm.name,
+          groupId: siteForm.groupId,
+          note: siteForm.note,
+          siteId: siteForm.siteId || undefined,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: { site?: SiteItem };
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setMessage(json.error?.message ?? "新增集合點失敗");
+        return;
+      }
+      setSiteForm({ name: "", groupId: siteForm.groupId, note: "", siteId: "" });
+      setMessage(`已建立集合點「${json.data?.site?.name ?? ""}」，QR 已產生，可列印海報。`);
+      await load();
+    } catch {
+      setMessage("新增集合點失敗，請稍後再試");
+    } finally {
+      setCreatingSite(false);
+    }
   }
 
   return (
@@ -244,12 +286,57 @@ export function AttendanceManagerPanel() {
         </div>
       </section>
 
+      <section className="rounded-lg border bg-card p-4 print:hidden">
+        <h2 className="text-base font-semibold">新增集合點／櫃檯 QR</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          輸入顯示名稱與組別後儲存，系統自動產生簽到網址與 QR。可選填代碼（例如 SITE-YONGHE-GATE）。
+        </p>
+        <form className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-5" onSubmit={(event) => void createSite(event)}>
+          <input
+            required
+            value={siteForm.name}
+            onChange={(event) => setSiteForm((current) => ({ ...current, name: event.target.value }))}
+            className="h-11 rounded-md border bg-background px-3 text-sm lg:col-span-2"
+            placeholder="集合點名稱（例：永和區公所一樓報到櫃檯）"
+          />
+          <select
+            value={siteForm.groupId}
+            onChange={(event) => setSiteForm((current) => ({ ...current, groupId: event.target.value }))}
+            className="h-11 rounded-md border bg-background px-3 text-sm"
+          >
+            {VOLUNTEER_GROUPS.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={siteForm.note}
+            onChange={(event) => setSiteForm((current) => ({ ...current, note: event.target.value }))}
+            className="h-11 rounded-md border bg-background px-3 text-sm"
+            placeholder="海報備註（選填）"
+          />
+          <input
+            value={siteForm.siteId}
+            onChange={(event) =>
+              setSiteForm((current) => ({ ...current, siteId: event.target.value.toUpperCase() }))
+            }
+            className="h-11 rounded-md border bg-background px-3 font-mono text-sm"
+            placeholder="SITE-代碼（選填）"
+          />
+          <Button type="submit" disabled={creatingSite} className="md:col-span-2 lg:col-span-5 lg:w-fit">
+            <QrCode className="h-4 w-4" />
+            {creatingSite ? "產生中…" : "儲存並產生 QR"}
+          </Button>
+        </form>
+      </section>
+
       <section className="rounded-lg border bg-card p-4 print:border-0 print:p-0">
         <div className="mb-4 flex items-center justify-between gap-3 print:hidden">
           <div>
             <h2 className="text-base font-semibold">集合點 QR 海報</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              列印後貼在各組集合處。志工用手機相機掃描即可打開簽到頁。
+              列印後貼在各組集合處或公所櫃檯。志工用手機相機掃描即可打開簽到頁。
             </p>
           </div>
           <Button type="button" variant="secondary" onClick={() => window.print()}>
@@ -260,8 +347,13 @@ export function AttendanceManagerPanel() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {sites.map((site) => (
             <article key={site.id} className="break-inside-avoid rounded-lg border bg-background p-4 text-center">
-              <p className="text-sm text-muted-foreground">{site.kind === "office" ? "公所" : "外勤"}</p>
+              <p className="text-sm text-muted-foreground">
+                {site.kind === "office" ? "公所" : "外勤"}
+                {site.custom ? " · 自訂" : ""}
+              </p>
               <h3 className="mt-1 text-lg font-semibold">{site.name}</h3>
+              {site.note ? <p className="mt-1 text-xs text-muted-foreground">{site.note}</p> : null}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={site.qrUrl} alt={`${site.name} QR`} className="mx-auto mt-3 h-40 w-40" />
               <p className="mt-2 font-mono text-xs">{site.id}</p>
             </article>

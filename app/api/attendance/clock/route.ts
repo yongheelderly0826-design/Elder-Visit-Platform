@@ -9,7 +9,7 @@ import { mockClockAttendance } from "@/lib/domain/volunteer-attendance-mock";
 import {
   OFFICE_KIOSK_SITE_ID,
   VOLUNTEER_CLOCK_COOKIE,
-  getAttendanceSite,
+  isAttendanceSiteId,
 } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
 import { getSystemStatus } from "@/lib/system/env";
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   }
 
   const siteId = (body.siteId ?? body.site_id ?? (isKiosk ? OFFICE_KIOSK_SITE_ID : "")).trim();
-  if (!isKiosk && !getAttendanceSite(siteId)) {
+  if (!isKiosk && !isAttendanceSiteId(siteId)) {
     return NextResponse.json(
       { error: { code: "VALIDATION_ERROR", message: "請先掃描組別 QR 或確認地點代碼" } },
       { status: 400 },

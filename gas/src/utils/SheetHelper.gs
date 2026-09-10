@@ -95,6 +95,7 @@ var SheetHelper = (function () {
       '個案名冊': ['case_id', 'external_id', 'case_type', 'name', 'id_number', 'gender', 'birth_date', 'age', 'household_district', 'household_village', 'visit_district', 'visit_village', 'address', 'primary_phone', 'secondary_phone', 'contact_note', 'visit_status', 'dispatch_priority', 'encoded_id', 'data_quality_tag', 'imported_at', 'updated_at'],
       '派案紀錄': ['assignment_id', 'batch_id', 'case_id', 'encoded_id', 'visitor_id', 'visit_village', 'status', 'dispatched_at', 'confirmed_at', 'due_date', 'notes', 'updated_at'],
       '簽到退紀錄': ['attendance_id', 'visitor_id', 'assignment_id', 'session_date', 'checkin_at', 'checkout_at', 'checkin_lat', 'checkin_lng', 'checkout_lat', 'checkout_lng', 'session_type', 'duration_minutes', 'channel', 'site_id', 'site_name', 'group_id', 'group_name', 'worker_name', 'id_number', 'source'],
+      '出勤集合點': ['site_id', 'name', 'group_id', 'kind', 'note', 'status', 'created_at', 'created_by'],
       '關懷表登打': ['careform_id', 'assignment_id', 'encoded_id', 'visitor_id', 'visit_result', 'completion_pct', 'answers_json', 'consent_signed', 'photo_urls', 'status', 'submitted_at', 'audited_at'],
       '空訪紀錄': ['missed_visit_id', 'assignment_id', 'encoded_id', 'visitor_id', 'photo_urls', 'notes', 'recorded_at'],
       '稽核佇列': ['audit_id', 'careform_id', 'reviewer', 'decision', 'reason', 'decided_at'],
@@ -138,6 +139,28 @@ var SheetHelper = (function () {
     return headers.concat(missing);
   }
 
+  function ensureSheet(name, headers) {
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      if (headers && headers.length) {
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        sheet.setFrozenRows(1);
+      }
+      return sheet;
+    }
+    if (headers && headers.length) {
+      if (sheet.getLastRow() === 0) {
+        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        sheet.setFrozenRows(1);
+      } else {
+        ensureColumns(name, headers);
+      }
+    }
+    return sheet;
+  }
+
   function logOperation_(action, sheet, record) {
     try {
       var logSheet = getSheet(Config.SHEET_NAMES.LOG);
@@ -164,6 +187,7 @@ var SheetHelper = (function () {
     findByKey: findByKey,
     updateByKey: updateByKey,
     ensureColumns: ensureColumns,
+    ensureSheet: ensureSheet,
     initAllSheets: initAllSheets,
   };
 })();

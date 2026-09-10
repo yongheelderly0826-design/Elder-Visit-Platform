@@ -34,6 +34,7 @@ var ApiRouter = (function () {
       return AttendanceModule.monthlyExport((b && b.period) ? b : p);
     },
     'attendance.catalog': function () { return AttendanceModule.catalog(); },
+    'attendance.sites.create': function (p, b) { return AttendanceModule.createSite(b || p); },
 
     'careform.get': function (p) { return CareFormModule.get(p.assignment_id); },
     'careform.saveDraft': function (p, b) { return CareFormModule.saveDraft(b); },

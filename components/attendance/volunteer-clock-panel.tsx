@@ -7,6 +7,7 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
   getAttendanceSite,
+  isAttendanceSiteId,
   taipeiTime,
   type AttendanceRecord,
   type VolunteerClockStatus,
@@ -124,7 +125,7 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
   }
 
   async function punch() {
-    if (!site) {
+    if (!isAttendanceSiteId(siteId)) {
       setMessage("請先掃描組別 QR，或輸入地點代碼。");
       return;
     }
@@ -134,7 +135,7 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
       const response = await fetch("/api/attendance/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId: site.id, channel: "qr", source: "field_qr" }),
+        body: JSON.stringify({ siteId: siteId.toUpperCase(), channel: "qr", source: "field_qr" }),
       });
       const json = (await response.json()) as ClockResponse;
       if (!response.ok) {
@@ -142,7 +143,8 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
         return;
       }
       const action = json.data?.action === "checkout" ? "簽退" : "簽到";
-      setMessage(`${json.data?.visitor?.name ?? ""} 已${action}（${site.name}）`);
+      const placeName = site?.name ?? json.data?.record?.siteName ?? siteId;
+      setMessage(`${json.data?.visitor?.name ?? ""} 已${action}（${placeName}）`);
       await loadMe();
     } catch {
       setMessage("簽到退失敗，請確認網路後再試。");
@@ -189,10 +191,10 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
           const value = codes[0]?.rawValue;
           if (value) {
             const parsed = parseSiteId(value);
-            if (getAttendanceSite(parsed)) {
+            if (isAttendanceSiteId(parsed)) {
               setSiteId(parsed);
               stopScan();
-              setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name}`);
+              setMessage(`已讀取地點：${getAttendanceSite(parsed)?.name ?? parsed}`);
               return;
             }
           }
@@ -241,7 +243,7 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
           <p className="text-sm text-muted-foreground">現在時間</p>
           <p className="mt-1 font-mono text-4xl font-semibold tracking-tight">{now}</p>
           <p className="mt-3 text-sm text-muted-foreground">
-            {site ? site.name : "請掃描組別集合點 QR"}
+            {site?.name || (isAttendanceSiteId(siteId) ? siteId : "請掃描組別集合點 QR")}
           </p>
         </div>
       </section>
@@ -285,7 +287,7 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
           </div>
 
           <div className="grid gap-2">
-            <Button type="button" disabled={busy || !site} onClick={() => void punch()}>
+            <Button type="button" disabled={busy || !isAttendanceSiteId(siteId)} onClick={() => void punch()}>
               <Timer className="h-4 w-4" />
               {busy ? "處理中…" : checkedIn ? "確認簽退" : "確認簽到"}
             </Button>

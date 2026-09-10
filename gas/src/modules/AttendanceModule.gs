@@ -426,6 +426,10 @@ var AttendanceModule = (function () {
     };
   }
 
+  function createSite(data) {
+    return VolunteerAttendanceCatalog.createSite(data || {});
+  }
+
   return {
     checkin: checkin,
     checkout: checkout,
@@ -435,5 +439,6 @@ var AttendanceModule = (function () {
     list: list,
     monthlyExport: monthlyExport,
     catalog: catalog,
+    createSite: createSite,
   };
 })();

@@ -206,6 +206,16 @@ export const gasClient = {
         groups: Array<Record<string, unknown>>;
         sites: Array<Record<string, unknown>>;
       }>("attendance.catalog"),
+    createSite: (body: {
+      name: string;
+      group_id?: string;
+      groupId?: string;
+      kind?: string;
+      note?: string;
+      site_id?: string;
+      siteId?: string;
+      created_by?: string;
+    }) => gasFetch<Record<string, unknown>>("attendance.sites.create", { method: "POST", body }),
   },
 };
 
