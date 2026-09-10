@@ -106,7 +106,10 @@ export function VisitorLoginPanel() {
 
             <div className="flex gap-2 rounded-md border bg-background p-3 text-xs leading-5 text-muted-foreground">
               <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <p>用 Safari 開啟後，可選「加入主畫面」。桌面圖示每次都會優先開啟訪員證。</p>
+              <p>
+                要隱藏上方網址列，請先用 Safari 開啟本頁，再點「分享」→「加入主畫面」，之後從主畫面圖示啟動。一般 Safari 分頁或 LINE
+                內建瀏覽器無法隱藏網址列。
+              </p>
             </div>
           </form>
         </section>

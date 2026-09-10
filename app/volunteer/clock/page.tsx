@@ -10,7 +10,12 @@ export default async function VolunteerClockPage({
   const params = await searchParams;
   const cookieStore = await cookies();
   const isVisitor = cookieStore.get("demo_role")?.value === "visitor";
-  const panel = <VolunteerClockPanel initialSiteId={params.site ?? ""} />;
+  const panel = (
+    <VolunteerClockPanel
+      initialSiteId={params.site ?? ""}
+      visitorWorkspace={isVisitor}
+    />
+  );
 
   if (isVisitor) {
     return <AppShell active="clock">{panel}</AppShell>;

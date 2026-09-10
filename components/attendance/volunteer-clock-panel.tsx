@@ -45,7 +45,13 @@ function parseSiteId(raw: string) {
   }
 }
 
-export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: string }) {
+export function VolunteerClockPanel({
+  initialSiteId = "",
+  visitorWorkspace = false,
+}: {
+  initialSiteId?: string;
+  visitorWorkspace?: boolean;
+}) {
   const [siteId, setSiteId] = useState(initialSiteId.toUpperCase());
   const [idNumber, setIdNumber] = useState("");
   const [status, setStatus] = useState<VolunteerClockStatus | null>(null);
@@ -312,11 +318,37 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
             </p>
           </div>
 
-          <div className="grid gap-2">
-            <Button type="button" disabled={busy || !isAttendanceSiteId(siteId)} onClick={() => void punch()}>
-              <Timer className="h-4 w-4" />
-              {busy ? "處理中…" : checkedIn ? "確認簽退" : "確認簽到"}
+          <div className="grid gap-3">
+            <Button
+              type="button"
+              className={`min-h-20 w-full gap-3 px-6 py-4 text-xl font-bold shadow-md active:scale-[0.99] sm:min-h-24 sm:text-2xl ${
+                checkedIn
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
+              }`}
+              disabled={busy || !isAttendanceSiteId(siteId)}
+              aria-label={
+                busy
+                  ? "正在處理出勤紀錄"
+                  : checkedIn
+                    ? "確認簽退，目前狀態為已簽到"
+                    : "確認簽到，目前狀態為尚未簽到"
+              }
+              onClick={() => void punch()}
+            >
+              <Timer className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" aria-hidden="true" />
+              <span>{busy ? "處理中…" : checkedIn ? "確認簽退" : "確認簽到"}</span>
             </Button>
+            <p
+              className={`rounded-md px-4 py-3 text-center text-base font-semibold ${
+                checkedIn
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-primary/10 text-primary"
+              }`}
+              role="status"
+            >
+              {checkedIn ? "目前：已簽到，按上方按鈕完成簽退" : "目前：尚未簽到"}
+            </p>
             <Button type="button" variant="secondary" onClick={() => void startScan()}>
               <Camera className="h-4 w-4" />
               掃描組別 QR
@@ -336,7 +368,7 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
             <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
               相簿／拍照掃碼（相機打不開時用）
             </Button>
-            <Link href="/volunteer/badge">
+            <Link href={visitorWorkspace ? "/visitor/home" : "/volunteer/badge"}>
               <Button type="button" variant="outline" className="w-full">
                 <QrCode className="h-4 w-4" />
                 出示個人 QR（給櫃台掃）
@@ -374,7 +406,10 @@ export function VolunteerClockPanel({ initialSiteId = "" }: { initialSiteId?: st
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <QrCode className="h-4 w-4" />
         海報 QR 會開啟此頁並帶入地點。公所內勤可刷身分證或掃
-        <Link href="/volunteer/badge" className="mx-1 underline">
+        <Link
+          href={visitorWorkspace ? "/visitor/home" : "/volunteer/badge"}
+          className="mx-1 underline"
+        >
           個人 QR
         </Link>
         （櫃台

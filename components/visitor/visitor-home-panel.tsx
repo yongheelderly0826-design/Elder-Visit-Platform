@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { isLikelyInAppBrowser, startQrScan, type QrScanHandle } from "@/lib/client/qr-scan";
 import { getAttendanceSite, isAttendanceSiteId, OFFICE_KIOSK_SITE_ID } from "@/lib/domain/volunteer-attendance";
 
-type BadgeData = {
+export type BadgeData = {
   visitorId: string;
   name: string;
   groupName: string;
@@ -33,8 +33,14 @@ function parseSiteId(raw: string) {
   }
 }
 
-export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
-  const [badge, setBadge] = useState<BadgeData | null>(null);
+export function VisitorHomePanel({
+  cacheIdentity,
+  initialBadge = null,
+}: {
+  cacheIdentity: string;
+  initialBadge?: BadgeData | null;
+}) {
+  const [badge, setBadge] = useState<BadgeData | null>(initialBadge);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -48,7 +54,9 @@ export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
     setScanning(false);
   }, []);
 
-  const badgeCacheKey = `elder-visitor-badge-v1:${cacheIdentity.toLowerCase()}`;
+  const badgeCacheKey = cacheIdentity
+    ? `elder-visitor-badge-v1:${cacheIdentity.toLowerCase()}`
+    : null;
 
   const loadBadge = useCallback(async (background = false) => {
     if (!background) {
@@ -64,6 +72,7 @@ export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
       }
       setBadge(json.data);
       try {
+        if (!badgeCacheKey) return;
         const cached: CachedBadge = {
           badge: json.data,
           cachedAt: new Date().toISOString(),
@@ -84,14 +93,22 @@ export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
   }, [badgeCacheKey]);
 
   useEffect(() => {
-    let hasCachedBadge = false;
+    let hasCachedBadge = Boolean(initialBadge);
     try {
-      const raw = window.localStorage.getItem(badgeCacheKey);
-      if (raw) {
-        const cached = JSON.parse(raw) as CachedBadge;
-        if (cached.badge?.visitorId && cached.badge?.qrUrl) {
-          setBadge(cached.badge);
-          hasCachedBadge = true;
+      if (initialBadge && badgeCacheKey) {
+        const cached: CachedBadge = {
+          badge: initialBadge,
+          cachedAt: new Date().toISOString(),
+        };
+        window.localStorage.setItem(badgeCacheKey, JSON.stringify(cached));
+      } else if (badgeCacheKey) {
+        const raw = window.localStorage.getItem(badgeCacheKey);
+        if (raw) {
+          const cached = JSON.parse(raw) as CachedBadge;
+          if (cached.badge?.visitorId && cached.badge?.qrUrl) {
+            setBadge(cached.badge);
+            hasCachedBadge = true;
+          }
         }
       }
     } catch {
@@ -100,7 +117,7 @@ export function VisitorHomePanel({ cacheIdentity }: { cacheIdentity: string }) {
 
     // Cached QR is shown immediately; server verification refreshes silently.
     void loadBadge(hasCachedBadge);
-  }, [badgeCacheKey, loadBadge]);
+  }, [badgeCacheKey, initialBadge, loadBadge]);
 
   useEffect(() => () => stopScan(), [stopScan]);
 
