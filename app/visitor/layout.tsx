@@ -13,6 +13,9 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "訪員證",
   },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
 };
 
 export default function VisitorLayout({ children }: { children: ReactNode }) {
