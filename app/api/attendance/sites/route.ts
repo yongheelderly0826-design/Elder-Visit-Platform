@@ -8,6 +8,7 @@ import {
   VOLUNTEER_GROUPS,
   getVolunteerGroup,
   type AttendanceSite,
+  type VolunteerGroupId,
 } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
 import { getRuntimeEnvValue } from "@/lib/runtime/env";

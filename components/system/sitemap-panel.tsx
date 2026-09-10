@@ -6,7 +6,7 @@ import { sitemapSections } from "@/lib/domain/sitemap";
 import type { WorkspaceRole } from "@/lib/domain/types";
 
 export function SitemapPanel({ role }: { role: WorkspaceRole }) {
-  const visibleNavItems = getVisibleNavItems(role.capabilities);
+  const visibleNavItems = getVisibleNavItems(role.capabilities, role.key);
   const visibleHrefSet = new Set(visibleNavItems.map((item) => item.href));
   const visibleSections = getVisibleSitemapSections(role);
 

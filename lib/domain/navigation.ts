@@ -23,7 +23,7 @@ import {
   Wallet,
   Workflow,
 } from "lucide-react";
-import type { Capability } from "@/lib/domain/types";
+import type { Capability, WorkspaceRoleKey } from "@/lib/domain/types";
 
 export type NavKey =
   | "dashboard"
@@ -56,8 +56,13 @@ export type NavItem = {
   href: string;
   icon: ComponentType<{ className?: string }>;
   requiredCapabilities: Capability[];
+  /** When set, only these roles see the item (capabilities still apply). */
+  allowedRoles?: WorkspaceRoleKey[];
   group: "daily" | "operations" | "governance" | "system";
 };
+
+/** Pages that belong to the visitor workspace, not manager operations. */
+const VISITOR_ONLY: WorkspaceRoleKey[] = ["visitor"];
 
 export const navItems: NavItem[] = [
   {
@@ -74,6 +79,7 @@ export const navItems: NavItem[] = [
     href: "/visitor/home",
     icon: IdCard,
     requiredCapabilities: ["attendance.clock"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -82,6 +88,7 @@ export const navItems: NavItem[] = [
     href: "/visitor/tasks",
     icon: ListChecks,
     requiredCapabilities: ["visits.submit"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -90,6 +97,7 @@ export const navItems: NavItem[] = [
     href: "/visitor/drafts",
     icon: Files,
     requiredCapabilities: ["visits.submit"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -98,6 +106,7 @@ export const navItems: NavItem[] = [
     href: "/visitor/payments",
     icon: Wallet,
     requiredCapabilities: ["payments.read"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -106,6 +115,7 @@ export const navItems: NavItem[] = [
     href: "/volunteer/clock",
     icon: Timer,
     requiredCapabilities: ["attendance.clock"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -114,6 +124,7 @@ export const navItems: NavItem[] = [
     href: "/visitor/profile",
     icon: UserRound,
     requiredCapabilities: ["visits.submit"],
+    allowedRoles: VISITOR_ONLY,
     group: "daily",
   },
   {
@@ -248,8 +259,16 @@ export const navGroups: Array<{
   { key: "system", label: "系統設定" },
 ];
 
-export function getVisibleNavItems(capabilities: Capability[]) {
-  return navItems.filter((item) =>
-    item.requiredCapabilities.every((capability) => capabilities.includes(capability)),
-  );
+export function getVisibleNavItems(
+  capabilities: Capability[],
+  roleKey?: WorkspaceRoleKey | null,
+) {
+  return navItems.filter((item) => {
+    if (item.allowedRoles?.length) {
+      if (!roleKey || !item.allowedRoles.includes(roleKey)) {
+        return false;
+      }
+    }
+    return item.requiredCapabilities.every((capability) => capabilities.includes(capability));
+  });
 }

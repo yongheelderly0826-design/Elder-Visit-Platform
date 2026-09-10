@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clearVolunteerClockCookie } from "@/lib/attendance/session";
 import {
   encodeManagerSession,
   inferManagerRole,
@@ -8,6 +9,10 @@ import {
 
 function getSafeNextPath(nextPath: string | null) {
   if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
+    return "/dashboard";
+  }
+  // Managers must not land on visitor-only workspaces after login.
+  if (nextPath.startsWith("/visitor/")) {
     return "/dashboard";
   }
   return nextPath;
@@ -61,6 +66,17 @@ export async function POST(request: Request) {
     sameSite: "lax",
     maxAge: 60 * 60 * 8,
   });
+  response.cookies.set("demo_email", email, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 8,
+  });
+  response.cookies.set("demo_name", email, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 8,
+  });
+  clearVolunteerClockCookie(response);
 
   return response;
 }

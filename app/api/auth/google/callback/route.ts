@@ -6,6 +6,7 @@ import {
   isAllowedManagerEmail,
   SESSION_COOKIE,
 } from "@/lib/auth/google-manager";
+import { clearVolunteerClockCookie } from "@/lib/attendance/session";
 
 type GoogleTokenResponse = {
   access_token: string;
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
   if (stateRaw) {
     try {
       const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString("utf8")) as { next?: string };
-      if (state.next?.startsWith("/") && !state.next.startsWith("//")) {
+      if (state.next?.startsWith("/") && !state.next.startsWith("//") && !state.next.startsWith("/visitor/")) {
         nextPath = state.next;
       }
     } catch {
@@ -96,6 +97,17 @@ export async function GET(request: Request) {
     sameSite: "lax",
     maxAge: 60 * 60 * 8,
   });
+  response.cookies.set("demo_email", email, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 8,
+  });
+  response.cookies.set("demo_name", profile.name ?? email, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 8,
+  });
+  clearVolunteerClockCookie(response);
 
   return response;
 }

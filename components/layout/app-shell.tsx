@@ -30,7 +30,7 @@ export async function AppShell({
   }
   const roleKey = roleCookie as WorkspaceRoleKey;
   const role = getRoleByKey(roleKey);
-  const items = getVisibleNavItems(role.capabilities);
+  const items = getVisibleNavItems(role.capabilities, roleKey);
   const activeGroup = items.find((item) => item.key === active)?.group;
   const sponsor = getPrimarySponsor();
   const canManageSponsors = role.capabilities.includes("sponsors.manage");
@@ -169,7 +169,12 @@ export async function AppShell({
         </PermissionProvider>
       </div>
 
-      <BottomNav active={active} capabilities={role.capabilities} roleLabel={role.label} />
+      <BottomNav
+        active={active}
+        capabilities={role.capabilities}
+        roleKey={roleKey}
+        roleLabel={role.label}
+      />
     </div>
   );
 }

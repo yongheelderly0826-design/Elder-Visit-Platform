@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { LogOut, Menu, X } from "lucide-react";
 import { getVisibleNavItems, navGroups, type NavItem, type NavKey } from "@/lib/domain/navigation";
-import type { Capability } from "@/lib/domain/types";
+import type { Capability, WorkspaceRoleKey } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
 const primaryNavOrder: NavKey[] = ["badge", "tasks", "payments", "clock", "assignments", "cases"];
@@ -16,14 +16,16 @@ function isNavItem(item: NavItem | undefined): item is NavItem {
 export function BottomNav({
   active,
   capabilities,
+  roleKey,
   roleLabel,
 }: {
   active: NavKey;
   capabilities: Capability[];
+  roleKey?: WorkspaceRoleKey;
   roleLabel: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const items = getVisibleNavItems(capabilities);
+  const items = getVisibleNavItems(capabilities, roleKey);
   const primaryItems = primaryNavOrder
     .map((key) => items.find((item) => item.key === key))
     .filter(isNavItem)
