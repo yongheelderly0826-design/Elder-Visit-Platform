@@ -43,10 +43,12 @@ async function withQr(sites: SiteRow[]): Promise<SiteRow[]> {
 }
 
 function mapCatalogSite(row: Record<string, unknown>): SiteRow {
+  const groupIdRaw = String(row.group_id ?? row.groupId ?? "other");
+  const groupId = (getVolunteerGroup(groupIdRaw)?.id ?? "other") as VolunteerGroupId;
   return {
     id: String(row.id ?? row.site_id ?? "").toUpperCase(),
     name: String(row.name ?? ""),
-    groupId: String(row.group_id ?? row.groupId ?? "other"),
+    groupId,
     kind: (String(row.kind ?? "field") === "office" ? "office" : "field") as AttendanceSite["kind"],
     note: String(row.note ?? ""),
     custom: Boolean(row.custom),
