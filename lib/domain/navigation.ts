@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   BarChart3,
+  CalendarCheck2,
   ClipboardList,
   ContactRound,
   FileText,
@@ -34,6 +35,7 @@ export type NavKey =
   | "profile"
   | "cases"
   | "assignments"
+  | "dailyVisits"
   | "audit"
   | "kpi"
   | "engines"
@@ -149,6 +151,14 @@ export const navItems: NavItem[] = [
     href: "/manager/assignments",
     icon: ClipboardList,
     requiredCapabilities: ["assignment.manage"],
+    group: "operations",
+  },
+  {
+    key: "dailyVisits",
+    label: "每日訪視統計",
+    href: "/manager/daily-visits",
+    icon: CalendarCheck2,
+    requiredCapabilities: ["visits.read"],
     group: "operations",
   },
   {
