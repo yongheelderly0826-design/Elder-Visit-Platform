@@ -5,6 +5,10 @@ import type {
   ExportTemplateSummary,
 } from "@/lib/domain/types";
 import { governmentFormTemplates } from "@/lib/domain/government-forms";
+import {
+  consentDocumentIds,
+  type ConsentDocumentId,
+} from "@/lib/domain/consent-documents";
 
 export const consentScopeLabels: Record<ConsentScope, string> = {
   internal_use: "單位內部服務",
@@ -147,13 +151,9 @@ function isExpiringSoon(record: ConsentRecord) {
   return daysUntilExpiry >= 0 && daysUntilExpiry <= 30;
 }
 
-export const electronicConsentTemplateIds = [
-  "gov_personal_data_consent_115",
-  "gov_social_worker_confidentiality_115",
-  "gov_civil_affairs_confidentiality_115",
-] as const;
+export const electronicConsentTemplateIds = consentDocumentIds;
 
-export type ElectronicConsentTemplateId = (typeof electronicConsentTemplateIds)[number];
+export type ElectronicConsentTemplateId = ConsentDocumentId;
 export type ConsentSignerRole = "elder" | "visitor";
 
 export type ElectronicConsentRecord = {
@@ -171,6 +171,10 @@ export type ElectronicConsentRecord = {
   signatureFileUrl: string;
   signatureMimeType: "image/png" | "image/jpeg";
   signatureDataUrl?: string;
+  pdfFileId: string;
+  pdfFileUrl: string;
+  pdfFileName: string;
+  pdfGeneratedAt: string;
   signedAt: string;
   isTest: boolean;
   fieldValues: Record<string, string | boolean>;
@@ -228,8 +232,11 @@ export function validateConsentSignInput(input: ConsentSignInput) {
   }
   if (input.templateId === "gov_personal_data_consent_115") {
     if (input.signerRole !== "elder") errors.push("個資同意書必須由長者簽署。");
-    if (input.fieldValues.personal_data_use_consent !== "同意") {
-      errors.push("請確認個資使用同意。");
+    if (!["同意", "不同意"].includes(String(input.fieldValues.personal_data_use_consent))) {
+      errors.push("請勾選個資使用意願。");
+    }
+    if (!["同意", "不同意"].includes(String(input.fieldValues.health_database_link_consent))) {
+      errors.push("請勾選健康資料串聯意願。");
     }
   } else {
     if (input.signerRole !== "visitor") errors.push("保密同意書必須由訪員本人簽署。");
@@ -275,6 +282,10 @@ export function normalizeGasConsentRecord(row: Record<string, unknown>): Electro
       row.signature_mime_type ?? row.signatureMimeType ?? "image/png",
     ) as "image/png" | "image/jpeg",
     signatureDataUrl: String(row.signature_data_url ?? row.signatureDataUrl ?? "") || undefined,
+    pdfFileId: String(row.pdf_file_id ?? row.pdfFileId ?? ""),
+    pdfFileUrl: String(row.pdf_file_url ?? row.pdfFileUrl ?? ""),
+    pdfFileName: String(row.pdf_file_name ?? row.pdfFileName ?? ""),
+    pdfGeneratedAt: String(row.pdf_generated_at ?? row.pdfGeneratedAt ?? ""),
     signedAt: new Date(String(row.signed_at ?? row.signedAt ?? Date.now())).toISOString(),
     isTest:
       row.is_test === true ||

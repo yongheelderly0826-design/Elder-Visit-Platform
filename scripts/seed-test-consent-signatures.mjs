@@ -51,7 +51,7 @@ const seeds = [
     external_ref: "TEST-CONSENT-SIGNATURE-A-001",
     template_id: "gov_personal_data_consent_115",
     template_version: "115-116 年度",
-    title: "縣市政府版本個人資料蒐集聲明暨同意書",
+    title: "個人資料蒐集聲明暨同意書",
     signer_name: "測試簽署人甲",
     signer_role: "elder",
     visitor_id: "TEST-VISITOR-A",
@@ -102,12 +102,18 @@ for (const seed of seeds) {
     params: { external_ref: seed.external_ref, limit: 1 },
   });
   if (Array.isArray(existing) && existing.length > 0) {
-    console.log(`skip ${seed.external_ref}: already exists (${existing[0].consent_id})`);
+    const row = existing[0];
+    if (!row.pdf_file_id) {
+      await gas("consent.generatePdf", { body: { consent_id: row.consent_id } });
+      console.log(`generated PDF ${seed.external_ref}: ${row.consent_id}`);
+    } else {
+      console.log(`skip ${seed.external_ref}: record and PDF already exist (${row.consent_id})`);
+    }
     continue;
   }
   const { signature, ...record } = seed;
   const created = await gas("consent.sign", {
     body: { ...record, signature_data_url: await signature() },
   });
-  console.log(`created ${seed.external_ref}: ${created.consent_id}`);
+  console.log(`created record and PDF ${seed.external_ref}: ${created.consent_id}`);
 }

@@ -234,6 +234,11 @@ export const gasClient = {
       }),
     sign: (body: Record<string, unknown>) =>
       gasFetch<Record<string, unknown>>("consent.sign", { method: "POST", body }),
+    generatePdf: (consentId: string) =>
+      gasFetch<Record<string, unknown>>("consent.generatePdf", {
+        method: "POST",
+        body: { consent_id: consentId },
+      }),
   },
 };
 

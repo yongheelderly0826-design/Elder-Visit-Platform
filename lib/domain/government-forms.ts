@@ -125,7 +125,7 @@ export const governmentFormTemplates: GovernmentFormTemplate[] = [
   },
   {
     id: "gov_personal_data_consent_115",
-    name: "縣市政府版本個人資料蒐集聲明暨同意書",
+    name: "個人資料蒐集聲明暨同意書",
     kind: "personal_data_consent",
     ownerAgency: "縣市政府 / 衛生福利部",
     version: "115-116 年度",

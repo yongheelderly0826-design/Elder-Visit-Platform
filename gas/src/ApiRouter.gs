@@ -44,6 +44,7 @@ var ApiRouter = (function () {
     'consent.list': function (p) { return ConsentModule.list(p); },
     'consent.get': function (p) { return ConsentModule.get(p.id || p.consent_id, p); },
     'consent.sign': function (p, b) { return ConsentModule.sign(b); },
+    'consent.generatePdf': function (p, b) { return ConsentModule.generatePdf(b || p); },
 
     'audit.queue': function (p) { return AuditModule.queue(p); },
     'audit.decide': function (p, b) { return AuditModule.decide(b); },

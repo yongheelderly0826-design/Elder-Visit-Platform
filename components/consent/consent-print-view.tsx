@@ -5,9 +5,12 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { PrintButton } from "@/components/badges/print-button";
 import {
-  getElectronicConsentTemplate,
   type ElectronicConsentRecord,
 } from "@/lib/domain/consent";
+import {
+  formatRocDate,
+  getConsentDocument,
+} from "@/lib/domain/consent-documents";
 
 export function ConsentPrintView({ consentId, autoPrint }: { consentId: string; autoPrint: boolean }) {
   const [record, setRecord] = useState<ElectronicConsentRecord | null>(null);
@@ -45,20 +48,16 @@ export function ConsentPrintView({ consentId, autoPrint }: { consentId: string; 
     );
   }
 
-  const template = getElectronicConsentTemplate(record.templateId);
-  const fieldEntries = template.sections
-    .flatMap((section) => section.fields)
-    .filter((field) => field.type !== "signature" && field.key !== "signed_date")
-    .map((field) => [field.label, record.fieldValues[field.key]] as const)
-    .filter(([, value]) => value !== undefined && value !== "");
+  const document = getConsentDocument(record.templateId);
+  const rocDate = formatRocDate(record.signedAt);
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 text-slate-950 print:bg-white print:p-0">
       <style>{`
-        @page { size: A4; margin: 16mm; }
+        @page { size: A4; margin: 13mm 15mm; }
         @media print {
           .print-toolbar { display: none !important; }
-          .consent-sheet { box-shadow: none !important; margin: 0; padding: 0 !important; }
+          .consent-sheet { box-shadow: none !important; border: 0 !important; margin: 0; padding: 0 !important; }
           body { background: white !important; }
         }
       `}</style>
@@ -69,63 +68,133 @@ export function ConsentPrintView({ consentId, autoPrint }: { consentId: string; 
         </div>
         <PrintButton />
       </div>
-      <article className="consent-sheet mx-auto max-w-3xl rounded-xl bg-white p-10 shadow-sm">
+      <article className="consent-sheet mx-auto max-w-[210mm] border-2 border-slate-900 bg-white px-10 py-8 font-serif shadow-sm">
         {record.isTest && (
-          <p className="mb-4 inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">
+          <p className="mb-3 inline-flex rounded-full bg-amber-100 px-3 py-1 font-sans text-sm font-bold text-amber-900 print:border print:border-slate-900 print:bg-white">
             TEST 測試資料
           </p>
         )}
-        <h1 className="text-center text-2xl font-bold">{record.title}</h1>
-        <p className="mt-2 text-center text-sm text-slate-500">版本：{record.templateVersion}</p>
-        <section className="mt-8 space-y-5 text-base leading-8">
-          {template.sections.map((section) => (
-            <div key={section.title}>
-              <h2 className="font-bold">{section.title}</h2>
-              <p>{section.purpose}</p>
-            </div>
-          ))}
-          <p>
-            本人已閱讀並理解上述聲明，確認所填資料屬實，並依下列勾選結果簽署本同意書。
-          </p>
-        </section>
-        <dl className="mt-8 grid grid-cols-[9rem_1fr] border text-sm">
-          <dt className="border-b border-r bg-slate-50 p-3 font-medium">簽署人</dt>
-          <dd className="border-b p-3">{record.signerName}</dd>
-          <dt className="border-b border-r bg-slate-50 p-3 font-medium">簽署身分</dt>
-          <dd className="border-b p-3">{record.signerRole === "elder" ? "長者／立書人" : "訪員"}</dd>
-          {fieldEntries.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="border-b border-r bg-slate-50 p-3 font-medium">{label}</dt>
-              <dd className="border-b p-3">{String(value)}</dd>
-            </div>
-          ))}
-          <dt className="border-r bg-slate-50 p-3 font-medium">關聯資料</dt>
-          <dd className="p-3">{record.caseId || record.scheduleId || record.externalRef || "無"}</dd>
-        </dl>
-        <section className="mt-10 grid grid-cols-[8rem_1fr] items-end gap-4">
-          <p className="font-medium">簽名：</p>
-          {record.signatureDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={record.signatureDataUrl}
-              alt={`${record.signerName}簽名`}
-              className="h-28 w-full max-w-md border-b object-contain object-left-bottom"
-            />
-          ) : (
-            <p className="border-b pb-3 text-slate-500">簽名檔案無法載入</p>
-          )}
-          <p className="font-medium">簽署日期：</p>
-          <p className="border-b pb-2">
-            {new Intl.DateTimeFormat("zh-TW", {
-              dateStyle: "long",
-              timeZone: "Asia/Taipei",
-            }).format(new Date(record.signedAt))}
-          </p>
-        </section>
-        <footer className="mt-12 border-t pt-3 text-xs text-slate-500">
-          紀錄編號：{record.consentId} · 簽名圖檔保存在受限 Drive，未公開分享。
+        <p className="text-right text-lg font-bold">新北市政府</p>
+        <h1 className="mt-1 text-center text-2xl font-bold">{document.title}</h1>
+        {document.kind === "personal_data" ? (
+          <PersonalDataDocument record={record} rocDate={rocDate} />
+        ) : (
+          <ConfidentialityDocument record={record} rocDate={rocDate} />
+        )}
+        <footer className="mt-5 border-t pt-2 font-sans text-[10px] text-slate-500 print:text-slate-900">
+          紀錄編號：{record.consentId}　版本：{record.templateVersion}
+          {record.isTest ? "　TEST（不進正式匯出／核銷）" : ""}
         </footer>
       </article>
     </main>
+  );
+}
+
+function Clauses({ clauses }: { clauses: string[] }) {
+  const numbers = ["一", "二", "三", "四", "五", "六"];
+  return (
+    <ol className="mt-3 space-y-2 text-[15px] leading-7">
+      {clauses.map((clause, index) => (
+        <li key={clause} className="flex gap-2">
+          <span className="shrink-0">{numbers[index]}、</span>
+          <span>{clause}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Choice({ checked, label }: { checked: boolean; label: string }) {
+  return <span className="whitespace-nowrap">{checked ? "☑" : "☐"}{label}</span>;
+}
+
+function SignatureImage({ record }: { record: ElectronicConsentRecord }) {
+  return record.signatureDataUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={record.signatureDataUrl}
+      alt={`${record.signerName}簽名`}
+      className="inline-block h-20 w-64 border-b border-slate-900 object-contain object-left-bottom align-bottom"
+    />
+  ) : (
+    <span className="inline-block h-16 w-64 border-b border-slate-900 align-bottom text-sm text-slate-500">
+      簽名檔案無法載入
+    </span>
+  );
+}
+
+function RocDateLine({ rocDate }: { rocDate: ReturnType<typeof formatRocDate> }) {
+  return (
+    <p className="mt-3 text-center text-lg">
+      中華民國　{rocDate.year}　年　{rocDate.month}　月　{rocDate.day}　日
+    </p>
+  );
+}
+
+function PersonalDataDocument({
+  record,
+  rocDate,
+}: {
+  record: ElectronicConsentRecord;
+  rocDate: ReturnType<typeof formatRocDate>;
+}) {
+  const document = getConsentDocument("gov_personal_data_consent_115");
+  if (document.kind !== "personal_data") return null;
+  const personalChoice = String(record.fieldValues.personal_data_use_consent ?? "");
+  const healthChoice = String(record.fieldValues.health_database_link_consent ?? "");
+  return (
+    <>
+      <Clauses clauses={document.clauses} />
+      <p className="mt-3 text-[15px] leading-7">
+        我已詳閱本同意書，{" "}
+        <Choice checked={personalChoice === "同意"} label="同意" />{" "}
+        <Choice checked={personalChoice === "不同意"} label="不同意" />
+        個人資料於上開範圍內使用。
+      </p>
+      <h2 className="mt-4 text-lg font-bold">{document.healthSectionTitle}</h2>
+      <p className="mt-2 text-[15px] leading-7">
+        我 <Choice checked={healthChoice === "同意"} label="同意" />{" "}
+        <Choice checked={healthChoice === "不同意"} label="不同意" />
+        {document.healthStatement}
+      </p>
+      <p className="mt-4 text-lg">
+        立書人：<SignatureImage record={record} />
+        <span className="ml-2 text-sm">（須本人簽名、蓋章或手印）</span>
+      </p>
+      <RocDateLine rocDate={rocDate} />
+    </>
+  );
+}
+
+function ConfidentialityDocument({
+  record,
+  rocDate,
+}: {
+  record: ElectronicConsentRecord;
+  rocDate: ReturnType<typeof formatRocDate>;
+}) {
+  const document = getConsentDocument(record.templateId);
+  if (document.kind !== "confidentiality") return null;
+  const identity = String(record.fieldValues.identity_type ?? "");
+  return (
+    <>
+      <p className="mt-4 text-[16px] leading-8">
+        立同意書人 <span className="inline-block min-w-40 border-b text-center">{record.signerName}</span>
+        同意於參與○○縣／市辦理「擴大獨居老人服務計畫」期間，遵守以下事項：
+      </p>
+      <Clauses clauses={document.clauses} />
+      <div className="mt-6 space-y-3 text-lg leading-8">
+        <p>立同意書人：<SignatureImage record={record} /></p>
+        <p>
+          身分：
+          {document.identityOptions.map((option) => (
+            <span key={option} className="mr-3"><Choice checked={identity === option} label={option} /></span>
+          ))}
+        </p>
+        <p>身分證字號：<span className="inline-block min-w-64 border-b px-2">{String(record.fieldValues.national_id ?? "")}</span></p>
+        <p>聯絡電話：<span className="inline-block min-w-64 border-b px-2">{String(record.fieldValues.phone ?? "")}</span></p>
+      </div>
+      <RocDateLine rocDate={rocDate} />
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Eye, FileCheck2, Loader2, Printer, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Eye, FileCheck2, FileText, Loader2, Printer, ShieldCheck, TriangleAlert } from "lucide-react";
 import {
   consentRecords,
   consentScopeLabels,
@@ -10,6 +10,7 @@ import {
   getConsentGovernanceSummary,
   type ElectronicConsentRecord,
 } from "@/lib/domain/consent";
+import { getConsentDocument } from "@/lib/domain/consent-documents";
 
 const sourceLabels = {
   visit_form: "訪查表",
@@ -200,7 +201,7 @@ function ElectronicConsentRecords() {
                     )}
                   </td>
                   <td className="max-w-64 px-3 py-2">
-                    <p className="font-medium">{record.title}</p>
+                    <p className="font-medium">{getConsentDocument(record.templateId).title}</p>
                     {record.isTest && (
                       <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
                         TEST
@@ -225,6 +226,20 @@ function ElectronicConsentRecords() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
+                      {record.pdfFileUrl ? (
+                        <a
+                          href={record.pdfFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-9 items-center gap-1 rounded-md bg-emerald-700 px-3 font-medium text-white"
+                        >
+                          <FileText className="h-4 w-4" />開啟 PDF
+                        </a>
+                      ) : (
+                        <span className="inline-flex h-9 items-center px-2 text-xs text-amber-700">
+                          PDF 待補產
+                        </span>
+                      )}
                       <Link
                         href={`/manager/consent/${encodeURIComponent(record.consentId)}/print`}
                         className="inline-flex h-9 items-center gap-1 rounded-md border px-3 font-medium"

@@ -9,6 +9,7 @@ import {
   getElectronicConsentTemplate,
   type ElectronicConsentTemplateId,
 } from "@/lib/domain/consent";
+import { getConsentDocument } from "@/lib/domain/consent-documents";
 
 export function VisitorConsentForm({
   visitorName,
@@ -25,12 +26,14 @@ export function VisitorConsentForm({
   const [identityType, setIdentityType] = useState("");
   const [nationalId, setNationalId] = useState("");
   const [phone, setPhone] = useState("");
+  const [personalDataConsent, setPersonalDataConsent] = useState<"同意" | "不同意">("同意");
   const [healthLinkConsent, setHealthLinkConsent] = useState<"同意" | "不同意">("不同意");
   const [confirmed, setConfirmed] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState("");
   const [status, setStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const template = useMemo(() => getElectronicConsentTemplate(templateId), [templateId]);
+  const consentDocument = useMemo(() => getConsentDocument(templateId), [templateId]);
   const isPersonal = templateId === "gov_personal_data_consent_115";
   const identityOptions =
     template.sections.flatMap((section) => section.fields).find((field) => field.key === "identity_type")
@@ -58,7 +61,7 @@ export function VisitorConsentForm({
     const fieldValues = isPersonal
       ? {
           consent_person_name: signerName,
-          personal_data_use_consent: "同意",
+          personal_data_use_consent: personalDataConsent,
           health_database_link_consent: healthLinkConsent,
         }
       : {
@@ -88,7 +91,7 @@ export function VisitorConsentForm({
         error?: { message?: string };
       };
       if (!response.ok) throw new Error(payload.error?.message || "送出失敗");
-      setStatus(`簽署完成，紀錄編號：${payload.data?.record?.consentId ?? "已建立"}`);
+      setStatus(`簽署完成，PDF 已歸檔。紀錄編號：${payload.data?.record?.consentId ?? "已建立"}`);
       setSignatureDataUrl("");
       setConfirmed(false);
     } catch (error) {
@@ -190,7 +193,27 @@ export function VisitorConsentForm({
         <div className="mt-5 rounded-lg border bg-background p-4 text-sm leading-7">
           {isPersonal ? (
             <>
-              <p>本人已知悉蒐集目的、資料類型、利用期間、地區、對象及方式，並同意於本聲明範圍內蒐集、處理及利用個人資料。</p>
+              <h3 className="font-bold">{consentDocument.title}</h3>
+              <ol className="mt-2 list-cjk-ideographic space-y-2 pl-7">
+                {consentDocument.clauses.map((clause) => <li key={clause}>{clause}</li>)}
+              </ol>
+              <label className="mt-3 block">
+                個人資料於上開範圍內使用：
+                <select
+                  className="ml-2 h-11 rounded-md border bg-card px-3"
+                  value={personalDataConsent}
+                  onChange={(event) => setPersonalDataConsent(event.target.value as "同意" | "不同意")}
+                >
+                  <option>同意</option>
+                  <option>不同意</option>
+                </select>
+              </label>
+              {consentDocument.kind === "personal_data" && (
+                <p className="mt-3">
+                  <strong>{consentDocument.healthSectionTitle}</strong><br />
+                  我（同意／不同意）{consentDocument.healthStatement}
+                </p>
+              )}
               <label className="mt-3 flex min-h-12 items-center gap-3">
                 <input
                   type="checkbox"
@@ -198,7 +221,7 @@ export function VisitorConsentForm({
                   checked={confirmed}
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
-                我已閱讀並同意個資蒐集與使用
+                我已閱讀上述完整聲明，並依所選意願簽署
               </label>
               <label className="mt-3 block">
                 健康資料庫串聯分析：
@@ -214,7 +237,11 @@ export function VisitorConsentForm({
             </>
           ) : (
             <>
-              <p>本人承諾不得洩露、複製、轉讓、再使用或交付因訪查工作接觸之個人資料，離任後亦同。</p>
+              <h3 className="font-bold">{consentDocument.title}</h3>
+              <p className="mt-2">{consentDocument.introduction}</p>
+              <ol className="mt-2 list-cjk-ideographic space-y-2 pl-7">
+                {consentDocument.clauses.map((clause) => <li key={clause}>{clause}</li>)}
+              </ol>
               <label className="mt-3 flex min-h-12 items-center gap-3">
                 <input
                   type="checkbox"
