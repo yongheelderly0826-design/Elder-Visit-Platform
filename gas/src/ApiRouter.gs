@@ -41,6 +41,10 @@ var ApiRouter = (function () {
     'careform.submit': function (p, b) { return CareFormModule.submit(b); },
     'careform.validate': function (p, b) { return CareFormModule.validate(b); },
 
+    'consent.list': function (p) { return ConsentModule.list(p); },
+    'consent.get': function (p) { return ConsentModule.get(p.id || p.consent_id, p); },
+    'consent.sign': function (p, b) { return ConsentModule.sign(b); },
+
     'audit.queue': function (p) { return AuditModule.queue(p); },
     'audit.decide': function (p, b) { return AuditModule.decide(b); },
 

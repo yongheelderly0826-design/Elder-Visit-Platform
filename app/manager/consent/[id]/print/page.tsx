@@ -1,12 +1,17 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AppShell } from "@/components/layout/app-shell";
-import { ConsentDashboard } from "@/components/manage/consent-dashboard";
+import { ConsentPrintView } from "@/components/consent/consent-print-view";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getRoleByKey } from "@/lib/domain/permissions";
 import type { WorkspaceRoleKey } from "@/lib/domain/types";
 
-export default async function ConsentPage() {
+export default async function ConsentPrintPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ print?: string }>;
+}) {
   const cookieStore = await cookies();
   const manager = decodeManagerSession(cookieStore.get(SESSION_COOKIE)?.value);
   const roleKey = (manager?.roleKey ?? cookieStore.get("demo_role")?.value) as
@@ -16,9 +21,6 @@ export default async function ConsentPage() {
   if (roleKey === "visitor" || !getRoleByKey(roleKey).capabilities.includes("consent.manage")) {
     redirect("/dashboard");
   }
-  return (
-    <AppShell active="consent">
-      <ConsentDashboard />
-    </AppShell>
-  );
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  return <ConsentPrintView consentId={id} autoPrint={query.print === "1"} />;
 }

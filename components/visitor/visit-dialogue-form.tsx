@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
+import { SignaturePad } from "@/components/consent/signature-pad";
 import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
 import { Button } from "@/components/ui/button";
 import type { ElderCase, VisitSchedule, VisitSubmission } from "@/lib/domain/types";
@@ -884,37 +885,6 @@ function SubmitVisitButton({
       {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
       送出訪查紀錄
     </Button>
-  );
-}
-
-function SignaturePad({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const [signature, setSignature] = useState(value);
-
-  useEffect(() => {
-    setSignature(value);
-  }, [value]);
-
-  return (
-    <div className="mt-3">
-      <input
-        className="h-24 w-full rounded-md border bg-card px-3 text-center text-lg outline-none focus:ring-2 focus:ring-ring"
-        value={signature}
-        onChange={(event) => {
-          setSignature(event.target.value);
-          onChange(event.target.value);
-        }}
-        placeholder="請輸入簽名或簽名代碼"
-      />
-      <p className="mt-2 text-xs text-muted-foreground">
-        目前以文字簽名代替手寫 canvas；正式版可替換成簽名板。
-      </p>
-    </div>
   );
 }
 

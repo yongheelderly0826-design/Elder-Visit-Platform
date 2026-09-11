@@ -217,6 +217,24 @@ export const gasClient = {
       created_by?: string;
     }) => gasFetch<Record<string, unknown>>("attendance.sites.create", { method: "POST", body }),
   },
+  consent: {
+    list: (params?: {
+      template_id?: string;
+      external_ref?: string;
+      visitor_id?: string;
+      limit?: string;
+      include_signature?: string;
+    }) =>
+      gasFetch<Array<Record<string, unknown>>>("consent.list", {
+        params: params as Record<string, string> | undefined,
+      }),
+    get: (id: string) =>
+      gasFetch<Record<string, unknown>>("consent.get", {
+        params: { id, include_signature: "true" },
+      }),
+    sign: (body: Record<string, unknown>) =>
+      gasFetch<Record<string, unknown>>("consent.sign", { method: "POST", body }),
+  },
 };
 
 export function isGasConfigured(): boolean {

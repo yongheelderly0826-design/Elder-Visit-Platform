@@ -102,6 +102,7 @@ var SheetHelper = (function () {
       '車馬費核銷': ['payment_id', 'visitor_id', 'period', 'visit_count', 'total_hours', 'amount', 'status', 'locked_at'],
       '匯出紀錄': ['export_id', 'export_type', 'case_count', 'file_url', 'exported_by', 'exported_at'],
       '報表快照': ['snapshot_id', 'report_type', 'period', 'data_json', 'created_at'],
+      '電子同意書': ['consent_id', 'template_id', 'template_version', 'title', 'signer_name', 'signer_role', 'visitor_id', 'case_id', 'schedule_id', 'external_ref', 'signature_file_id', 'signature_file_url', 'signature_mime_type', 'signature_file_name', 'signed_at', 'is_test', 'field_values_json', 'metadata_json'],
       '_操作日誌': ['log_id', 'action', 'sheet', 'record_id', 'actor', 'timestamp', 'detail'],
     };
 

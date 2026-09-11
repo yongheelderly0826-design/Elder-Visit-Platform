@@ -5,6 +5,7 @@ import {
   ClipboardList,
   ContactRound,
   FileText,
+  FileSignature,
   Files,
   FormInput,
   Home,
@@ -50,7 +51,8 @@ export type NavKey =
   | "users"
   | "settings"
   | "clock"
-  | "attendance";
+  | "attendance"
+  | "visitorConsents";
 
 export type NavItem = {
   key: NavKey;
@@ -125,6 +127,15 @@ export const navItems: NavItem[] = [
     label: "我的資料",
     href: "/visitor/profile",
     icon: UserRound,
+    requiredCapabilities: ["visits.submit"],
+    allowedRoles: VISITOR_ONLY,
+    group: "daily",
+  },
+  {
+    key: "visitorConsents",
+    label: "同意書",
+    href: "/visitor/consents",
+    icon: FileSignature,
     requiredCapabilities: ["visits.submit"],
     allowedRoles: VISITOR_ONLY,
     group: "daily",

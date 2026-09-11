@@ -46,6 +46,7 @@ var Config = (function () {
       PAYMENTS: '車馬費核銷',
       EXPORTS: '匯出紀錄',
       REPORTS: '報表快照',
+      CONSENTS: '電子同意書',
       LOG: '_操作日誌',
     },
   };
