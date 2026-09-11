@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         })) as {
           export_id?: string;
           file_url?: string;
+          file_id?: string;
           file_name?: string;
           message?: string;
           validation?: {
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest) {
             mode: "gas",
             filename: gasResult.file_name ?? "生活關懷表.xlsx",
             fileUrl: gasResult.file_url ?? "",
+            downloadUrl: gasResult.file_id
+              ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(gasResult.file_id)}`
+              : "",
             content: gasResult.file_url ?? "",
             status: "ready",
             gasExport: gasResult,

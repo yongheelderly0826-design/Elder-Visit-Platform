@@ -23,6 +23,7 @@ type ExportResponse = {
     mode?: string;
     filename?: string;
     fileUrl?: string;
+    downloadUrl?: string;
     content?: string;
     message?: string;
     validation?: {
@@ -39,6 +40,18 @@ type ExportResponse = {
   };
 };
 
+type ExportDestination = "drive" | "local";
+
+function downloadToComputer(url: string, filename?: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  if (filename) link.download = filename;
+  link.rel = "noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 export function MohwExportPanel() {
   const canCreateExport = useCan("exports.create");
   const [items, setItems] = useState<MohwExportCandidate[]>([]);
@@ -53,7 +66,9 @@ export function MohwExportPanel() {
   const [skipped, setSkipped] = useState<Array<{ case_id: string; reason: string }>>([]);
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [destination, setDestination] = useState<ExportDestination>("drive");
 
   const loadCandidates = useCallback(async () => {
     setLoading(true);
@@ -136,6 +151,7 @@ export function MohwExportPanel() {
     setErrorLines([]);
     setSkipped([]);
     setFileUrl(null);
+    setDownloadUrl(null);
     setPreviewContent(null);
 
     try {
@@ -161,6 +177,9 @@ export function MohwExportPanel() {
       if (json.data?.fileUrl) {
         setFileUrl(json.data.fileUrl);
       }
+      if (json.data?.downloadUrl) {
+        setDownloadUrl(json.data.downloadUrl);
+      }
       if (json.data?.content && !json.data.fileUrl) {
         setPreviewContent(json.data.content);
       }
@@ -170,7 +189,24 @@ export function MohwExportPanel() {
       if (json.data?.skipped?.length) {
         setSkipped(json.data.skipped);
       }
-      setMessage(json.data?.message ?? `已匯出 ${selected.size} 筆`);
+      if (destination === "local") {
+        if (json.data?.downloadUrl) {
+          downloadToComputer(json.data.downloadUrl, json.data.filename);
+          setMessage(`已產生 ${selected.size} 筆，正在下載至本機電腦。Drive 仍保留備份。`);
+        } else if (json.data?.content) {
+          const blob = new Blob([json.data.content], {
+            type: "text/tab-separated-values;charset=utf-8",
+          });
+          const objectUrl = URL.createObjectURL(blob);
+          downloadToComputer(objectUrl, json.data.filename ?? "生活關懷表_demo.tsv");
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+          setMessage(`已將 ${selected.size} 筆示範資料下載至本機電腦。`);
+        } else {
+          setMessage("檔案已產生，但無法取得本機下載連結；請改用下方 Google Drive 連結。");
+        }
+      } else {
+        setMessage(json.data?.message ?? `已匯出 ${selected.size} 筆至 Google Drive`);
+      }
     } catch {
       setMessage("匯出失敗，請稍後再試");
     } finally {
@@ -221,6 +257,18 @@ export function MohwExportPanel() {
         <Button type="button" variant="outline" size="sm" onClick={clearSelection}>
           清除選取
         </Button>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          儲存位置
+          <select
+            value={destination}
+            onChange={(event) => setDestination(event.target.value as ExportDestination)}
+            className="h-9 rounded-md border bg-background px-3 font-normal"
+            disabled={exporting}
+          >
+            <option value="drive">Google Drive</option>
+            <option value="local">本機電腦</option>
+          </select>
+        </label>
         <Button
           type="button"
           size="sm"
@@ -228,9 +276,15 @@ export function MohwExportPanel() {
           onClick={() => void runExport()}
         >
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          匯出選取個案
+          {destination === "local" ? "匯出並下載至本機" : "匯出至 Google Drive"}
         </Button>
       </div>
+
+      {destination === "local" ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Excel 由系統完成 102 欄驗證後下載至這台電腦；Google Drive 會保留一份產檔備份。
+        </p>
+      ) : null}
 
       {note ? <p className="mt-3 text-sm text-amber-800">{note}</p> : null}
 
@@ -327,15 +381,27 @@ export function MohwExportPanel() {
       ) : null}
 
       {fileUrl ? (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-        >
-          <ExternalLink className="h-4 w-4" />
-          開啟 Google Drive xlsx
-        </a>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          >
+            <ExternalLink className="h-4 w-4" />
+            開啟 Google Drive xlsx
+          </a>
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              download
+              className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium"
+            >
+              <Download className="h-4 w-4" />
+              再次下載至本機
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       <MohwBatchErrorPanel
