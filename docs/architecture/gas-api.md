@@ -144,6 +144,8 @@ X-Workspace-Id: WS-YH-115
 |--------|------|------|
 | GET | `?action=reports.kpi&period=115-Q1` | KPI 快照 |
 | GET | `?action=reports.dispatchSummary` | 派案完成率 |
+| GET | `?action=reports.dailyVisitBundle&date=YYYY-MM-DD` | 每日訪視統計一次回傳（派案、訪員、個案、出勤、稽核、關懷表摘要） |
+| GET | `?action=assignments.visitorTasksBundle&visitor_id=&active_only=true` | 訪員任務一次回傳（進行中派案＋對應個案＋訪視次數） |
 
 ## 車馬費 Payment
 

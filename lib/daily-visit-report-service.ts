@@ -3,8 +3,10 @@ import {
   buildDailyVisitReport,
   createDemoDailyVisitReport,
   type DailyVisitReport,
+  type DailyVisitReportSources,
 } from "@/lib/domain/daily-visit-report";
-import { gasClient } from "@/lib/gas-client";
+import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
+import { gasClient, isUnknownGasAction } from "@/lib/gas-client";
 import { getSystemStatus } from "@/lib/system/env";
 
 type RawRow = Record<string, unknown>;
@@ -23,11 +25,8 @@ async function withSingleRetry<T>(operation: () => Promise<T>) {
 
 async function loadAuditRows() {
   try {
-    // 僅取待稽核佇列；通過／退回會同步寫回 careform.status，
-    // 避免 audit.queue(all) 對每筆歷史資料逐一 enrich 造成日報延遲。
     return await gasClient.audit.queue({ decision: "pending" });
   } catch {
-    // 關懷表狀態仍可呈現稽核進度；避免稽核服務暫時失敗拖垮整張日報。
     return [];
   }
 }
@@ -55,11 +54,34 @@ async function loadCareForms(assignments: RawRow[]) {
   return careForms;
 }
 
-export async function getDailyVisitReport(date: string): Promise<DailyVisitReport> {
-  if (getSystemStatus().dataMode !== "gas_ready") {
-    return createDemoDailyVisitReport(date);
-  }
+function asRows(value: unknown): RawRow[] {
+  return Array.isArray(value) ? value.filter((row): row is RawRow => Boolean(row) && typeof row === "object") : [];
+}
 
+function sourcesFromBundle(bundle: {
+  assignments?: unknown;
+  visitors?: unknown;
+  cases?: unknown;
+  attendance?: unknown;
+  audits?: unknown;
+  careForms?: unknown;
+}): DailyVisitReportSources {
+  const careForms = new Map<string, RawRow | null>();
+  for (const row of asRows(bundle.careForms)) {
+    const assignmentId = String(row.assignment_id ?? row.id ?? "").trim();
+    if (assignmentId) careForms.set(assignmentId, row);
+  }
+  return {
+    assignments: asRows(bundle.assignments),
+    visitors: asRows(bundle.visitors),
+    cases: asRows(bundle.cases),
+    attendance: asRows(bundle.attendance),
+    audits: asRows(bundle.audits),
+    careForms,
+  };
+}
+
+async function loadDailyVisitReportLegacy(date: string): Promise<DailyVisitReport> {
   const period = date.slice(0, 7);
   const assignments = await withSingleRetry(
     () => gasClient.assignments.list() as Promise<RawRow[]>,
@@ -96,4 +118,33 @@ export async function getDailyVisitReport(date: string): Promise<DailyVisitRepor
       .join(" ");
   }
   return report;
+}
+
+async function loadDailyVisitReport(date: string, fresh = false): Promise<DailyVisitReport> {
+  try {
+    const bundle = await gasClient.reports.dailyVisitBundle(date, { fresh });
+    return buildDailyVisitReport(date, sourcesFromBundle(bundle), "gas");
+  } catch (error) {
+    if (!isUnknownGasAction(error)) {
+      console.error("dailyVisitBundle failed, falling back to legacy reads", error);
+    }
+    return loadDailyVisitReportLegacy(date);
+  }
+}
+
+export async function getDailyVisitReport(
+  date: string,
+  options?: { fresh?: boolean },
+): Promise<DailyVisitReport> {
+  if (getSystemStatus().dataMode !== "gas_ready") {
+    return createDemoDailyVisitReport(date);
+  }
+  if (options?.fresh) {
+    return loadDailyVisitReport(date, true);
+  }
+  return cachedRead(
+    ["daily-visit-report", date],
+    [GAS_READ_TAGS.dailyVisits],
+    () => loadDailyVisitReport(date),
+  );
 }

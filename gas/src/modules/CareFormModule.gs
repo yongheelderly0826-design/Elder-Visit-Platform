@@ -20,7 +20,9 @@ var CareFormModule = (function () {
       photo_urls: JSON.stringify(data.photos || []),
       status: '草稿',
     };
-    return SheetHelper.appendRow(SHEET, record);
+    var savedDraft = SheetHelper.appendRow(SHEET, record);
+    ReadCache.bump();
+    return savedDraft;
   }
 
   function submit(data) {
@@ -74,6 +76,7 @@ var CareFormModule = (function () {
       case_id: data.case_id || '',
     });
 
+    ReadCache.bump();
     return {
       careform: record,
       validation: { ok: true, errorLines: [] },

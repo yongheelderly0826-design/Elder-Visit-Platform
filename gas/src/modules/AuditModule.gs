@@ -88,13 +88,15 @@ var AuditModule = (function () {
     });
     if (existing.length) return existing[0];
 
-    return SheetHelper.appendRow(SHEET, {
+    var created = SheetHelper.appendRow(SHEET, {
       audit_id: 'AUD-' + Utilities.getUuid().slice(0, 8),
       careform_id: careformId,
       reviewer: '',
       decision: '',
       reason: '',
     });
+    ReadCache.bump();
+    return created;
   }
 
   function normalizeDecision_(value) {
@@ -159,6 +161,7 @@ var AuditModule = (function () {
       }
     }
 
+    ReadCache.bump();
     return enrichItem_(updated);
   }
 

@@ -1,4 +1,5 @@
-import { gasClient } from "@/lib/gas-client";
+import { gasClient, isUnknownGasAction } from "@/lib/gas-client";
+import { cachedRead, GAS_READ_TAGS, invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { blueprints } from "@/lib/domain/mock-data";
 import { createPaymentBatchPreview, paymentFeeRules } from "@/lib/domain/payments";
 import type {
@@ -159,7 +160,7 @@ function summarizeCases(cases: CaseRegistryItem[]): CaseRegistrySummary {
   };
 }
 
-async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
+async function buildVisitorTasksLegacy(visitorId?: string): Promise<VisitorTask[]> {
   const workspaceId = process.env.GAS_WORKSPACE_ID ?? "WS-YH-115";
   const assignmentParams: { active_only: string; visitor_id?: string } = {
     active_only: "true",
@@ -169,10 +170,9 @@ async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
     assignmentParams.visitor_id = resolvedVisitorId;
   }
 
-  const [assignments, cases, allAssignments] = await Promise.all([
+  const [assignments, cases] = await Promise.all([
     gasClient.assignments.list(assignmentParams) as Promise<GasAssignmentRow[]>,
     gasClient.cases.list({ district: "永和區" }) as Promise<GasCaseRow[]>,
-    gasClient.assignments.list() as Promise<GasAssignmentRow[]>,
   ]);
 
   const scopedAssignments = resolvedVisitorId
@@ -180,7 +180,7 @@ async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
     : assignments;
   const caseMap = indexElderCases(cases);
   const historyCount = new Map<string, number>();
-  for (const row of allAssignments) {
+  for (const row of scopedAssignments) {
     const caseId = String(row.case_id ?? "").trim();
     if (!caseId) continue;
     historyCount.set(caseId, (historyCount.get(caseId) ?? 0) + 1);
@@ -197,6 +197,54 @@ async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
       },
     ];
   });
+}
+
+function tasksFromBundle(
+  bundle: {
+    assignments?: unknown[];
+    cases?: unknown[];
+    attempt_counts?: Record<string, number>;
+  },
+  visitorId?: string,
+): VisitorTask[] {
+  const workspaceId = process.env.GAS_WORKSPACE_ID ?? "WS-YH-115";
+  const resolvedVisitorId = String(visitorId || "").trim();
+  const assignments = (bundle.assignments ?? []) as GasAssignmentRow[];
+  const scopedAssignments = resolvedVisitorId
+    ? assignments.filter((row) => String(row.visitor_id ?? "").trim() === resolvedVisitorId)
+    : assignments;
+  const caseMap = indexElderCases((bundle.cases ?? []) as GasCaseRow[]);
+  const historyCount = new Map(
+    Object.entries(bundle.attempt_counts ?? {}).map(([caseId, count]) => [caseId, Number(count) || 1]),
+  );
+
+  return scopedAssignments.flatMap((row) => {
+    const elderCase = lookupElderCase(caseMap, row);
+    if (!elderCase) return [];
+    const caseId = String(row.case_id ?? elderCase.id).trim();
+    return [
+      {
+        schedule: toVisitSchedule(row, historyCount.get(caseId) ?? 1, workspaceId),
+        elderCase,
+      },
+    ];
+  });
+}
+
+async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
+  const resolvedVisitorId = String(visitorId || process.env.GAS_DEFAULT_VISITOR_ID || "").trim();
+  try {
+    const bundle = await gasClient.assignments.visitorTasksBundle({
+      visitor_id: resolvedVisitorId || undefined,
+      active_only: "true",
+    });
+    return tasksFromBundle(bundle, resolvedVisitorId);
+  } catch (error) {
+    if (!isUnknownGasAction(error)) {
+      console.error("visitorTasksBundle failed, falling back to legacy reads", error);
+    }
+    return buildVisitorTasksLegacy(visitorId);
+  }
 }
 
 const yongheWorkspace: Workspace = {
@@ -283,8 +331,14 @@ export const gasRepository: AppRepository = {
   },
 
   async getVisitorTasks(visitorId?: string) {
+    const resolvedVisitorId = String(visitorId || "").trim();
     try {
-      return await buildVisitorTasks(visitorId);
+      if (!resolvedVisitorId) return await buildVisitorTasks(visitorId);
+      return await cachedRead(
+        ["visitor-tasks", resolvedVisitorId],
+        [GAS_READ_TAGS.visitorTasks],
+        () => buildVisitorTasks(resolvedVisitorId),
+      );
     } catch (error) {
       console.error("getVisitorTasks failed", visitorId, error);
       return [] satisfies VisitorTask[];
@@ -434,6 +488,7 @@ export const gasRepository: AppRepository = {
         notes: "由派案管理確認",
         auto_confirm: true,
       })) as GasAssignmentRow;
+      invalidateGasReadCaches();
 
       return {
         recommendationId,

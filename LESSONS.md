@@ -172,3 +172,11 @@
 - **Rule:** Store an issued-badge snapshot with visitor code, display identity, photo reference, validity dates, QR payload, claim token hash and serial; use that snapshot for printing, public verification and mobile badge claiming.
 - **Evidence:** `supabase/migrations/0034_visitor_badges.sql`, `lib/domain/visitor-badges.ts`, and `components/badges/visitor-badge-card.tsx`.
 - **Added on:** 2026-06-22
+
+## Lesson: GAS list pages should not N+1 round-trip
+
+- **Trigger:** Manager daily visit stats and visitor tasks felt delayed even when the spreadsheet only had a few rows.
+- **Cause:** Each screen made many separate GAS calls, and GAS re-read entire sheets for every care form / assignment lookup. There was no short-lived cache despite the architecture doc.
+- **Rule:** For dashboard and inbox reads, add a composite GAS action that reads each sheet once, cache the bundle 20–25 seconds, and invalidate on dispatch, visit submit, visit clock, and audit decide. Keep a legacy fallback until the new GAS action is deployed.
+- **Evidence:** `gas/src/modules/ReportModule.gs`, `lib/daily-visit-report-service.ts`, `lib/repositories/gas.ts`, and `lib/gas-read-cache.ts`.
+- **Added on:** 2026-09-15

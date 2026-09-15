@@ -61,12 +61,22 @@ export class GasApiError extends Error {
   }
 }
 
+export function isUnknownGasAction(error: unknown) {
+  if (!(error instanceof GasApiError)) return false;
+  return (
+    error.code === "NOT_FOUND" &&
+    /unknown action/i.test(error.message)
+  );
+}
+
 async function gasFetch<T>(
   action: string,
   options: {
     method?: "GET" | "POST";
     params?: Record<string, string>;
     body?: unknown;
+    revalidateSeconds?: number;
+    tags?: string[];
   } = {}
 ): Promise<T> {
   if (!GAS_URL) {
@@ -90,11 +100,20 @@ async function gasFetch<T>(
     "X-Workspace-Id": WORKSPACE_ID,
   };
 
-  const init: RequestInit = {
+  const init: RequestInit & { next?: { revalidate?: number; tags?: string[] } } = {
     method: options.method ?? "GET",
     headers,
     redirect: "follow",
   };
+
+  if (options.revalidateSeconds && !options.body) {
+    init.next = {
+      revalidate: options.revalidateSeconds,
+      tags: options.tags,
+    };
+  } else if (!options.body) {
+    init.cache = "no-store";
+  }
 
   if (options.body) {
     const serialized = JSON.stringify(options.body);
@@ -199,6 +218,17 @@ export const gasClient = {
   assignments: {
     list: (params?: { visitor_id?: string; status?: string; active_only?: string }) =>
       gasFetch<unknown[]>("assignments.list", { params: params as Record<string, string> }),
+    visitorTasksBundle: (params: { visitor_id?: string; active_only?: string }) =>
+      gasFetch<{
+        visitor_id?: string;
+        assignments: unknown[];
+        cases: unknown[];
+        attempt_counts?: Record<string, number>;
+      }>("assignments.visitorTasksBundle", {
+        params: params as Record<string, string>,
+        revalidateSeconds: 20,
+        tags: ["gas-visitor-tasks"],
+      }),
     get: (assignmentId: string) =>
       gasFetch<unknown>("assignments.get", { params: { assignment_id: assignmentId } }),
     dispatch: (body: unknown) =>
@@ -270,6 +300,23 @@ export const gasClient = {
   reports: {
     kpi: (period?: string) =>
       gasFetch<unknown>("reports.kpi", { params: period ? { period } : undefined }),
+    dailyVisitBundle: (date: string, options?: { fresh?: boolean }) =>
+      gasFetch<{
+        date?: string;
+        assignments: unknown[];
+        visitors: unknown[];
+        cases: unknown[];
+        attendance: unknown[];
+        audits: unknown[];
+        careForms: unknown[];
+      }>("reports.dailyVisitBundle", {
+        params: {
+          date,
+          ...(options?.fresh ? { fresh: "1" } : {}),
+        },
+        revalidateSeconds: options?.fresh ? undefined : 20,
+        tags: options?.fresh ? undefined : ["gas-daily-visits"],
+      }),
   },
   audit: {
     queue: (params?: { decision?: string }) =>

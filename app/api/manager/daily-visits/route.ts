@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   if (forbidden) return forbidden;
 
   const date = request.nextUrl.searchParams.get("date") || taipeiToday();
+  const fresh = request.nextUrl.searchParams.get("fresh") === "1";
   if (!isValidDailyVisitDate(date)) {
     return NextResponse.json(
       {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json({ data: await getDailyVisitReport(date) });
+    return NextResponse.json({ data: await getDailyVisitReport(date, { fresh }) });
   } catch (error) {
     const message =
       error instanceof GasApiError

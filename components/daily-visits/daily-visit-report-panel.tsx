@@ -29,12 +29,14 @@ export function DailyVisitReportPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal, fresh = false) => {
     setLoading(true);
     setError("");
     try {
+      const query = new URLSearchParams({ date });
+      if (fresh) query.set("fresh", "1");
       const response = await fetch(
-        `/api/manager/daily-visits?date=${encodeURIComponent(date)}`,
+        `/api/manager/daily-visits?${query.toString()}`,
         { signal, cache: "no-store" },
       );
       const json = (await response.json()) as ApiResponse;
@@ -85,7 +87,7 @@ export function DailyVisitReportPanel() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void load()}
+            onClick={() => void load(undefined, true)}
             disabled={loading}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -105,7 +107,7 @@ export function DailyVisitReportPanel() {
         <section className="rounded-lg border border-destructive/40 bg-card p-6 text-center">
           <p className="font-medium">無法載入統計</p>
           <p className="mt-1 text-sm text-muted-foreground">{error}</p>
-          <Button className="mt-4" type="button" onClick={() => void load()}>
+          <Button className="mt-4" type="button" onClick={() => void load(undefined, true)}>
             再試一次
           </Button>
         </section>

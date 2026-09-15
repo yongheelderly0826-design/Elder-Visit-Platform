@@ -11,6 +11,7 @@ import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
 import { getPaymentEligibility, validateVisitSubmission } from "@/lib/domain/visits";
 import { getSystemStatus } from "@/lib/system/env";
+import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 
 type VisitSubmitPayload = VisitSubmission & {
   assignmentId?: string;
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
         consent_signed: submission.consentSigned,
         photos: submission.photoNames,
       });
+      invalidateGasReadCaches();
     } catch (error) {
       const message = error instanceof Error ? error.message : "GAS careform.submit 失敗";
       return NextResponse.json({ error: { code: "GAS_SUBMIT_FAILED", message } }, { status: 502 });

@@ -13,6 +13,7 @@ import {
   type AttendanceRecord,
 } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 function taipeiHm(iso: string) {
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       }).visitor;
       const record = mapGasAttendanceRecord(result.record as Record<string, unknown>);
       const action = result.action === "checkout" ? "checkout" : "checkin";
+      invalidateGasReadCaches();
       return NextResponse.json({
         data: {
           mode: "gas",

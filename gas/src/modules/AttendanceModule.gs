@@ -255,23 +255,24 @@ var AttendanceModule = (function () {
       session_type: sessionType,
       assignment_id: isVisit ? data.assignment_id : '',
     });
-    if (open) {
-      return {
-        action: 'checkout',
-        record: checkout({
-          attendance_id: open.attendance_id,
-          session_type: sessionType,
-          lat: data.lat,
-          lng: data.lng,
-        }),
-        visitor: enrichVisitor_(visitor),
-      };
-    }
-    return {
-      action: 'checkin',
-      record: checkin(data),
-      visitor: enrichVisitor_(visitor),
-    };
+    var result = open
+      ? {
+          action: 'checkout',
+          record: checkout({
+            attendance_id: open.attendance_id,
+            session_type: sessionType,
+            lat: data.lat,
+            lng: data.lng,
+          }),
+          visitor: enrichVisitor_(visitor),
+        }
+      : {
+          action: 'checkin',
+          record: checkin(data),
+          visitor: enrichVisitor_(visitor),
+        };
+    ReadCache.bump();
+    return result;
   }
 
   function identify(data) {

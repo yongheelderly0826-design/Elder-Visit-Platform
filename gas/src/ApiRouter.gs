@@ -31,6 +31,9 @@ var ApiRouter = (function () {
     'assignments.get': function (p) { return AssignmentModule.get(p.assignment_id || p.id); },
     'assignments.dispatch': function (p, b) { return AssignmentModule.dispatch(b); },
     'assignments.confirm': function (p, b) { return AssignmentModule.confirm(b); },
+    'assignments.visitorTasksBundle': function (p) {
+      return AssignmentModule.visitorTasksBundle(p);
+    },
 
     'attendance.checkin': function (p, b) { return AttendanceModule.checkin(b); },
     'attendance.checkout': function (p, b) { return AttendanceModule.checkout(b); },
@@ -70,6 +73,7 @@ var ApiRouter = (function () {
 
     'reports.kpi': function (p) { return ReportModule.kpi(p); },
     'reports.dispatchSummary': function (p) { return ReportModule.dispatchSummary(p); },
+    'reports.dailyVisitBundle': function (p) { return ReportModule.dailyVisitBundle(p); },
 
     'payments.calculate': function (p, b) { return PaymentModule.calculate(b); },
     'payments.lock': function (p, b) { return PaymentModule.lock(b); },

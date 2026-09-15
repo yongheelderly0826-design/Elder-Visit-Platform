@@ -5,6 +5,7 @@ import { submitAuditDecision } from "@/lib/domain/audit";
 import { mapGasAuditQueueItem, mapUiDecisionToGas } from "@/lib/domain/gas-audit";
 import type { AuditDecision, AuditDecisionResult } from "@/lib/domain/types";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 export async function POST(request: NextRequest) {
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
         decision: mapUiDecisionToGas(decision.decision),
         reason: decision.supervisorNote,
       });
+      invalidateGasReadCaches();
       const item = mapGasAuditQueueItem(updated);
       const approved = decision.decision === "approve";
       const result: AuditDecisionResult = {

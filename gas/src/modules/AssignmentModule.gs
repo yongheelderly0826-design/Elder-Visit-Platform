@@ -68,6 +68,7 @@ var AssignmentModule = (function () {
     });
 
     saved.visit_attempt = countAttempts_(data.case_id);
+    ReadCache.bump();
     return saved;
   }
 
@@ -91,8 +92,86 @@ var AssignmentModule = (function () {
         updated_at: new Date().toISOString(),
       });
     }
+    ReadCache.bump();
     return updated;
   }
 
-  return { list: list, get: get, dispatch: dispatch, confirm: confirm };
+  function visitorTasksBundle(params) {
+    params = params || {};
+    var visitorId = String(params.visitor_id || '').trim();
+    var cacheKey = ReadCache.key('vt:' + (visitorId || 'all'));
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
+    var allAssignments = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var assignments = allAssignments;
+    if (visitorId) {
+      assignments = assignments.filter(function (r) {
+        return String(r.visitor_id || '').trim() === visitorId;
+      });
+    }
+    if (params.status) {
+      assignments = assignments.filter(function (r) {
+        return r.status === params.status;
+      });
+    }
+    if (params.active_only === true || params.active_only === 'true') {
+      assignments = assignments.filter(function (r) {
+        return ACTIVE_STATUSES[r.status];
+      });
+    }
+
+    var attemptCounts = {};
+    allAssignments.forEach(function (row) {
+      var caseId = String(row.case_id || '').trim();
+      if (!caseId) return;
+      attemptCounts[caseId] = (attemptCounts[caseId] || 0) + 1;
+    });
+
+    var caseRows = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CASES)
+    );
+    var caseById = {};
+    var caseByEncoded = {};
+    var caseByExternal = {};
+    caseRows.forEach(function (row) {
+      var id = String(row.case_id || '').trim();
+      if (id) caseById[id] = row;
+      var encoded = String(row.encoded_id || '').trim();
+      if (encoded && !caseByEncoded[encoded]) caseByEncoded[encoded] = row;
+      var external = String(row.external_id || '').trim();
+      if (external && !caseByExternal[external]) caseByExternal[external] = row;
+    });
+
+    var cases = [];
+    var seenCases = {};
+    assignments.forEach(function (row) {
+      var found =
+        caseById[String(row.case_id || '').trim()] ||
+        caseByEncoded[String(row.encoded_id || '').trim()] ||
+        caseByExternal[String(row.external_id || '').trim()];
+      if (!found) return;
+      var id = String(found.case_id || '').trim();
+      if (!id || seenCases[id]) return;
+      seenCases[id] = true;
+      cases.push(found);
+    });
+
+    var payload = {
+      visitor_id: visitorId,
+      assignments: assignments,
+      cases: cases,
+      attempt_counts: attemptCounts,
+    };
+    ReadCache.putJson(cacheKey, payload);
+    return payload;
+  }
+
+  return {
+    list: list,
+    get: get,
+    dispatch: dispatch,
+    confirm: confirm,
+    visitorTasksBundle: visitorTasksBundle,
+  };
 })();
