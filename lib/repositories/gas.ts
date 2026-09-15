@@ -88,6 +88,32 @@ function toElderCase(row: GasCaseRow): ElderCase {
   };
 }
 
+function rowKeys(row: GasCaseRow | GasAssignmentRow) {
+  return [row.case_id, row.encoded_id, row.external_id]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+}
+
+function indexElderCases(cases: GasCaseRow[]) {
+  const map = new Map<string, ElderCase>();
+  for (const row of cases) {
+    const elderCase = toElderCase(row);
+    for (const key of [...rowKeys(row), elderCase.id, elderCase.caseCode]) {
+      const id = String(key ?? "").trim();
+      if (id && !map.has(id)) map.set(id, elderCase);
+    }
+  }
+  return map;
+}
+
+function lookupElderCase(caseMap: Map<string, ElderCase>, row: GasAssignmentRow) {
+  for (const key of rowKeys(row)) {
+    const elderCase = caseMap.get(key);
+    if (elderCase) return elderCase;
+  }
+  return undefined;
+}
+
 function toVisitSchedule(
   row: GasAssignmentRow,
   attempt: number,
@@ -138,7 +164,7 @@ async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
   const assignmentParams: { active_only: string; visitor_id?: string } = {
     active_only: "true",
   };
-  const resolvedVisitorId = visitorId || process.env.GAS_DEFAULT_VISITOR_ID;
+  const resolvedVisitorId = String(visitorId || process.env.GAS_DEFAULT_VISITOR_ID || "").trim();
   if (resolvedVisitorId) {
     assignmentParams.visitor_id = resolvedVisitorId;
   }
@@ -149,17 +175,21 @@ async function buildVisitorTasks(visitorId?: string): Promise<VisitorTask[]> {
     gasClient.assignments.list() as Promise<GasAssignmentRow[]>,
   ]);
 
-  const caseMap = new Map(cases.map((row) => [String(row.case_id ?? ""), toElderCase(row)]));
+  const scopedAssignments = resolvedVisitorId
+    ? assignments.filter((row) => String(row.visitor_id ?? "").trim() === resolvedVisitorId)
+    : assignments;
+  const caseMap = indexElderCases(cases);
   const historyCount = new Map<string, number>();
   for (const row of allAssignments) {
-    const caseId = String(row.case_id ?? "");
+    const caseId = String(row.case_id ?? "").trim();
+    if (!caseId) continue;
     historyCount.set(caseId, (historyCount.get(caseId) ?? 0) + 1);
   }
 
-  return assignments.flatMap((row) => {
-    const caseId = String(row.case_id ?? "");
-    const elderCase = caseMap.get(caseId);
+  return scopedAssignments.flatMap((row) => {
+    const elderCase = lookupElderCase(caseMap, row);
     if (!elderCase) return [];
+    const caseId = String(row.case_id ?? elderCase.id).trim();
     return [
       {
         schedule: toVisitSchedule(row, historyCount.get(caseId) ?? 1, workspaceId),
@@ -255,7 +285,8 @@ export const gasRepository: AppRepository = {
   async getVisitorTasks(visitorId?: string) {
     try {
       return await buildVisitorTasks(visitorId);
-    } catch {
+    } catch (error) {
+      console.error("getVisitorTasks failed", visitorId, error);
       return [] satisfies VisitorTask[];
     }
   },

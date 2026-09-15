@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getHeadshotPreviewUrl } from "@/lib/domain/visitor-headshots";
 import { getPassbookPreviewUrl, uploadVisitorPassbook } from "@/lib/domain/visitor-documents";
-import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
+import { VOLUNTEER_CLOCK_COOKIE } from "@/lib/domain/volunteer-attendance";
+import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 
 type VisitorSelfProfile = {
   id: string;
@@ -245,15 +246,18 @@ function getDemoVisitorProfile(request: NextRequest) {
   }
 
   const email = request.cookies.get("demo_email")?.value?.toLowerCase() ?? "visitor@eldervisit.org";
-  const link = getDemoVisitorLink(email);
+  const { visitorId, name } = resolveVisitorIdentity({
+    visitorId: request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value,
+    email,
+    name: request.cookies.get("demo_name")?.value,
+  });
   const fullName =
-    request.cookies.get("demo_name")?.value ||
-    link?.name ||
+    name ||
     (email === "joe@elder.org" ? "Joe訪員" : "王訪員");
-  const visitorCode = link?.visitorId || "EV-115-YH-CIV-0001";
+  const visitorCode = visitorId || "EV-115-YH-CIV-0001";
 
   const data: VisitorSelfProfile = {
-    id: link?.visitorId ? `demo_${link.visitorId}` : "demo_visitor_profile",
+    id: visitorId ? `demo_${visitorId}` : "demo_visitor_profile",
     fullName,
     displayName: `永和區公所民政課-${fullName}`,
     visitorCode,

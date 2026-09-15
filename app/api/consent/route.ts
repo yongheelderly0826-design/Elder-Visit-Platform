@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getRoleKey, requireCapability, requireManagerCapability } from "@/lib/api/authorization";
 import { SESSION_COOKIE } from "@/lib/auth/google-manager";
-import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
+import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import {
   getElectronicConsentTemplate,
   isElectronicConsentTemplateId,
@@ -129,11 +129,11 @@ export async function POST(request: NextRequest) {
     );
   }
   const email = request.cookies.get("demo_email")?.value?.toLowerCase() ?? "";
-  const linkedVisitor = getDemoVisitorLink(email);
-  const authenticatedVisitorId =
-    request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value || linkedVisitor?.visitorId || "";
-  const authenticatedVisitorName =
-    request.cookies.get("demo_name")?.value?.trim() || linkedVisitor?.name || "";
+  const { visitorId: authenticatedVisitorId, name: authenticatedVisitorName } = resolveVisitorIdentity({
+    visitorId: request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value,
+    email,
+    name: request.cookies.get("demo_name")?.value,
+  });
   const template = getElectronicConsentTemplate(body.templateId);
   const isPersonal = body.templateId === "gov_personal_data_consent_115";
   const fieldValues = { ...(body.fieldValues ?? {}) };

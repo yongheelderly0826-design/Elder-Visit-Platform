@@ -3,7 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { VisitDialogueForm } from "@/components/visitor/visit-dialogue-form";
 import { VisitorWorkflowBar } from "@/components/visitor/visitor-workflow-bar";
 import { requireVisitorSession } from "@/lib/auth/visitor-guard";
-import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
+import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { getRepository } from "@/lib/repositories";
 
 export default async function VisitDetailPage({
@@ -19,8 +19,8 @@ export default async function VisitDetailPage({
     notFound();
   }
 
-  const link = getDemoVisitorLink(session.email);
-  if (link?.visitorId && task.schedule.visitorId && task.schedule.visitorId !== link.visitorId) {
+  const { visitorId } = resolveVisitorIdentity(session);
+  if (visitorId && task.schedule.visitorId && task.schedule.visitorId !== visitorId) {
     notFound();
   }
 

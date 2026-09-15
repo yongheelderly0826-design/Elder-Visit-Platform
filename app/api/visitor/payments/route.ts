@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
-import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
+import { VOLUNTEER_CLOCK_COOKIE } from "@/lib/domain/volunteer-attendance";
+import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { listDemoVisitorPayments } from "@/lib/domain/demo-visitor-payments";
 import { paymentFeeRules } from "@/lib/domain/payments";
 import { gasClient } from "@/lib/gas-client";
@@ -12,7 +13,11 @@ export async function GET(request: NextRequest) {
   if (forbidden) return forbidden;
 
   const email = request.cookies.get("demo_email")?.value?.toLowerCase() ?? "";
-  const link = getDemoVisitorLink(email);
+  const { visitorId, name } = resolveVisitorIdentity({
+    visitorId: request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value,
+    email,
+    name: request.cookies.get("demo_name")?.value,
+  });
   const demoItems = listDemoVisitorPayments(email);
 
   let auditItems: Array<{
@@ -30,12 +35,12 @@ export async function GET(request: NextRequest) {
     updatedAt: string;
   }> = [];
 
-  if (getSystemStatus().dataMode === "gas_ready" && link?.visitorId) {
+  if (getSystemStatus().dataMode === "gas_ready" && visitorId) {
     try {
       const approved = await gasClient.audit.queue({ decision: "通過" });
       const pending = await gasClient.audit.queue({ decision: "pending" });
       const mine = [...approved, ...pending].filter(
-        (row) => String(row.visitor_id ?? "") === link.visitorId,
+        (row) => String(row.visitor_id ?? "").trim() === visitorId,
       );
 
       auditItems = mine.map((row) => {
@@ -81,8 +86,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     data: {
-      visitorId: link?.visitorId ?? null,
-      visitorName: link?.name ?? request.cookies.get("demo_name")?.value ?? null,
+      visitorId: visitorId || null,
+      visitorName: name || null,
       feeRule: paymentFeeRules,
       items: Array.from(byAssignment.values()),
     },

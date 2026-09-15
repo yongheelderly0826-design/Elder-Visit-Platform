@@ -5,7 +5,10 @@ var AssignmentModule = (function () {
   function list(params) {
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.visitor_id) {
-      rows = rows.filter(function (r) { return r.visitor_id === params.visitor_id; });
+      var wantedVisitor = String(params.visitor_id).trim();
+      rows = rows.filter(function (r) {
+        return String(r.visitor_id || '').trim() === wantedVisitor;
+      });
     }
     if (params.status) {
       rows = rows.filter(function (r) { return r.status === params.status; });
