@@ -57,6 +57,10 @@ export const MOHW_OPTION_ALIASES: Record<string, Record<string, string>> = {
   },
   life_difficulties: {
     外出交通不方便: "外出交通不方便（例如缺乏公車或客運）",
+    記憶力不好: "最近記憶力不好",
+  },
+  help_sources_none: {
+    找不到人可以問: "找不到人可以協助",
   },
   worries: {
     自己經濟問題: "自己經濟問題(如債務)",

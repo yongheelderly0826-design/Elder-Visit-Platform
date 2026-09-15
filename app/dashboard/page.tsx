@@ -220,6 +220,7 @@ const dashboardByRole: Record<
       { title: "名冊管理", detail: "新增、修改與追蹤服務對象資料狀態。", href: "/manager/cases", icon: Users },
       { title: "表單", detail: "維護縣市政府關懷表與同意書欄位模板。", href: "/manager/forms", icon: FormInput },
       { title: "派案作業", detail: "依區域、風險與訪員量能確認派案。", href: "/manager/assignments", icon: ClipboardCheck },
+      { title: "高關懷", detail: "橘／黃／綠自動列管與追蹤狀態。", href: "/manager/high-care", icon: ShieldCheck },
       { title: "志工出勤", detail: "外勤掃 QR、公所刷證，月底匯出 Excel。", href: "/manager/attendance", icon: Clock3 },
       { title: "訊息發布", detail: "發布工作群組公告、跑馬燈與個別通知。", href: "/manager/notifications", icon: FileText },
     ],

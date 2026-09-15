@@ -43,6 +43,8 @@ export function LoginPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [inviteMode, setInviteMode] = useState(false);
   const [inviteReady, setInviteReady] = useState(false);
+  const [gasToken, setGasToken] = useState<string | null>(null);
+  const [passwordMode, setPasswordMode] = useState<"invite" | "recovery">("invite");
   const [settingPassword, setSettingPassword] = useState(false);
   const [managerEmail, setManagerEmail] = useState("yongheelderly0826@gmail.com");
 
@@ -58,6 +60,20 @@ export function LoginPanel() {
 
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const queryGasToken = searchParams.get("gas_token");
+      if (queryGasToken) {
+        const mode = searchParams.get("mode") === "recovery" ? "recovery" : "invite";
+        setGasToken(queryGasToken);
+        setPasswordMode(mode);
+        setInviteMode(true);
+        setInviteReady(true);
+        setMessage(
+          mode === "recovery"
+            ? "請設定新密碼；完成後請用 Email 與新密碼登入。"
+            : "請先設定密碼，完成後再用 Email 與新密碼登入系統。",
+        );
+        return;
+      }
       const isInvite =
         searchParams.get("invited") === "1" ||
         hashParams.get("type") === "invite" ||
@@ -172,6 +188,32 @@ export function LoginPanel() {
     setSettingPassword(true);
 
     try {
+      if (gasToken) {
+        const response = await fetch("/api/auth/gas-password", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: gasToken, mode: passwordMode, password: newPassword }),
+        });
+        const json = (await response.json()) as {
+          data?: { email?: string; message?: string };
+          error?: { message?: string };
+        };
+        if (!response.ok || !json.data) {
+          setMessage(json.error?.message ?? "密碼設定失敗，請請管理者重新產生連結。");
+          return;
+        }
+        setEmail(json.data.email ?? "");
+        setPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setInviteReady(false);
+        setInviteMode(false);
+        setGasToken(null);
+        window.history.replaceState(null, "", "/login");
+        setMessage(`${json.data.message ?? "密碼已設定完成"} 請用 Email 與新密碼登入系統。`);
+        return;
+      }
+
       const supabase = createBrowserSupabaseClient();
       const { error } = await supabase.auth.updateUser({ password: newPassword });
 
@@ -241,7 +283,9 @@ export function LoginPanel() {
               <div className="grid gap-4">
               {inviteMode && (
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                  <p className="text-sm font-semibold text-primary">訪員帳號啟用</p>
+                  <p className="text-sm font-semibold text-primary">
+                    {passwordMode === "recovery" ? "重設訪員密碼" : "訪員帳號啟用"}
+                  </p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     請設定至少 8 個字元的新密碼。完成後回到登入畫面，用 Email 與新密碼登入。
                   </p>

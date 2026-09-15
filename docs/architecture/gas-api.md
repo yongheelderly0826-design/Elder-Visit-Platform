@@ -1,3 +1,15 @@
+## 訪員註冊與 Email 密碼帳號
+
+GAS/Google Sheets 是預設使用者後端；Supabase 環境變數可全部留空。`initAllSheets()` 會建立
+`訪員註冊申請` 與 `訪員帳號`。核准申請時會同步建立或更新 `訪查員主檔` 與帳號。
+
+- `registrations.list|get|create|review|batchReview`
+- `accounts.getAuthByEmail|issueToken|setPassword|markLogin`
+
+密碼由 Next.js 使用 Node `crypto.scrypt` 雜湊；Sheet 只保存 hash、salt 與參數。邀請與重設
+token 使用 32-byte 隨機值，Sheet 只保存 SHA-256 hash，30 分鐘過期且設定密碼後一次性清除。
+GAS 不使用 `MailApp`；管理者從後台複製一次性 URL，安全交給訪員。
+
 # GAS Web App API 規格
 
 Base URL：`https://script.google.com/macros/s/{DEPLOYMENT_ID}/exec`
@@ -101,7 +113,16 @@ X-Workspace-Id: WS-YH-115
 |--------|------|------|
 | GET | `?action=careform.get&assignment_id={id}` | 讀取草稿/已提交 |
 | POST | `?action=careform.saveDraft` | 存草稿 |
-| POST | `?action=careform.submit` | 正式提交 |
+| POST | `?action=careform.submit` | 正式提交（並寫入高關懷名冊） |
+| POST | `?action=careform.generatePdf` | 將答案填入 Google 試算表母版，輸出單頁直式 A3 PDF 並保存至 Drive |
+
+## 高關懷 High Care
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `?action=highcare.list` | 名冊（可 color／status） |
+| GET | `?action=highcare.stats` | 顏色與狀態件數 |
+| POST | `?action=highcare.update` | 更新追蹤狀態 |
 
 ## 稽核 Audit
 

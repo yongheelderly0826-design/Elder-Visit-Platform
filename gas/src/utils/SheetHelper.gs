@@ -92,17 +92,20 @@ var SheetHelper = (function () {
     var templates = {
       '_設定': ['key', 'value', 'description'],
       '訪查員主檔': ['visitor_id', 'name', 'id_number', 'phone', 'email', 'service_areas', 'volunteer_group', 'status', 'badge_no', 'photo_url', 'bank_account', 'registered_at', 'approved_at', 'updated_at'],
+      '訪員註冊申請': ['request_id', 'account_id', 'email', 'full_name', 'requested_unit_name', 'requested_workspace_id', 'requested_workspace_name', 'requested_role_key', 'status', 'review_note', 'submitted_at', 'reviewed_at', 'visitor_id', 'profile_json', 'created_at', 'updated_at'],
+      '訪員帳號': ['account_id', 'email', 'visitor_id', 'full_name', 'role_key', 'status', 'password_hash', 'password_salt', 'password_params', 'invite_token_hash', 'invite_expires_at', 'reset_token_hash', 'reset_expires_at', 'password_updated_at', 'last_login_at', 'created_at', 'updated_at'],
       '個案名冊': ['case_id', 'external_id', 'case_type', 'name', 'id_number', 'gender', 'birth_date', 'age', 'household_district', 'household_village', 'visit_district', 'visit_village', 'address', 'primary_phone', 'secondary_phone', 'contact_note', 'visit_status', 'dispatch_priority', 'encoded_id', 'data_quality_tag', 'imported_at', 'updated_at'],
       '派案紀錄': ['assignment_id', 'batch_id', 'case_id', 'encoded_id', 'visitor_id', 'visit_village', 'status', 'dispatched_at', 'confirmed_at', 'due_date', 'notes', 'updated_at'],
       '簽到退紀錄': ['attendance_id', 'visitor_id', 'assignment_id', 'session_date', 'checkin_at', 'checkout_at', 'checkin_lat', 'checkin_lng', 'checkout_lat', 'checkout_lng', 'session_type', 'duration_minutes', 'channel', 'site_id', 'site_name', 'group_id', 'group_name', 'worker_name', 'id_number', 'source'],
       '出勤集合點': ['site_id', 'name', 'group_id', 'kind', 'note', 'status', 'created_at', 'created_by'],
       '關懷表登打': ['careform_id', 'assignment_id', 'encoded_id', 'visitor_id', 'visit_result', 'completion_pct', 'answers_json', 'consent_signed', 'photo_urls', 'status', 'submitted_at', 'audited_at'],
+      '高關懷名冊': ['high_care_id', 'case_id', 'careform_id', 'assignment_id', 'encoded_id', 'elder_name', 'colors', 'primary_color', 'trigger_keys', 'trigger_labels', 'trigger_values', 'opened_at', 'status', 'owner', 'note', 'last_visit_triggered', 'updated_at'],
       '空訪紀錄': ['missed_visit_id', 'assignment_id', 'encoded_id', 'visitor_id', 'photo_urls', 'notes', 'recorded_at'],
       '稽核佇列': ['audit_id', 'careform_id', 'reviewer', 'decision', 'reason', 'decided_at'],
       '車馬費核銷': ['payment_id', 'visitor_id', 'period', 'visit_count', 'total_hours', 'amount', 'status', 'locked_at'],
       '匯出紀錄': ['export_id', 'export_type', 'case_count', 'file_url', 'exported_by', 'exported_at'],
       '報表快照': ['snapshot_id', 'report_type', 'period', 'data_json', 'created_at'],
-      '電子同意書': ['consent_id', 'template_id', 'template_version', 'title', 'signer_name', 'signer_role', 'visitor_id', 'case_id', 'schedule_id', 'external_ref', 'signature_file_id', 'signature_file_url', 'signature_mime_type', 'signature_file_name', 'signed_at', 'is_test', 'field_values_json', 'metadata_json', 'pdf_file_id', 'pdf_file_url', 'pdf_file_name', 'pdf_generated_at'],
+      '電子同意書': ['consent_id', 'template_id', 'template_version', 'title', 'signer_name', 'signer_role', 'visitor_id', 'case_id', 'schedule_id', 'external_ref', 'signature_file_id', 'signature_file_url', 'signature_mime_type', 'signature_file_name', 'signed_at', 'is_test', 'field_values_json', 'metadata_json', 'pdf_file_id', 'pdf_file_url', 'pdf_file_name', 'pdf_generated_at', 'pdf_template_key', 'signature_folder_id', 'signature_folder_url', 'pdf_folder_id', 'pdf_folder_url'],
       '_操作日誌': ['log_id', 'action', 'sheet', 'record_id', 'actor', 'timestamp', 'detail'],
     };
 
@@ -164,6 +167,19 @@ var SheetHelper = (function () {
 
   function logOperation_(action, sheet, record) {
     try {
+      var sensitive = {
+        password_hash: true,
+        password_salt: true,
+        password_params: true,
+        invite_token_hash: true,
+        reset_token_hash: true,
+        token: true,
+        raw_token: true,
+      };
+      var safeRecord = {};
+      Object.keys(record || {}).forEach(function (key) {
+        safeRecord[key] = sensitive[key] ? '[REDACTED]' : record[key];
+      });
       var logSheet = getSheet(Config.SHEET_NAMES.LOG);
       logSheet.appendRow([
         Utilities.getUuid(),
@@ -172,7 +188,7 @@ var SheetHelper = (function () {
         record.visitor_id || record.case_id || record.assignment_id || '',
         Session.getActiveUser().getEmail(),
         new Date().toISOString(),
-        JSON.stringify(record).substring(0, 500),
+        JSON.stringify(safeRecord).substring(0, 500),
       ]);
     } catch (e) {
       Logger.log('Log failed: ' + e);

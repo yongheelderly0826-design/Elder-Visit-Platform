@@ -5,6 +5,7 @@ import { gasClient } from "@/lib/gas-client";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import { calculateMohwCareFormCompletion } from "@/lib/domain/mohw-life-care-ui";
+import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import { validateMohwLifeCareRow } from "@/lib/domain/mohw-life-care-validation";
 import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
   const mohwValidation = careFormAnswers
     ? validateMohwLifeCareRow(careFormAnswers, { row: 2 })
     : null;
+  const highCare = careFormAnswers ? evaluateHighCare(careFormAnswers) : null;
 
   if (mohwValidation && !mohwValidation.ok) {
     return NextResponse.json(
@@ -123,6 +125,7 @@ export async function POST(request: NextRequest) {
       paymentEligibility,
       careFormCompletion,
       mohwValidation,
+      highCare,
       gasResult,
       forms: getVisitFormFlowItems({
         gov_social_worker_confidentiality_115: "completed",

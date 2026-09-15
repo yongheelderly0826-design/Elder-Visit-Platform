@@ -47,17 +47,15 @@ export type MohwCareFormCompletion = {
 const QUESTIONNAIRE_SKIP_STATUSES = ["拒絕訪視", "查無此人", "無法溝通", "住址不詳"];
 
 const UI_SECTIONS: Array<{ title: string; fromCol: number; toCol: number }> = [
-  { title: "一、訪查資訊", fromCol: 1, toCol: 5 },
-  { title: "二、基本資料", fromCol: 6, toCol: 17 },
-  { title: "三、戶籍與居住地址", fromCol: 18, toCol: 28 },
-  { title: "四、居住與家庭支持", fromCol: 29, toCol: 42 },
-  { title: "五、身體健康", fromCol: 43, toCol: 55 },
-  { title: "六、生活困難與社交", fromCol: 56, toCol: 70 },
-  { title: "七、活動、情緒與服務意願", fromCol: 71, toCol: 81 },
-  { title: "八、訪查員觀察", fromCol: 82, toCol: 89 },
-  { title: "九、個資與健康資料同意", fromCol: 90, toCol: 92 },
-  { title: "十、社政訪查人", fromCol: 93, toCol: 97 },
-  { title: "十一、民政訪查人", fromCol: 98, toCol: 102 },
+  { title: "一、獨居老人資料（訪查資訊）", fromCol: 1, toCol: 5 },
+  { title: "一、獨居老人資料（基本資料）", fromCol: 6, toCol: 17 },
+  { title: "一、獨居老人資料（戶籍與居住）", fromCol: 18, toCol: 28 },
+  { title: "問卷：居住、家庭與身體", fromCol: 29, toCol: 55 },
+  { title: "問卷：生活困難、社交與服務", fromCol: 56, toCol: 81 },
+  { title: "二、訪查員觀察題（用看的，不要直接問）", fromCol: 82, toCol: 89 },
+  { title: "個資與健康資料同意（不套印 A3）", fromCol: 90, toCol: 92 },
+  { title: "社政訪查人（不套印 A3）", fromCol: 93, toCol: 97 },
+  { title: "民政訪查人（不套印 A3）", fromCol: 98, toCol: 102 },
 ];
 
 const CONDITIONAL_RULES: Record<string, MohwFieldCondition[]> = {

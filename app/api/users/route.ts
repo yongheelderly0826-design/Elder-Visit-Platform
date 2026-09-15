@@ -11,9 +11,24 @@ export async function GET(request: NextRequest) {
   const forbidden = requireCapability(request, "users.manage");
   if (forbidden) return forbidden;
 
-  return NextResponse.json({
-    data: await getUserManagementOverview(),
-  });
+  try {
+    return NextResponse.json({
+      data: await getUserManagementOverview(),
+    });
+  } catch (cause) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "USER_DIRECTORY_UNAVAILABLE",
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "目前無法讀取 Google Sheets 使用者名冊。",
+        },
+      },
+      { status: 502 },
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {

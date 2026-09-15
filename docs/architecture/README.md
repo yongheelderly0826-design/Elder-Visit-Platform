@@ -57,6 +57,7 @@
 | 志工出勤 | `簽到退紀錄`（`志工出勤`） | `AttendanceModule` | `/volunteer/clock`、`/volunteer/badge`、`/office/kiosk`、`/manager/attendance` |
 | 訪查到宅簽到 | 同上（`訪查`） | `AttendanceModule` | `/visitor/visits/[id]` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
+| 高關懷 | `高關懷名冊` | `HighCareModule` | `/manager/high-care` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | — | `ExportModule` | `/manager/exports` |
 | 報表/KPI | `報表快照` | `ReportModule` | `/manager/kpi` |
@@ -76,6 +77,7 @@
 ├── 派案紀錄        ← 派案批次、訪查員、編碼名單
 ├── 簽到退紀錄      ← 志工出勤（集合點 QR／個人 QR／刷證）＋訪查到宅（assignment_id）
 ├── 關懷表登打      ← 去識別化編碼對應之表單答案
+├── 高關懷名冊      ← 橘／黃／綠自動列管
 ├── 空訪紀錄        ← 未遇拍照、備註
 ├── 稽核佇列        ← 待覆核、退回、通過
 ├── 車馬費核銷      ← 時數、金額、鎖定狀態

@@ -12,6 +12,16 @@ var ApiRouter = (function () {
     'visitors.update': function (p, b) { return VisitorModule.update(b); },
     'visitors.approve': function (p, b) { return VisitorModule.approve(b); },
 
+    'registrations.list': function (p) { return UserAccountModule.registrations.list(p); },
+    'registrations.get': function (p) { return UserAccountModule.registrations.get(p.request_id || p.id); },
+    'registrations.create': function (p, b) { return UserAccountModule.registrations.create(b); },
+    'registrations.review': function (p, b) { return UserAccountModule.registrations.review(b); },
+    'registrations.batchReview': function (p, b) { return UserAccountModule.registrations.batchReview(b); },
+    'accounts.getAuthByEmail': function (p) { return UserAccountModule.accounts.getAuthByEmail(p.email); },
+    'accounts.issueToken': function (p, b) { return UserAccountModule.accounts.issueToken(b); },
+    'accounts.setPassword': function (p, b) { return UserAccountModule.accounts.setPassword(b); },
+    'accounts.markLogin': function (p, b) { return UserAccountModule.accounts.markLogin(b); },
+
     'cases.list': function (p) { return CaseModule.list(p); },
     'cases.get': function (p) { return CaseModule.get(p.id); },
     'cases.getEncoded': function (p) { return CaseModule.getByEncoded(p.code); },
@@ -40,6 +50,11 @@ var ApiRouter = (function () {
     'careform.saveDraft': function (p, b) { return CareFormModule.saveDraft(b); },
     'careform.submit': function (p, b) { return CareFormModule.submit(b); },
     'careform.validate': function (p, b) { return CareFormModule.validate(b); },
+    'careform.generatePdf': function (p, b) { return NtpcCareFormPdfModule.generate(b || p); },
+
+    'highcare.list': function (p) { return HighCareModule.list(p); },
+    'highcare.stats': function () { return HighCareModule.stats(); },
+    'highcare.update': function (p, b) { return HighCareModule.update(b || p); },
 
     'consent.list': function (p) { return ConsentModule.list(p); },
     'consent.get': function (p) { return ConsentModule.get(p.id || p.consent_id, p); },

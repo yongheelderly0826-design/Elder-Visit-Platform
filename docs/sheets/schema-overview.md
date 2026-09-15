@@ -1,3 +1,14 @@
+### 訪員註冊申請
+
+保存註冊申請、審核狀態、工作空間/角色、訪員與帳號關聯；完整註冊表單放在
+`profile_json`。空表代表目前 0 筆申請，不會自動寫入示範 `reg_001/reg_002`。
+
+### 訪員帳號
+
+保存 GAS Email 密碼帳號。敏感欄位為 `password_hash`、`password_salt`、
+`password_params`、invite/reset token hash 與期限；不保存明文密碼或 raw token，
+也不由使用者名冊 API 回傳。
+
 # Google Sheets 欄位定義總覽
 
 > 工作簿名稱建議：`永和區_115年_獨居長者訪查_主檔`  
@@ -15,6 +26,7 @@
 | `派案紀錄` | `assignment_id` | 派案與狀態 |
 | `簽到退紀錄` | `attendance_id` | 簽到/簽退 |
 | `關懷表登打` | `careform_id` | 去識別化表單答案 |
+| `高關懷名冊` | `high_care_id` | 橘／黃／綠自動列管 |
 | `空訪紀錄` | `missed_visit_id` | 未遇紀錄 |
 | `稽核佇列` | `audit_id` | 覆核 |
 | `車馬費核銷` | `payment_id` | 費用 |
@@ -151,6 +163,30 @@
 | status | 狀態 | enum | ✅ | 草稿/已提交/已稽核 |
 | submitted_at | 提交時間 | datetime | | |
 | audited_at | 稽核時間 | datetime | | |
+
+---
+
+## `高關懷名冊`
+
+| 英文 key | 中文 | 型別 | 必填 | 說明 |
+|----------|------|------|------|------|
+| high_care_id | 列管編號 | text | ✅ | HC-… |
+| case_id | 案號 | text | | |
+| careform_id | 關懷表 | text | ✅ | |
+| assignment_id | 派案 | text | | |
+| encoded_id | 編碼 | text | | |
+| elder_name | 姓名 | text | | |
+| colors | 觸發色 | text | ✅ | 橘;黃;綠 |
+| primary_color | 主顯示色 | text | | 橘 > 黃 > 綠 |
+| trigger_keys | 觸發欄位 | text | | |
+| trigger_labels | 觸發題項 | text | | |
+| trigger_values | 觸發值 | text | | |
+| opened_at | 列管時間 | datetime | ✅ | |
+| status | 狀態 | enum | ✅ | 追蹤中／已轉介／已結案 |
+| owner | 承辦 | text | | |
+| note | 備註 | text | | 本訪未觸發不刪列 |
+| last_visit_triggered | 本訪是否觸發 | boolean | | |
+| updated_at | 更新時間 | datetime | | |
 
 ---
 

@@ -6,6 +6,8 @@ import { setVolunteerClockCookie, clearVolunteerClockCookie } from "@/lib/attend
 import { SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDemoVisitorLink } from "@/lib/domain/demo-visitor-link";
 import { authenticateDemoAccount, demoLoginAccounts } from "@/lib/domain/permissions";
+import { verifyGasPassword } from "@/lib/auth/gas-password";
+import { gasClient, isGasConfigured } from "@/lib/gas-client";
 import type { WorkspaceRoleKey } from "@/lib/domain/types";
 
 function getSafeNextPath(
@@ -90,12 +92,60 @@ export async function POST(request: NextRequest) {
     // Supabase Auth can be unavailable during local setup; demo login remains available.
   }
 
+  if (isGasConfigured()) {
+    try {
+      const account = await gasClient.accounts.getAuthByEmail(email.trim().toLowerCase());
+      if (
+        account &&
+        account.status === "active" &&
+        account.password_hash &&
+        (await verifyGasPassword({
+          password,
+          passwordHash: account.password_hash,
+          passwordSalt: account.password_salt,
+          passwordParams: account.password_params,
+        }))
+      ) {
+        const roleKey = normalizeRoleKey(account.role_key, "visitor");
+        if (body.visitorOnly && roleKey !== "visitor") return visitorOnlyError();
+        const response = NextResponse.json({
+          data: {
+            ok: true,
+            mode: "gas",
+            roleKey,
+            fullName: account.full_name,
+            nextPath: getSafeNextPath(
+              body.next ?? null,
+              getDefaultLandingPath(roleKey),
+              roleKey,
+            ),
+          },
+        });
+        response.cookies.set("demo_role", roleKey, {
+          path: "/",
+          sameSite: "lax",
+          maxAge: sessionMaxAge(roleKey),
+        });
+        clearManagerSession(response);
+        attachDemoVisitorSession(response, account.email, account.full_name, roleKey, account.visitor_id);
+        try {
+          await gasClient.accounts.markLogin(account.email);
+        } catch {
+          // last_login_at 同步失敗不應阻擋已驗證的登入。
+        }
+        return response;
+      }
+    } catch {
+      // GAS 暫時無法使用時，仍保留既有示範帳號登入。
+    }
+  }
+
   if (!demoAccount) {
     return NextResponse.json(
       {
         error: {
           code: "INVALID_LOGIN",
-          message: "帳號或密碼錯誤，請確認 Supabase 使用者或示範帳號。",
+          message: "帳號或密碼錯誤，請確認 Email 與密碼。",
         },
       },
       { status: 401 },
@@ -132,6 +182,7 @@ function attachDemoVisitorSession(
   email: string,
   fullName?: string,
   roleKey?: WorkspaceRoleKey,
+  visitorId?: string,
 ) {
   const maxAge = sessionMaxAge(roleKey);
   response.cookies.set("demo_email", email.toLowerCase(), {
@@ -147,9 +198,9 @@ function attachDemoVisitorSession(
     });
   }
 
-  const link = roleKey === "visitor" ? getDemoVisitorLink(email) : null;
-  if (link?.visitorId) {
-    setVolunteerClockCookie(response, link.visitorId);
+  const link = roleKey === "visitor" && !visitorId ? getDemoVisitorLink(email) : null;
+  if (visitorId || link?.visitorId) {
+    setVolunteerClockCookie(response, visitorId || link!.visitorId);
   } else {
     clearVolunteerClockCookie(response);
   }

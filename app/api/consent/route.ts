@@ -37,6 +37,11 @@ const demoRecords: ElectronicConsentRecord[] = [
     pdfFileUrl: "",
     pdfFileName: "",
     pdfGeneratedAt: "",
+    pdfTemplateKey: "",
+    signatureFolderId: "",
+    signatureFolderUrl: "",
+    pdfFolderId: "",
+    pdfFolderUrl: "",
     signedAt: "2026-09-01T08:00:00.000Z",
     isTest: true,
     fieldValues: {

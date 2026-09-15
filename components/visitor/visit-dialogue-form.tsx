@@ -21,6 +21,7 @@ import {
 } from "@/lib/domain/mohw-life-care-ui";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import {
   validateMohwLifeCareRow,
   type MohwValidationError,
@@ -94,6 +95,7 @@ export function VisitDialogueForm({
       ),
     [careFormAnswers, submission],
   );
+  const highCare = useMemo(() => evaluateHighCare(careFormAnswers), [careFormAnswers]);
   const mohwValidation = useMemo(
     () =>
       validateMohwLifeCareRow(
@@ -192,7 +194,10 @@ export function VisitDialogueForm({
       }),
     });
     const data = (await response.json()) as {
-      data?: { nextStep?: string };
+      data?: {
+        nextStep?: string;
+        highCare?: { triggered?: boolean; primaryColor?: string | null; colors?: string[] };
+      };
       error?: {
         code?: string;
         message?: string;
@@ -210,7 +215,10 @@ export function VisitDialogueForm({
       return;
     }
 
-    setResult(data.data?.nextStep ?? "已送出");
+    const listed = data.data?.highCare?.triggered
+      ? `；已列入高關懷（${(data.data.highCare.colors ?? []).join("、") || data.data.highCare.primaryColor}）`
+      : "";
+    setResult(`${data.data?.nextStep ?? "已送出"}${listed}`);
     window.localStorage.removeItem(draftKey);
     window.localStorage.removeItem(careFormDraftKey);
     setIsSubmitting(false);
@@ -255,7 +263,7 @@ export function VisitDialogueForm({
     }));
   }
 
-  async function exportCareForm(format: "word" | "pdf") {
+  async function exportCareForm(format: "word" | "pdf" | "a3") {
     const response = await fetch("/api/exports/care-form", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -266,13 +274,33 @@ export function VisitDialogueForm({
         answers: careFormAnswers,
       }),
     });
+    if ((format === "pdf" || format === "a3") && response.ok) {
+      const driveUrl = response.headers.get("X-Care-Form-Drive-Url");
+      const folderUrl = response.headers.get("X-Care-Form-Folder-Url");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const visitDate = String(careFormAnswers.visit_date ?? "").slice(0, 10);
+      const safeName = elderCase.name.replace(/[\\/:*?"<>|]/g, "-");
+      link.href = url;
+      link.download = `${visitDate || "未填日期"}_${safeName}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setExportResult(
+        `已產生單頁直式 A3 PDF：${link.download}。` +
+          (driveUrl ? `已存入 Google Drive「關懷表 PDF」目錄。${folderUrl ? `\n${folderUrl}` : ""}` : "") +
+          "\n列印請選 A3 直式、縮放 100%。",
+      );
+      return;
+    }
     const data = (await response.json()) as {
       data?: { filename: string; content: string; note: string };
+      error?: { message?: string };
     };
     setExportResult(
       data.data
         ? `${data.data.filename}\n${data.data.note}\n\n${data.data.content}`
-        : "匯出失敗，請稍後再試。",
+        : `匯出失敗：${data.error?.message || "請稍後再試。"}`,
     );
   }
 
@@ -314,10 +342,10 @@ export function VisitDialogueForm({
             <div>
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold">衛福部生活關懷表（102 欄）</h2>
+                <h2 className="text-sm font-semibold">生活關懷表（紙本分段 · 102 欄主檔）</h2>
               </div>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                依中央系統匯入格式填寫，含條件欄位與訪視狀態分支；完成後可送稽核並匯出 xlsx。
+                依新北紙本題組填寫，資料仍存衛福部 102 欄。橘／黃／綠由系統計算，訪員不必手選。
               </p>
             </div>
             <div className="rounded-md border bg-card px-3 py-2 text-sm">
@@ -358,7 +386,28 @@ export function VisitDialogueForm({
             </div>
           )}
 
+          {highCare.triggered && (
+            <div className="mt-3 rounded-md border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
+              <p className="font-semibold">已列入高關懷（{highCare.colors.join("、")}）</p>
+              <p className="mt-1 text-xs leading-6">
+                {highCare.triggers.map((item) => item.label).join("、")}。送出後進入名冊統計，不必再填一張表。
+              </p>
+            </div>
+          )}
+          {!highCare.triggered && (
+            <p className="mt-3 text-xs text-muted-foreground">三、特殊題項：目前未觸發橘／黃／綠。</p>
+          )}
+
           <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
+            <Button
+              className="w-full sm:w-auto"
+              type="button"
+              variant="outline"
+              disabled={careFormCompletion.percent < 100}
+              onClick={() => void exportCareForm("a3")}
+            >
+              下載完整 A3 PDF（含題目）
+            </Button>
             <Button
               className="w-full sm:w-auto"
               type="button"
@@ -366,16 +415,7 @@ export function VisitDialogueForm({
               disabled={careFormCompletion.percent < 100}
               onClick={() => void exportCareForm("word")}
             >
-              匯出 Word 套版
-            </Button>
-            <Button
-              className="w-full sm:w-auto"
-              type="button"
-              variant="outline"
-              disabled={careFormCompletion.percent < 100}
-              onClick={() => void exportCareForm("pdf")}
-            >
-              匯出 PDF 預覽
+              匯出欄位清單
             </Button>
           </div>
           {exportResult && (
@@ -436,6 +476,15 @@ export function VisitDialogueForm({
                 </details>
               );
             })}
+            <section className="rounded-lg border bg-card p-3">
+              <p className="text-sm font-semibold">三、特殊題項（系統計算，勿手選）</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                對應紙本橘／黃／綠色塊。有風險值即列入高關懷名冊。
+              </p>
+              <p className="mt-2 text-sm">
+                {highCare.triggered ? `結果：${highCare.colors.join("、")}` : "結果：未觸發"}
+              </p>
+            </section>
           </div>
         </section>
 
@@ -593,7 +642,7 @@ export function VisitDialogueForm({
         )}
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <p className="rounded-md bg-card p-2 text-muted-foreground">
-            生活關懷表：送出後由督導確認特殊風險題項。
+            生活關懷表：橘／黃／綠由系統計算，送出後自動列入高關懷名冊。
           </p>
           <p className="rounded-md bg-card p-2 text-muted-foreground">
             保密同意書：由承辦或督導於派案前確認。

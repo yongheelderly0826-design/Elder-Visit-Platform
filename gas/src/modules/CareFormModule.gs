@@ -65,9 +65,19 @@ var CareFormModule = (function () {
     // 加入稽核佇列
     AuditModule.enqueue(record.careform_id);
 
+    var highCare = HighCareModule.upsertFromSubmit({
+      answers: answers,
+      careform_id: record.careform_id,
+      assignment_id: record.assignment_id,
+      encoded_id: record.encoded_id,
+      elder_name: answers.name || '',
+      case_id: data.case_id || '',
+    });
+
     return {
       careform: record,
       validation: { ok: true, errorLines: [] },
+      highCare: highCare,
     };
   }
 

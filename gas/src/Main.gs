@@ -67,3 +67,12 @@ function authorizeDriveScopes() {
   Logger.log('Drive OK: ' + root.getName());
   return root.getName();
 }
+
+/**
+ * 手動授權寄送邀請／重設密碼信的權限。
+ */
+function authorizeMailScope() {
+  var quota = MailApp.getRemainingDailyQuota();
+  Logger.log('Mail quota: ' + quota);
+  return quota;
+}

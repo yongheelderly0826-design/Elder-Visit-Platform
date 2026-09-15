@@ -8,6 +8,7 @@ import {
   FileSignature,
   Files,
   FormInput,
+  HeartPulse,
   Home,
   IdCard,
   ListChecks,
@@ -38,6 +39,7 @@ export type NavKey =
   | "assignments"
   | "dailyVisits"
   | "audit"
+  | "highCare"
   | "kpi"
   | "engines"
   | "exports"
@@ -186,6 +188,14 @@ export const navItems: NavItem[] = [
     href: "/manager/audit",
     icon: SearchCheck,
     requiredCapabilities: ["audit.run"],
+    group: "operations",
+  },
+  {
+    key: "highCare",
+    label: "高關懷",
+    href: "/manager/high-care",
+    icon: HeartPulse,
+    requiredCapabilities: ["visits.read"],
     group: "operations",
   },
   {

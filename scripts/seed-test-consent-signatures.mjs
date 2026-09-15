@@ -5,6 +5,7 @@ import sharp from "sharp";
 const gasUrl = process.env.GAS_WEB_APP_URL;
 const token = process.env.GAS_API_TOKEN;
 const workspaceId = process.env.GAS_WORKSPACE_ID || "WS-YH-115";
+const formalTemplateKeyVersion = "formal-v4";
 
 if (!gasUrl || !token) {
   throw new Error("請先設定 GAS_WEB_APP_URL 與 GAS_API_TOKEN；本腳本不會自動部署 GAS。");
@@ -103,11 +104,20 @@ for (const seed of seeds) {
   });
   if (Array.isArray(existing) && existing.length > 0) {
     const row = existing[0];
-    if (!row.pdf_file_id) {
-      await gas("consent.generatePdf", { body: { consent_id: row.consent_id } });
-      console.log(`generated PDF ${seed.external_ref}: ${row.consent_id}`);
+    if (
+      !row.pdf_file_id ||
+      !String(row.pdf_template_key || "").endsWith(`:${formalTemplateKeyVersion}`)
+    ) {
+      const generated = await gas("consent.generatePdf", {
+        body: { consent_id: row.consent_id },
+      });
+      console.log(
+        `generated formal-template PDF ${seed.external_ref}: ${row.consent_id} (${generated.pdf_template_key})`,
+      );
     } else {
-      console.log(`skip ${seed.external_ref}: record and PDF already exist (${row.consent_id})`);
+      console.log(
+        `skip ${seed.external_ref}: current formal-template PDF already exists (${row.consent_id})`,
+      );
     }
     continue;
   }

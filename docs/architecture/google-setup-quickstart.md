@@ -1,3 +1,12 @@
+## 更新既有站的使用者 Sheets
+
+部署更新後（本次不執行部署），在 Apps Script 編輯器執行 `initSpreadsheet()`；也可首次安裝時執行
+`bootstrapPlatform()`。兩者都會透過 `SheetHelper.initAllSheets()` 新增 `訪員註冊申請` 與
+`訪員帳號`，只補缺少的工作表/欄位，不會覆寫既有 consent、high-care 或其他資料。
+
+Vercel 至少設定 `GAS_WEB_APP_URL`、`GAS_API_TOKEN`、`GAS_WORKSPACE_ID`。Supabase 三個環境變數
+為選用；未設定時註冊、核准、邀請、設定/重設密碼與登入都走 GAS。
+
 # Google 試算表 + GAS 快速設定（5 步驟）
 
 > 使用 `yongheelderly0826-design` 綁定的 **Google 帳號**登入
@@ -45,6 +54,23 @@ api_token: xxxxxxxxx
 ```
 
 **請記下這兩個值。**
+
+### 關懷表 A3 母版
+
+GAS 預設使用下列 Google 試算表作為關懷表空白套版：
+
+```text
+106h8JIuZ4CdCUqXn5vImoxRbveTknylzsiy4lMpAnPk
+```
+
+如需更換母版，請在 Apps Script「專案設定 → 指令碼屬性」加入：
+
+```text
+CAREFORM_TEMPLATE_SPREADSHEET_ID=新的試算表 ID
+```
+
+產生的單頁直式 A3 PDF 會保存到 Drive 的 `關懷表 PDF` 目錄。若要指定既有目錄，
+可設定 `CAREFORM_PDF_FOLDER_ID`；未設定時系統會自動建立。
 
 ---
 
@@ -97,6 +123,7 @@ npm run dev
 | `派案紀錄` | 派案 |
 | `簽到退紀錄` | 簽到退 |
 | `關懷表登打` | 表單答案 |
+| `高關懷名冊` | 橘黃綠列管 |
 | `空訪紀錄` | 未遇 |
 | `稽核佇列` | 覆核 |
 | `車馬費核銷` | 費用 |

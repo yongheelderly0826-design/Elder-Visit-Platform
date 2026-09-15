@@ -218,7 +218,7 @@ export const newTaipeiCareFormSections = [
         "以上均無",
         "無法觀察",
       ]),
-      field("special_color_result", "特殊題項結果", "single_choice", true, true, [
+      field("special_color_result", "特殊題項結果（系統計算，勿手選）", "single_choice", false, true, [
         "橘色",
         "黃色",
         "綠色",

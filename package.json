@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:auth-crypto": "tsx scripts/auth-crypto-smoke.ts",
     "db:bundle": "node scripts/build-supabase-sql-bundle.mjs",
     "task:new": "node scripts/create-task-brief.mjs",
     "task:orchestrate": "node scripts/orchestrate-task.mjs",
@@ -27,6 +28,7 @@
     "import:60": "node scripts/import-60-cases-to-gas.mjs"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.2",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
@@ -38,6 +40,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
+    "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -57,6 +60,7 @@
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.2",
     "wrangler": "^4.93.1"
   }

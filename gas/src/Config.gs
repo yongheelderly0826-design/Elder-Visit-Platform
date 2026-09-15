@@ -32,15 +32,24 @@ var Config = (function () {
     FISCAL_YEAR: function () {
       return get('FISCAL_YEAR', '115');
     },
+    CAREFORM_TEMPLATE_SPREADSHEET_ID: function () {
+      return get(
+        'CAREFORM_TEMPLATE_SPREADSHEET_ID',
+        '106h8JIuZ4CdCUqXn5vImoxRbveTknylzsiy4lMpAnPk'
+      );
+    },
 
     SHEET_NAMES: {
       SETTINGS: '_設定',
       VISITORS: '訪查員主檔',
+      REGISTRATIONS: '訪員註冊申請',
+      VISITOR_ACCOUNTS: '訪員帳號',
       CASES: '個案名冊',
       ASSIGNMENTS: '派案紀錄',
       ATTENDANCE: '簽到退紀錄',
       ATTENDANCE_SITES: '出勤集合點',
       CAREFORMS: '關懷表登打',
+      HIGH_CARE: '高關懷名冊',
       MISSED: '空訪紀錄',
       AUDIT: '稽核佇列',
       PAYMENTS: '車馬費核銷',

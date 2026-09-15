@@ -11,6 +11,7 @@ import {
   Clock3,
   Download,
   IdCard,
+  KeyRound,
   Mail,
   Plus,
   RefreshCw,
@@ -189,7 +190,7 @@ export function UsersPanel() {
             }
           : current,
       );
-      if (json.data.source === "supabase") {
+      if (json.data.source === "supabase" || json.data.source === "gas") {
         await loadUsers();
       }
     } finally {
@@ -920,14 +921,17 @@ function ApprovedVisitorRegistry({
   onInvited: (result: VisitorInvitationResult) => void;
   onVerified: (requestId: string) => void;
 }) {
+  const canManageUsers = useCan("users.manage");
   const [query, setQuery] = useState("");
   const [workerGroup, setWorkerGroup] = useState<"all" | VisitorRegistrationWorkerGroup>("all");
   const [activeView, setActiveView] = useState<VisitorRegistryView>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [invitingRequestId, setInvitingRequestId] = useState<string | null>(null);
+  const [resettingPasswordRequestId, setResettingPasswordRequestId] = useState<string | null>(null);
   const [verifyingRequestId, setVerifyingRequestId] = useState<string | null>(null);
   const [batchAction, setBatchAction] = useState<"invite" | "verify" | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [generatedPasswordUrl, setGeneratedPasswordUrl] = useState<string | null>(null);
   const [exportingPhotos, setExportingPhotos] = useState(false);
   const [exportingPassbooks, setExportingPassbooks] = useState(false);
   const [issuingBadges, setIssuingBadges] = useState(false);
@@ -1043,12 +1047,46 @@ function ApprovedVisitorRegistry({
     }
     setInvitingRequestId(request.id);
     setInviteMessage(null);
+    setGeneratedPasswordUrl(null);
 
     try {
       const result = await sendVisitorInvite(request);
       setInviteMessage(result);
     } finally {
       setInvitingRequestId(null);
+    }
+  }
+
+  async function resetVisitorPassword(request: UserRegistrationRequest) {
+    if (
+      !window.confirm(
+        `確定要為 ${request.fullName} 產生一次性重設密碼連結？\n\n連結需由管理者安全交給 ${request.email}，30 分鐘後失效。`,
+      )
+    ) {
+      return;
+    }
+
+    setResettingPasswordRequestId(request.id);
+    setInviteMessage(null);
+    setGeneratedPasswordUrl(null);
+    try {
+      const response = await fetch("/api/users/reset-password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ requestId: request.id }),
+      });
+      const json = (await response.json()) as {
+        data?: { message: string; nextStep: string; setupUrl?: string };
+        error?: { message?: string };
+      };
+      setInviteMessage(
+        response.ok && json.data
+          ? `${json.data.message} ${json.data.nextStep}`
+          : (json.error?.message ?? "重設密碼信沒有寄出，請稍後再試。"),
+      );
+      setGeneratedPasswordUrl(response.ok ? (json.data?.setupUrl ?? null) : null);
+    } finally {
+      setResettingPasswordRequestId(null);
     }
   }
 
@@ -1080,6 +1118,7 @@ function ApprovedVisitorRegistry({
     }
 
     onInvited(json.data);
+    setGeneratedPasswordUrl(json.data.setupUrl ?? null);
     return `${json.data.message} ${json.data.nextStep}`;
   }
 
@@ -1517,7 +1556,34 @@ function ApprovedVisitorRegistry({
 
       {inviteMessage && (
         <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
-          {inviteMessage}
+          <p>{inviteMessage}</p>
+          {generatedPasswordUrl && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                aria-label="一次性密碼設定連結"
+                className="h-10 min-w-0 rounded-md border bg-background px-3 text-foreground"
+                readOnly
+                value={generatedPasswordUrl}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="bg-background"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(generatedPasswordUrl);
+                    setInviteMessage("連結已複製。請在 30 分鐘內安全交給訪員。");
+                  } catch {
+                    setInviteMessage("無法自動複製；請點選上方欄位後手動複製完整連結。");
+                  }
+                }}
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                複製連結
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1643,6 +1709,20 @@ function ApprovedVisitorRegistry({
                       : "發送邀請"}
                 </Button>
                 )}
+                {mode === "approved" &&
+                  canManageUsers &&
+                  profile?.authInviteStatus === "activated" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      disabled={resettingPasswordRequestId === request.id}
+                      onClick={() => resetVisitorPassword(request)}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      {resettingPasswordRequestId === request.id ? "寄送中" : "重設密碼"}
+                    </Button>
+                  )}
                 <Button
                   type="button"
                   variant={isAssignableVisitor(request) ? "outline" : "default"}
@@ -1796,6 +1876,20 @@ function ApprovedVisitorRegistry({
                             : "邀請"}
                       </Button>
                       )}
+                      {mode === "approved" &&
+                        canManageUsers &&
+                        profile?.authInviteStatus === "activated" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={resettingPasswordRequestId === request.id}
+                            onClick={() => resetVisitorPassword(request)}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                            {resettingPasswordRequestId === request.id ? "寄送中" : "重設密碼"}
+                          </Button>
+                        )}
                       <Button
                         type="button"
                         size="sm"

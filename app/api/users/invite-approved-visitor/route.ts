@@ -22,7 +22,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({
-    data: await inviteApprovedVisitor(requestId, request.nextUrl.origin),
-  });
+  try {
+    return NextResponse.json({
+      data: await inviteApprovedVisitor(requestId, request.nextUrl.origin),
+    });
+  } catch (cause) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "INVITE_LINK_FAILED",
+          message: cause instanceof Error ? cause.message : "無法產生設定密碼連結。",
+        },
+      },
+      { status: 500 },
+    );
+  }
 }

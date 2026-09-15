@@ -278,7 +278,7 @@ export type UserRegistrationDecisionResult = {
   status: UserRegistrationStatus;
   message: string;
   nextStep: string;
-  source?: "supabase";
+  source?: "supabase" | "gas";
 };
 
 export type UserRegistrationBatchDecision = {
@@ -296,7 +296,7 @@ export type UserRegistrationBatchDecisionResult = {
   results: UserRegistrationDecisionResult[];
   message: string;
   nextStep: string;
-  source?: "supabase";
+  source?: "supabase" | "gas";
 };
 
 export type VisitorInvitationResult = {
@@ -305,13 +305,15 @@ export type VisitorInvitationResult = {
   status: VisitorAuthInviteStatus;
   message: string;
   nextStep: string;
+  setupUrl?: string;
+  expiresAt?: string;
 };
 
 export type VisitorRegistrationSubmissionResult = {
   request: UserRegistrationRequest;
   message: string;
   nextStep: string;
-  source: "supabase";
+  source: "supabase" | "gas";
   warning: string | null;
 };
 

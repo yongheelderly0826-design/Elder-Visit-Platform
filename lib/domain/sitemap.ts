@@ -182,6 +182,7 @@ export const sitemapSections = [
       "贊助成果只能使用彙整或匿名化資料，不應輸出可識別個案。",
     ],
     relatedLinks: [
+      { label: "高關懷", href: "/manager/high-care" },
       { label: "KPI", href: "/manager/kpi" },
       { label: "匯出", href: "/manager/exports" },
       { label: "同意治理", href: "/manager/consent" },

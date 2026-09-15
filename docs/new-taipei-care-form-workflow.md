@@ -80,14 +80,20 @@ flowchart TD
 
 必填欄位未完成時，不能送出訪查紀錄，也不能產生 Word / PDF。
 
-### 4. Word / PDF 匯出
+### 4. A3 套印與高關懷
 
-表單完成度達 100% 後，可使用：
+表單完成度達 100% 後，可使用 **下載完整 A3 PDF（含題目）**。
 
-- `匯出 Word 套版`
-- `匯出 PDF 預覽`
+- 空白母版：Google Spreadsheet `106h8JIuZ4CdCUqXn5vImoxRbveTknylzsiy4lMpAnPk`
+- 工作表：`獨居長者生活關懷表`
+- 產製方式：複製母版 → 依題目對照寫入答案儲存格 → `scale=4` 縮放至單頁
+- 固定格式：**一頁、A3、直式**
+- 檔名：`YYYY-MM-DD_個案姓名.pdf`
+- 保存位置：Google Drive `關懷表 PDF` 目錄；同時下載到訪員裝置
 
-目前輸出的是套版資料與 PDF 預覽內容。下一階段會把欄位寫回 `新北市政府獨居老人生活關懷表(空白).docx` 的勾選框與文字欄位，並產出正式 PDF。
+對照見 [`ntpc-paper-vs-mohw-102.md`](./ntpc-paper-vs-mohw-102.md)。
+
+橘／黃／綠由系統依紙本色塊規則計算，訪員不必手選。送出後若觸發，自動寫入 `高關懷名冊`。承辦至 `/manager/high-care` 篩選與更新狀態。
 
 ### 5. 後台 Excel 匯出
 
@@ -107,13 +113,16 @@ flowchart TD
 - [ ] 確認顯示 `新北市政府獨居老人生活關懷表`
 - [ ] 確認完成度為 100%
 - [ ] 展開各段表單，確認欄位已有模擬答案
-- [ ] 點選 `匯出 Word 套版`
-- [ ] 點選 `匯出 PDF 預覽`
-- [ ] 送出訪查紀錄
-- [ ] 到 `/manager/exports` 確認有 `社會局中央系統匯入 Excel` 模板
+- [ ] 點選 `下載完整 A3 PDF（含題目）`
+- [ ] 確認 PDF 只有 1 頁，尺寸為 A3 直式
+- [ ] 確認檔名為 `日期_個案姓名.pdf`，且 Google Drive `關懷表 PDF` 目錄已有同名檔
+- [ ] 確認第三句色碼為系統計算、不可手選
+- [ ] 送出訪查紀錄（有色塊則出現高關懷提示）
+- [ ] 到 `/manager/high-care` 確認列管與統計
+- [ ] 到 `/manager/exports` 確認衛福部 102 欄 xlsx 仍可用
 
 ## 目前限制
 
-- Word 目前是套版資料輸出，尚未直接改寫 docx 勾選框。
-- PDF 目前是預覽資料輸出，尚未接正式 PDF renderer。
-- 中央系統 Excel 欄位順序需依社會局提供規格再固定。
+- 正式 A3 需由 GAS 產製，才能直接填入 Google 試算表母版並保存至 Drive。
+- 正式下載 API 未設定 GAS 時會停止匯出，避免產生欄位可能錯位的 PDF；`public/forms/ntpc-life-care-google-sheet-a3.pdf` 僅供本機版面預覽。
+- 中央系統 Excel 欄位順序依衛福部 102 欄範本。

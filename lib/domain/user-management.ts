@@ -2,6 +2,8 @@ import { getCurrentWorkspace } from "@/lib/domain/mock-data";
 import { getRuntimeEnvValue, hasRuntimeEnvValue } from "@/lib/runtime/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getHeadshotPreviewUrl, uploadRegistrationHeadshot } from "@/lib/domain/visitor-headshots";
+import { createGasOneTimeToken } from "@/lib/auth/gas-password";
+import { gasClient, type GasRegistrationRow } from "@/lib/gas-client";
 import type {
   UserRegistrationBatchDecision,
   UserRegistrationBatchDecisionResult,
@@ -41,86 +43,16 @@ export const visitorRegistrationJobTitles = [
   "其他",
 ];
 
-export const registrationRequests: UserRegistrationRequest[] = [
-  {
-    id: "reg_001",
-    email: "visitor.yonghe@eldervisit.org",
-    fullName: "陳怡君",
-    requestedUnitName: "永和區公所民政課",
-    requestedWorkspaceId: "ws_elder_visit_115",
-    requestedWorkspaceName: "115 年獨居長者訪查",
-    requestedRoleKey: "visitor",
-    status: "pending_social_bureau_review",
-    submittedAt: "2026-04-26T09:15:00+08:00",
-    reviewNote: "已完成教育訓練，等待社會局覆核訪查資格。",
-    visitorRegistrationProfile: {
-      rootUnitName: "永和區公所",
-      departmentName: "民政課",
-      departmentOther: null,
-      jobTitle: "里幹事",
-      jobTitleOther: null,
-      displayName: "永和區公所民政課-陳怡君-里幹事",
-      gender: "女",
-      nationalId: "A123456789",
-      workerGroup: "civil_affairs",
-      officialEmail: "visitor.yonghe@eldervisit.org",
-      phone: "0912-345-678",
-      trainingCompleted: true,
-      trainingCompletedAt: "2026-04-18",
-      visitorCertificateNo: "EV-YH-115-001",
-      headshotOriginalUrl: null,
-      headshotProcessedUrl: null,
-      socialBureauReviewStatus: "pending",
-      socialBureauReviewedAt: null,
-      socialBureauReviewNote: null,
-      registrationCode: "REG-115-YH-0001",
-      authInviteStatus: "not_sent",
-      authInvitedAt: null,
-      authInviteSentCount: 0,
-      authActivatedAt: null,
-      profileCompletionStatus: "submitted",
-      profileSubmittedAt: "2026-04-26T09:15:00+08:00",
-      profileReviewedAt: null,
-      profileReturnReason: null,
-      visitorCode: null,
-      qrCodePayload: null,
-      bankAccountLast5: null,
-      bankName: null,
-      bankCode: null,
-      bankBranchName: null,
-      bankAccountName: null,
-      passbookCoverUrl: null,
-      passbookUploadedAt: null,
-      remittanceReviewStatus: "pending",
-      remittanceReady: false,
-      note: "由民政課提報，可支援里別派案與共訪。",
-    },
-  },
-  {
-    id: "reg_002",
-    email: "case.viewer@eldervisit.org",
-    fullName: "成果檢視者",
-    requestedUnitName: "示範公所",
-    requestedWorkspaceId: "ws_elder_visit_115",
-    requestedWorkspaceName: "115 年獨居長者訪查",
-    requestedRoleKey: "viewer",
-    status: "email_verified",
-    submittedAt: "2026-04-26T10:10:00+08:00",
-    reviewNote: "已完成 email 驗證，等待管理者選擇 Workspace 與角色。",
-  },
-];
-
 export async function getUserManagementOverview() {
   const workspace = getCurrentWorkspace();
-  const supabaseRequests = await getSupabaseRegistrationRequests();
-  const useSupabaseOnly =
-    hasRuntimeEnvValue("NEXT_PUBLIC_SUPABASE_URL") && hasRuntimeEnvValue("SUPABASE_SERVICE_ROLE_KEY");
+  const useSupabase = isSupabaseUserManagementConfigured();
+  const requests = useSupabase
+    ? await getSupabaseRegistrationRequests()
+    : (await gasClient.registrations.list()).map(mapGasRegistrationRow);
 
   return {
     workspace,
-    registrationRequests: useSupabaseOnly
-      ? supabaseRequests
-      : mergeRegistrationRequests(supabaseRequests, registrationRequests),
+    registrationRequests: requests,
     flow: [
       "使用者建立帳號並完成 email 驗證。",
       "新訪員填寫清冊欄位：姓名、性別、身分證字號、民政/社政、職稱、公務信箱與教育訓練。",
@@ -225,11 +157,25 @@ export async function submitVisitorRegistration(
     },
   };
 
+  if (!isSupabaseUserManagementConfigured()) {
+    try {
+      const saved = await gasClient.registrations.create(toGasRegistrationInput(request));
+      return {
+        request: mapGasRegistrationRow(saved),
+        message: `${displayName} 的訪員註冊資料已送出。`,
+        nextStep: "承辦管理者可在使用者管理頁進行審核。",
+        source: "gas",
+        warning: null,
+      };
+    } catch (error) {
+      throw new Error(toGasUserMessage(error, "註冊資料未能寫入 Google Sheets，請稍後再試。"));
+    }
+  }
+
   const supabaseResult = await insertSupabaseRegistrationRequest(request);
   if (!supabaseResult.request) {
     throw new Error(supabaseResult.warning ?? "註冊資料尚未儲存，請稍後再試；若持續失敗，請聯絡系統管理者。");
   }
-
   return {
     request: supabaseResult.request,
     message: `${displayName} 的訪員註冊資料已送出。`,
@@ -242,6 +188,20 @@ export async function submitVisitorRegistration(
 export async function reviewRegistration(
   decision: UserRegistrationDecision,
 ): Promise<UserRegistrationDecisionResult> {
+  if (!isSupabaseUserManagementConfigured()) {
+    try {
+      const result = await gasClient.registrations.review({
+        request_id: decision.requestId,
+        decision: decision.decision,
+        role_key: decision.roleKey,
+        workspace_id: decision.workspaceId,
+        note: decision.note,
+      });
+      return createGasRegistrationDecisionResult(result.registration, result.previously_completed);
+    } catch (error) {
+      throw new Error(toGasUserMessage(error, "Google Sheets 審核寫入失敗，請確認 GAS 已更新並重新整理。"));
+    }
+  }
   const supabaseResult = await reviewSupabaseRegistration(decision);
   if (supabaseResult) {
     return {
@@ -258,6 +218,50 @@ export async function reviewRegistrationsBatch(
   const requestIds = Array.from(new Set(decision.requestIds.filter(Boolean)));
   if (requestIds.length === 0) {
     throw new Error("沒有可批次核准的待審核申請。");
+  }
+
+  if (!isSupabaseUserManagementConfigured()) {
+    try {
+      const gasResults = await gasClient.registrations.batchReview({
+        request_ids: requestIds,
+        decision: decision.decision,
+        role_key: "visitor",
+        workspace_id: decision.workspaceId,
+        note: decision.note,
+      });
+      const results: UserRegistrationDecisionResult[] = gasResults.map((item, index) => {
+        if ("error" in item) {
+          return {
+            requestId: item.request_id || requestIds[index],
+            status: "pending_social_bureau_review",
+            message: item.error,
+            nextStep: "請重新整理後再單筆重試。",
+            source: "gas",
+          };
+        }
+        return createGasRegistrationDecisionResult(item.registration, item.previously_completed);
+      });
+      const approved = gasResults.filter(
+        (item) =>
+          "registration" in item &&
+          !item.previously_completed &&
+          item.registration.status === "approved",
+      ).length;
+      const failed = gasResults.filter((item) => "error" in item).length;
+      const skipped = gasResults.filter((item) => "previously_completed" in item && item.previously_completed).length;
+      return {
+        total: requestIds.length,
+        approved,
+        skipped,
+        failed,
+        results,
+        message: `整批核准完成：${approved} 筆通過、${skipped} 筆已處理、${failed} 筆未完成。`,
+        nextStep: "請接續產生一次性設定密碼連結。",
+        source: "gas",
+      };
+    } catch (error) {
+      throw new Error(toGasUserMessage(error, "Google Sheets 整批審核失敗，請確認 GAS 已更新。"));
+    }
   }
 
   const supabase = createAdminClient();
@@ -329,6 +333,9 @@ export async function inviteApprovedVisitor(
   requestId: string,
   origin: string,
 ): Promise<VisitorInvitationResult> {
+  if (!isSupabaseUserManagementConfigured()) {
+    return issueGasPasswordLink(requestId, origin, "invite");
+  }
   try {
     const supabase = createAdminClient();
     const { data: request, error } = await (supabase as unknown as RegistrationRequestByIdClient)
@@ -407,6 +414,162 @@ export async function inviteApprovedVisitor(
       nextStep: "請稍後重試；若持續失敗，請聯絡系統管理者。",
     };
   }
+}
+
+export async function issueGasPasswordLink(
+  requestId: string,
+  origin: string,
+  mode: "invite" | "recovery",
+): Promise<VisitorInvitationResult> {
+  const { token, tokenHash } = createGasOneTimeToken();
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const url = new URL("/login", origin);
+  url.searchParams.set("gas_token", token);
+  url.searchParams.set("mode", mode);
+  try {
+    const issued = await gasClient.accounts.issueToken({
+      request_id: requestId,
+      mode,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      setup_url: url.toString(),
+    });
+    return {
+      requestId,
+      email: issued.email,
+      status: mode === "invite" ? "sent" : "activated",
+      message:
+        mode === "invite"
+          ? `設定密碼信已寄到 ${issued.email}。`
+          : `重設密碼信已寄到 ${issued.email}。`,
+      nextStep: "請訪員在 30 分鐘內開啟信件中的一次性連結；管理者也可複製連結備用。",
+      setupUrl: url.toString(),
+      expiresAt,
+    };
+  } catch (error) {
+    throw new Error(toGasUserMessage(error, mode === "invite" ? "無法產生設定密碼連結。" : "無法產生重設密碼連結。"));
+  }
+}
+
+function isSupabaseUserManagementConfigured() {
+  return (
+    getRuntimeEnvValue("USER_MANAGEMENT_BACKEND") === "supabase" &&
+    hasRuntimeEnvValue("NEXT_PUBLIC_SUPABASE_URL") &&
+    hasRuntimeEnvValue("SUPABASE_SERVICE_ROLE_KEY")
+  );
+}
+
+function toGasRegistrationInput(request: UserRegistrationRequest): Record<string, unknown> {
+  return {
+    request_id: request.id,
+    email: request.email,
+    full_name: request.fullName,
+    requested_unit_name: request.requestedUnitName,
+    requested_workspace_id: request.requestedWorkspaceId,
+    requested_workspace_name: request.requestedWorkspaceName,
+    requested_role_key: request.requestedRoleKey,
+    status: request.status,
+    review_note: request.reviewNote,
+    submitted_at: request.submittedAt,
+    profile: request.visitorRegistrationProfile ?? {},
+  };
+}
+
+function mapGasRegistrationRow(row: GasRegistrationRow): UserRegistrationRequest {
+  const profile = row.profile ?? {};
+  const hasProfile = Object.keys(profile).length > 0;
+  const value = (key: string) => profile[key];
+  const text = (key: string, fallback = "") =>
+    typeof value(key) === "string" ? (value(key) as string) : fallback;
+  const nullableText = (key: string) => text(key) || null;
+
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    requestedUnitName: row.requested_unit_name || "未指定單位",
+    requestedWorkspaceId: row.requested_workspace_id,
+    requestedWorkspaceName: row.requested_workspace_name || getCurrentWorkspace().name,
+    requestedRoleKey: normalizeRoleKey(row.requested_role_key),
+    status: normalizeRegistrationStatus(row.status),
+    submittedAt: row.submitted_at,
+    reviewNote: row.review_note,
+    visitorRegistrationProfile: hasProfile
+      ? {
+          rootUnitName: text("rootUnitName", "永和區公所"),
+          departmentName: text("departmentName", "其他"),
+          departmentOther: nullableText("departmentOther"),
+          jobTitle: text("jobTitle", "其他"),
+          jobTitleOther: nullableText("jobTitleOther"),
+          displayName: text("displayName", row.full_name),
+          gender: normalizeGender(nullableText("gender")),
+          nationalId: text("nationalId"),
+          workerGroup: normalizeWorkerGroup(nullableText("workerGroup")),
+          officialEmail: text("officialEmail", row.email),
+          phone: text("phone"),
+          trainingCompleted: Boolean(value("trainingCompleted")),
+          trainingCompletedAt: nullableText("trainingCompletedAt"),
+          visitorCertificateNo: nullableText("visitorCertificateNo"),
+          headshotOriginalUrl: nullableText("headshotOriginalUrl"),
+          headshotProcessedUrl: nullableText("headshotProcessedUrl"),
+          socialBureauReviewStatus: normalizeReviewStatus(nullableText("socialBureauReviewStatus")),
+          socialBureauReviewedAt: nullableText("socialBureauReviewedAt"),
+          socialBureauReviewNote: nullableText("socialBureauReviewNote"),
+          registrationCode: nullableText("registrationCode"),
+          authInviteStatus: normalizeAuthInviteStatus(nullableText("authInviteStatus")),
+          authInvitedAt: nullableText("authInvitedAt"),
+          authInviteSentCount: Number(value("authInviteSentCount") || 0),
+          authActivatedAt: nullableText("authActivatedAt"),
+          profileCompletionStatus: normalizeProfileCompletionStatus(nullableText("profileCompletionStatus")),
+          profileSubmittedAt: nullableText("profileSubmittedAt"),
+          profileReviewedAt: nullableText("profileReviewedAt"),
+          profileReturnReason: nullableText("profileReturnReason"),
+          visitorCode: nullableText("visitorCode") ?? row.visitor_id,
+          qrCodePayload: nullableText("qrCodePayload"),
+          bankAccountLast5: nullableText("bankAccountLast5"),
+          bankName: nullableText("bankName"),
+          bankCode: nullableText("bankCode"),
+          bankBranchName: nullableText("bankBranchName"),
+          bankAccountName: nullableText("bankAccountName"),
+          passbookCoverUrl: nullableText("passbookCoverUrl"),
+          passbookUploadedAt: nullableText("passbookUploadedAt"),
+          remittanceReviewStatus: normalizeRemittanceReviewStatus(nullableText("remittanceReviewStatus")),
+          remittanceReady: Boolean(value("remittanceReady")),
+          note: nullableText("note"),
+        }
+      : undefined,
+  };
+}
+
+function createGasRegistrationDecisionResult(
+  row: GasRegistrationRow,
+  previouslyCompleted: boolean,
+): UserRegistrationDecisionResult {
+  const request = mapGasRegistrationRow(row);
+  const approved = request.status === "approved";
+  return {
+    requestId: request.id,
+    status: request.status,
+    message: approved
+      ? `${request.fullName} 已通過加入申請。`
+      : `${request.fullName} 的加入申請已退回。`,
+    nextStep: previouslyCompleted
+      ? "此申請已完成審核，無需重複操作。"
+      : approved
+        ? "訪員主檔與帳號已建立，請產生一次性設定密碼連結。"
+        : "請通知申請人補正後重新提出申請。",
+    source: "gas",
+  };
+}
+
+function toGasUserMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    if (error.message.includes("not configured")) {
+      return "GAS 尚未設定，請設定 GAS_WEB_APP_URL 與 GAS_API_TOKEN 後再試。";
+    }
+    return error.message;
+  }
+  return fallback;
 }
 
 async function updateInvitationStatus(
@@ -939,19 +1102,6 @@ async function getSupabaseActiveWorkspace() {
   } catch {
     return null;
   }
-}
-
-function mergeRegistrationRequests(
-  supabaseRequests: UserRegistrationRequest[],
-  fallbackRequests: UserRegistrationRequest[],
-) {
-  const seen = new Set<string>();
-  return [...supabaseRequests, ...fallbackRequests].filter((request) => {
-    const key = `${request.id}:${request.email}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function mapRegistrationRow(

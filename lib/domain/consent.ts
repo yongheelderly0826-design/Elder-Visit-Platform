@@ -175,6 +175,11 @@ export type ElectronicConsentRecord = {
   pdfFileUrl: string;
   pdfFileName: string;
   pdfGeneratedAt: string;
+  pdfTemplateKey: string;
+  signatureFolderId: string;
+  signatureFolderUrl: string;
+  pdfFolderId: string;
+  pdfFolderUrl: string;
   signedAt: string;
   isTest: boolean;
   fieldValues: Record<string, string | boolean>;
@@ -286,6 +291,11 @@ export function normalizeGasConsentRecord(row: Record<string, unknown>): Electro
     pdfFileUrl: String(row.pdf_file_url ?? row.pdfFileUrl ?? ""),
     pdfFileName: String(row.pdf_file_name ?? row.pdfFileName ?? ""),
     pdfGeneratedAt: String(row.pdf_generated_at ?? row.pdfGeneratedAt ?? ""),
+    pdfTemplateKey: String(row.pdf_template_key ?? row.pdfTemplateKey ?? ""),
+    signatureFolderId: String(row.signature_folder_id ?? row.signatureFolderId ?? ""),
+    signatureFolderUrl: String(row.signature_folder_url ?? row.signatureFolderUrl ?? ""),
+    pdfFolderId: String(row.pdf_folder_id ?? row.pdfFolderId ?? ""),
+    pdfFolderUrl: String(row.pdf_folder_url ?? row.pdfFolderUrl ?? ""),
     signedAt: new Date(String(row.signed_at ?? row.signedAt ?? Date.now())).toISOString(),
     isTest:
       row.is_test === true ||

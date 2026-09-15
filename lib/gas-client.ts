@@ -18,6 +18,35 @@ export type GasResponse<T> = {
   } | null;
 };
 
+export type GasRegistrationRow = {
+  id: string;
+  account_id: string | null;
+  email: string;
+  full_name: string;
+  requested_unit_name: string;
+  requested_workspace_id: string | null;
+  requested_workspace_name: string;
+  requested_role_key: string;
+  status: string;
+  review_note: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  visitor_id: string | null;
+  profile: Record<string, unknown>;
+};
+
+export type GasAuthAccount = {
+  account_id: string;
+  email: string;
+  visitor_id: string;
+  full_name: string;
+  role_key: string;
+  status: string;
+  password_hash: string;
+  password_salt: string;
+  password_params: string;
+};
+
 export class GasApiError extends Error {
   code: string;
   errorLines: string[];
@@ -100,6 +129,65 @@ export const gasClient = {
     update: (body: unknown) => gasFetch<unknown>("visitors.update", { method: "POST", body }),
     approve: (body: unknown) => gasFetch<unknown>("visitors.approve", { method: "POST", body }),
   },
+  registrations: {
+    list: (params?: { status?: string }) =>
+      gasFetch<GasRegistrationRow[]>("registrations.list", {
+        params: params as Record<string, string> | undefined,
+      }),
+    get: (requestId: string) =>
+      gasFetch<GasRegistrationRow | null>("registrations.get", {
+        params: { request_id: requestId },
+      }),
+    create: (body: Record<string, unknown>) =>
+      gasFetch<GasRegistrationRow>("registrations.create", { method: "POST", body }),
+    review: (body: Record<string, unknown>) =>
+      gasFetch<{ registration: GasRegistrationRow; previously_completed: boolean }>(
+        "registrations.review",
+        { method: "POST", body },
+      ),
+    batchReview: (body: Record<string, unknown>) =>
+      gasFetch<
+        Array<
+          | { registration: GasRegistrationRow; previously_completed: boolean }
+          | { request_id: string; error: string; code: string }
+        >
+      >("registrations.batchReview", { method: "POST", body }),
+  },
+  accounts: {
+    getAuthByEmail: (email: string) =>
+      gasFetch<GasAuthAccount | null>("accounts.getAuthByEmail", { params: { email } }),
+    issueToken: (body: {
+      request_id: string;
+      mode: "invite" | "recovery";
+      token_hash: string;
+      expires_at: string;
+      setup_url: string;
+    }) =>
+      gasFetch<{
+        request_id: string;
+        email: string;
+        full_name: string;
+        mode: "invite" | "recovery";
+        expires_at: string;
+      }>("accounts.issueToken", { method: "POST", body }),
+    setPassword: (body: {
+      mode: "invite" | "recovery";
+      token_hash: string;
+      password_hash: string;
+      password_salt: string;
+      password_params: string;
+    }) =>
+      gasFetch<{
+        account_id: string;
+        email: string;
+        visitor_id: string;
+        full_name: string;
+        role_key: string;
+        status: string;
+      }>("accounts.setPassword", { method: "POST", body }),
+    markLogin: (email: string) =>
+      gasFetch<boolean>("accounts.markLogin", { method: "POST", body: { email } }),
+  },
   cases: {
     list: (params?: { district?: string; case_type?: string; visit_status?: string }) =>
       gasFetch<unknown[]>("cases.list", { params: params as Record<string, string> }),
@@ -118,12 +206,41 @@ export const gasClient = {
     confirm: (body: unknown) =>
       gasFetch<unknown>("assignments.confirm", { method: "POST", body }),
   },
+  highCare: {
+    list: (params?: { color?: string; status?: string }) =>
+      gasFetch<Array<Record<string, unknown>>>("highcare.list", {
+        params: params as Record<string, string> | undefined,
+      }),
+    stats: () =>
+      gasFetch<Record<string, number>>("highcare.stats"),
+    update: (body: { high_care_id: string; status?: string; owner?: string; note?: string }) =>
+      gasFetch<Record<string, unknown>>("highcare.update", { method: "POST", body }),
+  },
   careform: {
     get: (assignmentId: string) =>
       gasFetch<unknown>("careform.get", { params: { assignment_id: assignmentId } }),
     saveDraft: (body: unknown) =>
       gasFetch<unknown>("careform.saveDraft", { method: "POST", body }),
     submit: (body: unknown) => gasFetch<unknown>("careform.submit", { method: "POST", body }),
+    generatePdf: (body: {
+      answers: Record<string, unknown>;
+      elder_name?: string;
+      case_code?: string;
+      encoded_id?: string;
+      district?: string;
+      include_base64?: boolean;
+    }) =>
+      gasFetch<{
+        file_id: string;
+        file_url: string;
+        file_name: string;
+        folder_id: string;
+        folder_url: string;
+        page_size: "A3";
+        orientation: "portrait";
+        page_count: 1;
+        pdf_base64: string;
+      }>("careform.generatePdf", { method: "POST", body }),
     validate: (body: unknown) =>
       gasFetch<{ ok: boolean; errorLines: string[] }>("careform.validate", {
         method: "POST",

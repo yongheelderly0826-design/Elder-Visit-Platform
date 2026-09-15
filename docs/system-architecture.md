@@ -230,6 +230,7 @@ sequenceDiagram
 | 志工出勤（集合點／刷證／個人 QR） | `簽到退紀錄`（`志工出勤`） | `AttendanceModule` | `/volunteer/clock`、`/volunteer/badge`、`/office/kiosk` |
 | 訪查到宅簽到退 | `簽到退紀錄`（`訪查`） | `AttendanceModule` | `/visitor/visits/[id]`、`/api/visits/clock` |
 | 關懷表 | `關懷表登打` | `CareFormModule` | `/visitor/visits/[id]` |
+| 高關懷 | `高關懷名冊` | `HighCareModule` | `/manager/high-care` |
 | 稽核 | `稽核佇列` | `AuditModule` | `/manager/audit` |
 | 衛福部匯出 | `匯出紀錄` | `ExportModule` | `/manager/exports` |
 | 出勤月結 | Drive「志工出勤月結」＋本機 xlsx | `AttendanceModule.monthlyExport` | `/manager/attendance` |
