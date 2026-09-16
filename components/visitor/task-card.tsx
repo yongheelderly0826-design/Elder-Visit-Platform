@@ -3,6 +3,7 @@ import { AlertTriangle, Camera, MapPin, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
 import { getRiskLabel, getVisitStatusLabel } from "@/lib/domain/visits";
+import { maskPersonName } from "@/lib/domain/person-name";
 import { cn } from "@/lib/utils";
 
 export function TaskCard({
@@ -17,7 +18,7 @@ export function TaskCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">{elderCase.name}</h2>
+            <h2 className="text-base font-semibold">{maskPersonName(elderCase.name)}</h2>
             <span
               className={cn(
                 "rounded-md px-2 py-1 text-xs font-medium",
