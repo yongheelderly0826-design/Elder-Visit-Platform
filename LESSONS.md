@@ -180,3 +180,11 @@
 - **Rule:** For dashboard and inbox reads, add a composite GAS action that reads each sheet once, cache the bundle 20–25 seconds, and invalidate on dispatch, visit submit, visit clock, and audit decide. Keep a legacy fallback until the new GAS action is deployed.
 - **Evidence:** `gas/src/modules/ReportModule.gs`, `lib/daily-visit-report-service.ts`, `lib/repositories/gas.ts`, and `lib/gas-read-cache.ts`.
 - **Added on:** 2026-09-15
+
+## Lesson: Daily visit stats persist as one JSON row plus a Drive file, not a new spreadsheet per day
+
+- **Trigger:** Daily visit stats still felt slow after the composite bundle, and a one-spreadsheet-per-day layout was considered.
+- **Cause:** Rebuilding from six live sheets on every page load is expensive; a new workbook per day would also change the folder architecture for later KPI / dispatch / attendance snapshots.
+- **Rule:** Keep `報表快照` as one row per day (`report_type=daily_visit`, `period=YYYY-MM-DD`) and back up to Drive `報表快照/每日訪視統計/YYYY-MM-DD.json`. Rebuild a few seconds after dispatch, visit clock, care-form submit, or audit decide; do not create a new spreadsheet per day.
+- **Evidence:** `gas/src/modules/ReportModule.gs`, `gas/src/triggers/OnEditTriggers.gs`, and `lib/daily-visit-report-service.ts`.
+- **Added on:** 2026-09-16

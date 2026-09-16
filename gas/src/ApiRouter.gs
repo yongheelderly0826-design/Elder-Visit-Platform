@@ -74,6 +74,10 @@ var ApiRouter = (function () {
     'reports.kpi': function (p) { return ReportModule.kpi(p); },
     'reports.dispatchSummary': function (p) { return ReportModule.dispatchSummary(p); },
     'reports.dailyVisitBundle': function (p) { return ReportModule.dailyVisitBundle(p); },
+    'reports.dailyVisitSnapshot': function (p) { return ReportModule.getDailyVisitSnapshot(p); },
+    'reports.saveDailyVisitSnapshot': function (p, b) {
+      return ReportModule.saveDailyVisitSnapshot(b && b.date ? b : p);
+    },
 
     'payments.calculate': function (p, b) { return PaymentModule.calculate(b); },
     'payments.lock': function (p, b) { return PaymentModule.lock(b); },

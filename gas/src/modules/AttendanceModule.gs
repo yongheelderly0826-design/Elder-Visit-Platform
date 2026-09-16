@@ -272,6 +272,13 @@ var AttendanceModule = (function () {
           visitor: enrichVisitor_(visitor),
         };
     ReadCache.bump();
+    if (isVisit) {
+      ReportModule.scheduleDailyVisitSnapshot(sessionDate);
+      var due = String((assignment && assignment.due_date) || '').slice(0, 10);
+      if (due && due !== sessionDate) {
+        ReportModule.scheduleDailyVisitSnapshot(due);
+      }
+    }
     return result;
   }
 

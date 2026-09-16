@@ -317,6 +317,26 @@ export const gasClient = {
         revalidateSeconds: options?.fresh ? undefined : 20,
         tags: options?.fresh ? undefined : ["gas-daily-visits"],
       }),
+    dailyVisitSnapshot: (date: string, options?: { fresh?: boolean }) =>
+      gasFetch<{
+        date?: string;
+        source?: string;
+        generated_at?: string;
+        assignments: unknown[];
+        visitors: unknown[];
+        cases: unknown[];
+        attendance: unknown[];
+        audits: unknown[];
+        careForms: unknown[];
+        backup?: { file_id?: string; file_url?: string; file_name?: string };
+      }>("reports.dailyVisitSnapshot", {
+        params: {
+          date,
+          ...(options?.fresh ? { fresh: "1" } : {}),
+        },
+        revalidateSeconds: options?.fresh ? undefined : 20,
+        tags: options?.fresh ? undefined : ["gas-daily-visits"],
+      }),
   },
   audit: {
     queue: (params?: { decision?: string }) =>

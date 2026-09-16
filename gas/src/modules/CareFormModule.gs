@@ -77,6 +77,11 @@ var CareFormModule = (function () {
     });
 
     ReadCache.bump();
+    var assignment = AssignmentModule.get(data.assignment_id);
+    ReportModule.scheduleDailyVisitSnapshot(
+      String((assignment && assignment.due_date) || '').slice(0, 10) ||
+        Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
+    );
     return {
       careform: record,
       validation: { ok: true, errorLines: [] },

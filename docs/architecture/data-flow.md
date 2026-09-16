@@ -98,7 +98,7 @@ GAS AttendanceModule.clock()
 
 | 資料 | 快取位置 | TTL | 更新方式 |
 |------|---------|-----|----------|
-| 每日訪視統計 | GAS CacheService + Next.js `unstable_cache` | 20–25 秒 | 派案、關懷表、到宅簽到退、稽核寫入時失效 |
+| 每日訪視統計 | GAS CacheService + `報表快照` 一天一列 JSON + Drive `報表快照/每日訪視統計/YYYY-MM-DD.json` | 讀取走快照 | 派案、到宅簽到退、關懷表、稽核後約 3 秒重算 |
 | 訪員任務清單 | GAS CacheService + Next.js `unstable_cache` | 20–25 秒 | 派案、關懷表寫入時失效 |
 | 訪查員主檔 | GAS CacheService | 5 min | 寫入時失效（規劃中） |
 | KPI 報表 | `報表快照` Sheet | 每日 | 定時觸發 06:00 |

@@ -254,5 +254,196 @@ var ReportModule = (function () {
     return kpi(params);
   }
 
-  return { kpi: kpi, dispatchSummary: dispatchSummary, dailyVisitBundle: dailyVisitBundle };
+  var REPORT_TYPE = 'daily_visit';
+  var ROOT_FOLDER_PROP = 'SNAPSHOT_ROOT_FOLDER_ID';
+  var DAILY_FOLDER_PROP = 'DAILY_VISIT_SNAPSHOT_FOLDER_ID';
+  var PENDING_DATES_PROP = 'pending_daily_visit_dates';
+
+  function todayTaipei_() {
+    return Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+
+  function findOrCreateFolder_(parent, name) {
+    var folders = parent.getFoldersByName(name);
+    return folders.hasNext() ? folders.next() : parent.createFolder(name);
+  }
+
+  function snapshotRootFolder_() {
+    var props = PropertiesService.getScriptProperties();
+    var cached = props.getProperty(ROOT_FOLDER_PROP);
+    if (cached) {
+      try {
+        return DriveApp.getFolderById(cached);
+      } catch (e) {
+        // recreate below
+      }
+    }
+    var parent = DriveApp.getRootFolder();
+    try {
+      var file = DriveApp.getFileById(Config.SPREADSHEET_ID());
+      var parents = file.getParents();
+      if (parents.hasNext()) parent = parents.next();
+    } catch (e) {
+      // keep root
+    }
+    var folder = findOrCreateFolder_(parent, '報表快照');
+    props.setProperty(ROOT_FOLDER_PROP, folder.getId());
+    return folder;
+  }
+
+  function dailyVisitBackupFolder_() {
+    var props = PropertiesService.getScriptProperties();
+    var cached = props.getProperty(DAILY_FOLDER_PROP);
+    if (cached) {
+      try {
+        return DriveApp.getFolderById(cached);
+      } catch (e) {
+        // recreate below
+      }
+    }
+    var folder = findOrCreateFolder_(snapshotRootFolder_(), '每日訪視統計');
+    props.setProperty(DAILY_FOLDER_PROP, folder.getId());
+    return folder;
+  }
+
+  function writeDriveBackup_(date, payload) {
+    var folder = dailyVisitBackupFolder_();
+    var fileName = date + '.json';
+    var body = JSON.stringify(payload, null, 2);
+    var existing = folder.getFilesByName(fileName);
+    var file;
+    if (existing.hasNext()) {
+      file = existing.next();
+      file.setContent(body);
+    } else {
+      file = folder.createFile(Utilities.newBlob(body, 'application/json', fileName));
+    }
+    return {
+      file_id: file.getId(),
+      file_url: file.getUrl(),
+      file_name: file.getName(),
+    };
+  }
+
+  function loadPayloadFromDrive_(date) {
+    try {
+      var files = dailyVisitBackupFolder_().getFilesByName(date + '.json');
+      if (!files.hasNext()) return null;
+      return JSON.parse(files.next().getBlob().getDataAsString());
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function findSnapshotRow_(date) {
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i].report_type) === REPORT_TYPE && String(rows[i].period) === date) {
+        return rows[i];
+      }
+    }
+    return null;
+  }
+
+  function parseSnapshotPayload_(row) {
+    if (!row || row.data_json === '' || row.data_json == null) return null;
+    try {
+      return typeof row.data_json === 'string' ? JSON.parse(row.data_json) : row.data_json;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function upsertSnapshotRow_(date, payload) {
+    var now = new Date().toISOString();
+    var existing = findSnapshotRow_(date);
+    var patch = {
+      report_type: REPORT_TYPE,
+      period: date,
+      data_json: JSON.stringify(payload),
+      created_at: now,
+    };
+    if (existing && existing.snapshot_id) {
+      SheetHelper.updateByKey(SHEET, 'snapshot_id', existing.snapshot_id, patch);
+      patch.snapshot_id = existing.snapshot_id;
+      return patch;
+    }
+    patch.snapshot_id = 'SNAP-DV-' + date.replace(/-/g, '');
+    return SheetHelper.appendRow(SHEET, patch);
+  }
+
+  function saveDailyVisitSnapshot(params) {
+    params = params || {};
+    var date = String(params.date || todayTaipei_()).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      var err = new Error('日期格式錯誤，請使用 YYYY-MM-DD');
+      err.code = 'VALIDATION_ERROR';
+      throw err;
+    }
+    var payload = dailyVisitBundle({ date: date, fresh: '1' });
+    payload.generated_at = new Date().toISOString();
+    payload.source = 'snapshot';
+    var backup = { file_id: '', file_url: '', file_name: '' };
+    try {
+      backup = writeDriveBackup_(date, payload);
+    } catch (e) {
+      // Drive 備份失敗仍保留試算表一列
+    }
+    payload.backup = backup;
+    upsertSnapshotRow_(date, payload);
+    return payload;
+  }
+
+  function getDailyVisitSnapshot(params) {
+    params = params || {};
+    var date = String(params.date || todayTaipei_()).trim();
+    var fresh = params.fresh === '1' || params.fresh === true || params.fresh === 'true';
+    if (!fresh) {
+      var parsed = parseSnapshotPayload_(findSnapshotRow_(date)) || loadPayloadFromDrive_(date);
+      if (parsed) {
+        parsed.source = parsed.source || 'snapshot';
+        parsed.date = parsed.date || date;
+        return parsed;
+      }
+    }
+    return saveDailyVisitSnapshot({ date: date });
+  }
+
+  function scheduleDailyVisitSnapshot(date) {
+    date = String(date || todayTaipei_()).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    try {
+      var props = PropertiesService.getScriptProperties();
+      var pending = {};
+      try {
+        pending = JSON.parse(props.getProperty(PENDING_DATES_PROP) || '{}') || {};
+      } catch (e) {
+        pending = {};
+      }
+      pending[date] = true;
+      props.setProperty(PENDING_DATES_PROP, JSON.stringify(pending));
+      var triggers = ScriptApp.getProjectTriggers();
+      var exists = false;
+      for (var i = 0; i < triggers.length; i++) {
+        if (triggers[i].getHandlerFunction() === 'runPendingDailyVisitSnapshots') {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        ScriptApp.newTrigger('runPendingDailyVisitSnapshots').timeBased().after(3000).create();
+      }
+    } catch (e) {
+      // 觸發器權限不足時略過，讀取頁會現算並存檔
+    }
+  }
+
+  return {
+    kpi: kpi,
+    dispatchSummary: dispatchSummary,
+    dailyVisitBundle: dailyVisitBundle,
+    saveDailyVisitSnapshot: saveDailyVisitSnapshot,
+    getDailyVisitSnapshot: getDailyVisitSnapshot,
+    scheduleDailyVisitSnapshot: scheduleDailyVisitSnapshot,
+  };
 })();

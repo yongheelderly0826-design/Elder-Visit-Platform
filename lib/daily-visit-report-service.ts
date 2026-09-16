@@ -122,13 +122,30 @@ async function loadDailyVisitReportLegacy(date: string): Promise<DailyVisitRepor
 
 async function loadDailyVisitReport(date: string, fresh = false): Promise<DailyVisitReport> {
   try {
-    const bundle = await gasClient.reports.dailyVisitBundle(date, { fresh });
-    return buildDailyVisitReport(date, sourcesFromBundle(bundle), "gas");
+    const bundle = await gasClient.reports.dailyVisitSnapshot(date, { fresh });
+    const report = buildDailyVisitReport(date, sourcesFromBundle(bundle), "gas");
+    if (bundle.source === "snapshot" && !fresh) {
+      report.note = [
+        report.note,
+        "此頁讀取當日快照；新派案或簽到後約數秒會自動更新，也可按重新整理立即重算。",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    return report;
   } catch (error) {
     if (!isUnknownGasAction(error)) {
-      console.error("dailyVisitBundle failed, falling back to legacy reads", error);
+      console.error("dailyVisitSnapshot failed, falling back to live bundle", error);
     }
-    return loadDailyVisitReportLegacy(date);
+    try {
+      const bundle = await gasClient.reports.dailyVisitBundle(date, { fresh });
+      return buildDailyVisitReport(date, sourcesFromBundle(bundle), "gas");
+    } catch (bundleError) {
+      if (!isUnknownGasAction(bundleError)) {
+        console.error("dailyVisitBundle failed, falling back to legacy reads", bundleError);
+      }
+      return loadDailyVisitReportLegacy(date);
+    }
   }
 }
 

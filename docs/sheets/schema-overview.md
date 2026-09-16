@@ -31,7 +31,7 @@
 | `稽核佇列` | `audit_id` | 覆核 |
 | `車馬費核銷` | `payment_id` | 費用 |
 | `匯出紀錄` | `export_id` | 衛福部匯出 log |
-| `報表快照` | `snapshot_id` | KPI 快取 |
+| `報表快照` | `snapshot_id` | KPI 與每日訪視 JSON 快照 |
 | `_操作日誌` | `log_id` | 系統 log |
 
 ---

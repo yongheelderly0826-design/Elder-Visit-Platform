@@ -162,6 +162,15 @@ var AuditModule = (function () {
     }
 
     ReadCache.bump();
+    if (preview.assignment_id) {
+      var assignment = AssignmentModule.get(preview.assignment_id);
+      if (assignment) {
+        ReportModule.scheduleDailyVisitSnapshot(
+          String(assignment.due_date || '').slice(0, 10) ||
+            Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
+        );
+      }
+    }
     return enrichItem_(updated);
   }
 

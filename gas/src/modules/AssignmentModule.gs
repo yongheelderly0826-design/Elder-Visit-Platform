@@ -69,6 +69,10 @@ var AssignmentModule = (function () {
 
     saved.visit_attempt = countAttempts_(data.case_id);
     ReadCache.bump();
+    ReportModule.scheduleDailyVisitSnapshot(
+      String(saved.due_date || '').slice(0, 10) ||
+        Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
+    );
     return saved;
   }
 
@@ -93,6 +97,10 @@ var AssignmentModule = (function () {
       });
     }
     ReadCache.bump();
+    ReportModule.scheduleDailyVisitSnapshot(
+      String(updated.due_date || '').slice(0, 10) ||
+        Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
+    );
     return updated;
   }
 
