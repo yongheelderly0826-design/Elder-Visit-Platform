@@ -197,6 +197,14 @@
 - **Evidence:** `components/visitor/visit-dialogue-form.tsx` and `lib/domain/mohw-life-care-validation.ts` (`visitorFacingMohwError`).
 - **Added on:** 2026-09-21
 
+## Lesson: Export and payment joins must use case_id / assignment_id, not encoded_id
+
+- **Trigger:** Four 已稽核 cases existed, but 匯出管理 showed 0 candidates and 核銷批次 showed 0 items after 核准.
+- **Cause:** `export.listCandidates` looked up care forms by `encoded_id`. Import reused `YH-115-A001` for every case (`parseInt('A001')` is NaN), so the latest row was a 待補件／草稿 and every case was skipped. GAS payment preview also always returned `[]`.
+- **Rule:** Join 關懷表 → 派案 → 個案 by `assignment_id` / `case_id`. Do not treat `encoded_id` as unique. `IdEncoder` must parse the `A###` suffix. Manager export/payment screens should use one composite GAS read.
+- **Evidence:** `gas/src/utils/VisitRecordIndex.gs`, `gas/src/modules/ExportModule.gs`, `gas/src/utils/IdEncoder.gs`, and `components/export/exports-workspace.tsx`.
+- **Added on:** 2026-09-21
+
 ## Lesson: Volunteer transport fees use hour brackets or per-trip, never hourly multiplication
 
 - **Trigger:** Yonghe volunteer reimbursement was still a TODO (`amount: 0`) while the 115.07.01 plan already had quarterly/annual tables, and meal delivery was missing.

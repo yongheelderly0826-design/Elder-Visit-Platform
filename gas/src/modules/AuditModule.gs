@@ -16,21 +16,36 @@ var AuditModule = (function () {
     return value === true || value === 'true' || value === '是' || value === 'TRUE';
   }
 
-  function enrichItem_(audit) {
-    var careform =
-      SheetHelper.findByKey(Config.SHEET_NAMES.CAREFORMS, 'careform_id', audit.careform_id)[0] ||
-      {};
-    var caseRow = {};
-    if (careform.assignment_id) {
-      var assignment = AssignmentModule.get(careform.assignment_id);
-      if (assignment && assignment.case_id) {
-        caseRow = CaseModule.get(assignment.case_id) || {};
-      }
+  function queue(params) {
+    var index = VisitRecordIndex.build();
+    params = params || {};
+    var rows = index.audits;
+    if (params.decision === 'all') {
+      // keep all
+    } else if (params.decision && params.decision !== 'pending') {
+      rows = rows.filter(function (r) {
+        return String(r.decision) === String(params.decision);
+      });
+    } else {
+      rows = rows.filter(function (r) {
+        return !r.decision;
+      });
     }
+    return rows.map(function (audit) {
+      return enrichFromIndex_(index, audit);
+    });
+  }
+
+  function enrichFromIndex_(index, audit) {
+    var careform = index.careformById[String(audit.careform_id || '').trim()] || {};
+    var assignment = index.assignmentById[String(careform.assignment_id || '').trim()] || {};
+    var caseRow = index.caseById[String(assignment.case_id || '').trim()] || {};
     if (!caseRow.case_id && careform.encoded_id) {
-      caseRow =
-        SheetHelper.findByKey(Config.SHEET_NAMES.CASES, 'encoded_id', careform.encoded_id)[0] ||
-        {};
+      // 僅在派案缺 case_id 時退回 encoded_id；多案共用編碼時可能對錯人
+      var encodedMatches = index.cases.filter(function (row) {
+        return String(row.encoded_id) === String(careform.encoded_id);
+      });
+      if (encodedMatches.length === 1) caseRow = encodedMatches[0];
     }
 
     var answers = parseAnswers_(careform);
@@ -46,7 +61,7 @@ var AuditModule = (function () {
       decision: audit.decision || '',
       reason: audit.reason || '',
       decided_at: audit.decided_at || '',
-      assignment_id: careform.assignment_id || '',
+      assignment_id: careform.assignment_id || assignment.assignment_id || '',
       encoded_id: careform.encoded_id || caseRow.encoded_id || '',
       case_id: caseRow.case_id || '',
       external_id: caseRow.external_id || '',
@@ -63,23 +78,6 @@ var AuditModule = (function () {
       error_count: (validation.errors && validation.errors.length) || 0,
       error_lines: (validation.errorLines || []).slice(0, 8),
     };
-  }
-
-  function queue(params) {
-    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
-    params = params || {};
-    if (params.decision === 'all') {
-      // keep all
-    } else if (params.decision && params.decision !== 'pending') {
-      rows = rows.filter(function (r) {
-        return String(r.decision) === String(params.decision);
-      });
-    } else {
-      rows = rows.filter(function (r) {
-        return !r.decision;
-      });
-    }
-    return rows.map(enrichItem_);
   }
 
   function enqueue(careformId) {
@@ -116,7 +114,7 @@ var AuditModule = (function () {
       throw missing;
     }
 
-    var preview = enrichItem_(current);
+    var preview = enrichFromIndex_(VisitRecordIndex.build(), current);
     if (decision === '通過' && preview.validation_ok === false) {
       var verr = new Error('中央系統欄位驗證未通過，不可核准');
       verr.code = 'MOHW_VALIDATION_ERROR';
@@ -171,7 +169,7 @@ var AuditModule = (function () {
         );
       }
     }
-    return enrichItem_(updated);
+    return enrichFromIndex_(VisitRecordIndex.build(), updated);
   }
 
   function findByCareform(careformId) {

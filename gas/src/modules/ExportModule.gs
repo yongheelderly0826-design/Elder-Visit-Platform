@@ -17,63 +17,61 @@ var ExportModule = (function () {
     }
   }
 
-  function latestCareform_(encodedId) {
-    var careforms = SheetHelper.findByKey(
-      Config.SHEET_NAMES.CAREFORMS, 'encoded_id', encodedId
-    );
-    if (!careforms.length) return null;
-    return careforms[careforms.length - 1];
-  }
-
-  function latestAudit_(careformId) {
-    if (!careformId) return null;
-    var audits = AuditModule.findByCareform(careformId);
-    if (!audits.length) return null;
-    return audits[audits.length - 1];
+  function candidateFrom_(index, careform, caseRow) {
+    var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+    var auditDecision = audit ? String(audit.decision || '') : '';
+    var auditedPass = auditDecision === '通過' || String(careform.status) === '已稽核';
+    var answers = parseAnswers_(careform);
+    var validation = MohwLifeCareValidator.validateRow(answers, 2);
+    return {
+      case_id: caseRow.case_id,
+      encoded_id: caseRow.encoded_id,
+      external_id: caseRow.external_id || '',
+      name: caseRow.name || '',
+      visit_district: caseRow.visit_district || '',
+      visit_village: caseRow.visit_village || '',
+      careform_id: careform.careform_id,
+      careform_status: careform.status,
+      visit_result: careform.visit_result || '',
+      submitted_at: careform.submitted_at || '',
+      audited_at: careform.audited_at || '',
+      audit_decision: auditDecision || (auditedPass ? '通過' : '待稽核'),
+      export_ready: auditedPass && validation.ok,
+      validation_ok: validation.ok,
+      error_count: validation.errors.length,
+      error_lines: validation.errorLines.slice(0, 5),
+      assignment_id: careform.assignment_id || '',
+    };
   }
 
   /**
-   * 可匯出候選清單：有已提交／已稽核關懷表的個案
-   * params.only_audited = true 時只回傳稽核通過
+   * 可匯出候選：已提交／已稽核關懷表，用派案 case_id 對個案，不用 encoded_id。
    */
-  function listCandidates(params) {
+  function listCandidatesFromIndex_(index, params) {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
-    var cases = CaseModule.list(params || {});
-    var items = [];
+    var district = String(params.district || '').trim();
+    var byCase = {};
 
-    cases.forEach(function (caseRow) {
-      var careform = latestCareform_(caseRow.encoded_id);
-      if (!careform) return;
-      if (careform.status !== '已提交' && careform.status !== '已稽核') return;
-
-      var audit = latestAudit_(careform.careform_id);
+    index.careforms.forEach(function (careform) {
+      if (!VisitRecordIndex.ELIGIBLE[String(careform.status || '')]) return;
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform);
+      if (!caseRow) return;
+      if (district && String(caseRow.visit_district || '') !== district) return;
+      var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
       var auditDecision = audit ? String(audit.decision || '') : '';
-      var auditedPass = auditDecision === '通過' || careform.status === '已稽核';
-
+      var auditedPass = auditDecision === '通過' || String(careform.status) === '已稽核';
       if (onlyAudited && !auditedPass) return;
+      var caseId = String(caseRow.case_id);
+      var prev = byCase[caseId];
+      if (prev && String(prev.careform.status) === '已稽核' && String(careform.status) !== '已稽核') {
+        return;
+      }
+      byCase[caseId] = { careform: careform, caseRow: caseRow };
+    });
 
-      var answers = parseAnswers_(careform);
-      var validation = MohwLifeCareValidator.validateRow(answers, 2);
-
-      items.push({
-        case_id: caseRow.case_id,
-        encoded_id: caseRow.encoded_id,
-        external_id: caseRow.external_id || '',
-        name: caseRow.name || '',
-        visit_district: caseRow.visit_district || '',
-        visit_village: caseRow.visit_village || '',
-        careform_id: careform.careform_id,
-        careform_status: careform.status,
-        visit_result: careform.visit_result || '',
-        submitted_at: careform.submitted_at || '',
-        audited_at: careform.audited_at || '',
-        audit_decision: auditDecision || (auditedPass ? '通過' : '待稽核'),
-        export_ready: auditedPass && validation.ok,
-        validation_ok: validation.ok,
-        error_count: validation.errors.length,
-        error_lines: validation.errorLines.slice(0, 5),
-      });
+    var items = Object.keys(byCase).map(function (caseId) {
+      return candidateFrom_(index, byCase[caseId].careform, byCase[caseId].caseRow);
     });
 
     return {
@@ -83,26 +81,70 @@ var ExportModule = (function () {
     };
   }
 
+  function listCandidates(params) {
+    params = params || {};
+    var onlyAudited = params.only_audited === true || params.only_audited === 'true';
+    var cacheKey = ReadCache.key(
+      'exportCand:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+    var result = listCandidatesFromIndex_(VisitRecordIndex.build(), params);
+    ReadCache.putJson(cacheKey, result);
+    return result;
+  }
+
+  function managerBundle(params) {
+    params = params || {};
+    var onlyAudited = params.only_audited === true || params.only_audited === 'true';
+    var cacheKey = ReadCache.key(
+      'exportMgr2:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
+    var index = VisitRecordIndex.build();
+    var candidates = listCandidatesFromIndex_(index, params);
+    var paymentItems = PaymentModule.visitItemsFromIndex(index);
+    var totalAmount = paymentItems.reduce(function (sum, item) {
+      return sum + (item.total_fee || 0);
+    }, 0);
+    var payload = {
+      candidates: candidates,
+      payments: {
+        batch_no: 'PB-VISIT-' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd'),
+        item_count: paymentItems.length,
+        total_amount: totalAmount,
+        items: paymentItems,
+        warnings: paymentItems.length ? [] : ['目前沒有稽核通過、可列入核銷的訪視。'],
+      },
+      counts: VisitRecordIndex.counts(index),
+    };
+    ReadCache.putJson(cacheKey, payload);
+    return payload;
+  }
+
   function exportLifeCareXlsx(data) {
     Validation.requireFields(data, ['case_ids']);
     var caseIds = data.case_ids;
     var onlyAudited = data.only_audited === true;
     var payloads = [];
     var skipped = [];
+    var index = VisitRecordIndex.build();
 
     caseIds.forEach(function (caseId) {
-      var caseRow = CaseModule.get(caseId);
+      var caseRow = index.caseById[String(caseId)] || CaseModule.get(caseId);
       if (!caseRow) {
         skipped.push({ case_id: caseId, reason: '個案不存在' });
         return;
       }
-      var careform = latestCareform_(caseRow.encoded_id);
+      var careform = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
       if (!careform) {
         skipped.push({ case_id: caseId, reason: '尚無關懷表' });
         return;
       }
       if (onlyAudited) {
-        var audit = latestAudit_(careform.careform_id);
+        var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
         var pass = (audit && audit.decision === '通過') || careform.status === '已稽核';
         if (!pass) {
           skipped.push({ case_id: caseId, reason: '尚未稽核通過' });
@@ -180,6 +222,7 @@ var ExportModule = (function () {
 
   return {
     listCandidates: listCandidates,
+    managerBundle: managerBundle,
     exportLifeCareXlsx: exportLifeCareXlsx,
     history: history,
   };

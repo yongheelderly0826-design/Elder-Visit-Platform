@@ -69,12 +69,102 @@ var PaymentModule = (function () {
     return SheetHelper.appendRow(SHEET, record);
   }
 
-  function lock(data) {
-    Validation.requireFields(data, ['payment_id']);
-    data.status = '已鎖定';
-    data.locked_at = new Date().toISOString();
-    return data;
+  function visitItemsFromIndex(index) {
+    var VISIT_FEE = 180;
+    var DATA_FEE = 30;
+    var byCase = {};
+    index.careforms.forEach(function (careform) {
+      if (String(careform.status) !== '已稽核') return;
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform);
+      if (!caseRow) return;
+      var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+      if (audit && String(audit.decision || '') && String(audit.decision) !== '通過') return;
+      byCase[String(caseRow.case_id)] = { careform: careform, caseRow: caseRow, audit: audit };
+    });
+    return Object.keys(byCase).map(function (caseId) {
+      var row = byCase[caseId];
+      return {
+        id: row.careform.careform_id,
+        case_id: row.caseRow.case_id,
+        case_code: row.caseRow.external_id || row.caseRow.encoded_id || row.caseRow.case_id,
+        elder_name: row.caseRow.name || '',
+        visit_record_id: row.careform.careform_id,
+        locked_at: row.careform.audited_at || (row.audit && row.audit.decided_at) || '',
+        visit_fee: VISIT_FEE,
+        data_processing_fee: DATA_FEE,
+        total_fee: VISIT_FEE + DATA_FEE,
+        status: 'locked',
+      };
+    });
   }
 
-  return { calculate: calculate, lock: lock };
+  function visitBatchPreview() {
+    var cacheKey = ReadCache.key('payVisit');
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+    var items = visitItemsFromIndex(VisitRecordIndex.build());
+    var total = items.reduce(function (sum, item) {
+      return sum + (item.total_fee || 0);
+    }, 0);
+    var payload = {
+      batch_no: 'PB-VISIT-' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd'),
+      item_count: items.length,
+      total_amount: total,
+      items: items,
+      warnings: items.length ? [] : ['目前沒有稽核通過、可列入核銷的訪視。'],
+    };
+    ReadCache.putJson(cacheKey, payload);
+    return payload;
+  }
+
+  function createVisitBatch() {
+    var preview = visitBatchPreview();
+    if (!preview.items.length) {
+      var err = new Error('目前沒有稽核通過、可列入核銷的訪視。');
+      err.code = 'NO_LOCKED_PAYMENTS';
+      throw err;
+    }
+    ensureSchema_();
+    var record = {
+      payment_id: 'PAY-' + Utilities.getUuid().slice(0, 8),
+      visitor_id: 'VISIT-FEE',
+      period: Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM'),
+      visit_count: preview.item_count,
+      total_hours: 0,
+      amount: preview.total_amount,
+      status: '已鎖定',
+      rule_code: 'visit_fee',
+      rule_label: '訪視費 180 + 資料處理費 30',
+      locked_at: new Date().toISOString(),
+    };
+    SheetHelper.appendRow(SHEET, record);
+    ReadCache.bump();
+    preview.batch_no = record.payment_id;
+    preview.payment_id = record.payment_id;
+    return preview;
+  }
+
+  function lock(data) {
+    Validation.requireFields(data, ['payment_id']);
+    ensureSchema_();
+    var updated = SheetHelper.updateByKey(SHEET, 'payment_id', data.payment_id, {
+      status: '已鎖定',
+      locked_at: new Date().toISOString(),
+    });
+    if (!updated) {
+      var missing = new Error('找不到核銷紀錄：' + data.payment_id);
+      missing.code = 'NOT_FOUND';
+      throw missing;
+    }
+    ReadCache.bump();
+    return updated;
+  }
+
+  return {
+    calculate: calculate,
+    lock: lock,
+    visitItemsFromIndex: visitItemsFromIndex,
+    visitBatchPreview: visitBatchPreview,
+    createVisitBatch: createVisitBatch,
+  };
 })();

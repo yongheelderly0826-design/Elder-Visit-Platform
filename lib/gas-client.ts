@@ -294,6 +294,35 @@ export const gasClient = {
         items: Array<Record<string, unknown>>;
       }>("export.listCandidates", {
         params: params as Record<string, string> | undefined,
+        revalidateSeconds: 20,
+        tags: ["gas-manager-exports"],
+      }),
+    managerBundle: (params?: {
+      district?: string;
+      only_audited?: string;
+    }) =>
+      gasFetch<{
+        candidates: {
+          total: number;
+          ready_count: number;
+          items: Array<Record<string, unknown>>;
+        };
+        payments: {
+          batch_no?: string;
+          item_count: number;
+          total_amount: number;
+          items: Array<Record<string, unknown>>;
+          warnings?: string[];
+        };
+        counts: {
+          pending_audit: number;
+          approved: number;
+          returned: number;
+        };
+      }>("export.managerBundle", {
+        params: params as Record<string, string> | undefined,
+        revalidateSeconds: 20,
+        tags: ["gas-manager-exports"],
       }),
     history: () => gasFetch<unknown[]>("export.history"),
   },
@@ -429,6 +458,26 @@ export const gasClient = {
       gasFetch<Record<string, unknown>>("payments.calculate", { method: "POST", body }),
     lock: (body: { payment_id: string }) =>
       gasFetch<Record<string, unknown>>("payments.lock", { method: "POST", body }),
+    visitBatchPreview: () =>
+      gasFetch<{
+        batch_no?: string;
+        item_count: number;
+        total_amount: number;
+        items: Array<Record<string, unknown>>;
+        warnings?: string[];
+      }>("payments.visitBatchPreview", {
+        revalidateSeconds: 20,
+        tags: ["gas-manager-exports"],
+      }),
+    createVisitBatch: () =>
+      gasFetch<{
+        batch_no?: string;
+        payment_id?: string;
+        item_count: number;
+        total_amount: number;
+        items: Array<Record<string, unknown>>;
+        warnings?: string[];
+      }>("payments.createVisitBatch", { method: "POST", body: {} }),
   },
 };
 

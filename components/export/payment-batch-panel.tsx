@@ -7,15 +7,28 @@ import { Button } from "@/components/ui/button";
 import { paymentFeeRules } from "@/lib/domain/payments";
 import type { PaymentBatch, PaymentFeeRule } from "@/lib/domain/types";
 
-export function PaymentBatchPanel() {
+export function PaymentBatchPanel({
+  initialBatch,
+  initialFeeRule,
+  onBatchCreated,
+}: {
+  initialBatch?: PaymentBatch | null;
+  initialFeeRule?: PaymentFeeRule;
+  onBatchCreated?: (batch: PaymentBatch) => void;
+} = {}) {
   const canCalculatePayments = useCan("payments.calculate");
-  const [batch, setBatch] = useState<PaymentBatch | null>(null);
-  const [feeRule, setFeeRule] = useState<PaymentFeeRule>(paymentFeeRules);
+  const [batch, setBatch] = useState<PaymentBatch | null>(initialBatch ?? null);
+  const [feeRule, setFeeRule] = useState<PaymentFeeRule>(initialFeeRule ?? paymentFeeRules);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialBatch) {
+      setBatch(initialBatch);
+      if (initialFeeRule) setFeeRule(initialFeeRule);
+      return;
+    }
     void loadPreview();
-  }, []);
+  }, [initialBatch, initialFeeRule]);
 
   async function loadPreview() {
     const response = await fetch("/api/payments/batch");
@@ -29,8 +42,15 @@ export function PaymentBatchPanel() {
     const result = (await response.json()) as { data?: PaymentBatch; feeRule?: PaymentFeeRule };
     setBatch(result.data ?? null);
     setFeeRule(result.feeRule ?? paymentFeeRules);
-    setMessage(result.data ? `已建立核銷批次 ${result.data.batchNo}` : "建立批次失敗。");
+    if (result.data) {
+      setMessage(`已建立核銷批次 ${result.data.batchNo}`);
+      onBatchCreated?.(result.data);
+    } else {
+      setMessage("建立批次失敗。");
+    }
   }
+
+  const showBatch = batch !== null;
 
   return (
     <section className="rounded-lg border bg-card p-4">
@@ -39,7 +59,7 @@ export function PaymentBatchPanel() {
         <h2 className="text-base font-semibold">核銷批次</h2>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        將已鎖定的核銷項目彙整成批次，確認總額後再交給匯出模板。
+        將稽核通過的訪視彙整成核銷批次（訪視費 180 元＋資料處理費 30 元／案），確認後再匯出。
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <MiniMetric label="訪視費" value={`${feeRule.visitFee} 元`} />
@@ -50,7 +70,7 @@ export function PaymentBatchPanel() {
         {feeRule.description}
       </p>
 
-      {batch && (
+      {showBatch && batch && (
         <div className="mt-4 grid gap-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <MiniMetric label="批次編號" value={batch.batchNo} />
@@ -98,7 +118,10 @@ export function PaymentBatchPanel() {
             </table>
           </div>
 
-          <Button disabled={!canCalculatePayments} onClick={createBatch}>
+          <Button
+            disabled={!canCalculatePayments || batch.itemCount === 0}
+            onClick={createBatch}
+          >
             <CircleDollarSign className="h-4 w-4" />
             建立核銷批次
           </Button>

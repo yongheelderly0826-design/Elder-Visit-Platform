@@ -24,6 +24,20 @@ import type {
 type GasCaseRow = Record<string, string | number>;
 type GasAssignmentRow = Record<string, string | number>;
 
+function mapGasVisitPaymentItems(raw: Array<Record<string, unknown>>) {
+  return raw.map((row) => ({
+    id: String(row.id ?? row.visit_record_id ?? ""),
+    caseCode: String(row.case_code ?? row.external_id ?? row.case_id ?? ""),
+    elderName: String(row.elder_name ?? row.name ?? ""),
+    visitRecordId: String(row.visit_record_id ?? row.id ?? ""),
+    lockedAt: String(row.locked_at ?? new Date().toISOString()),
+    visitFee: Number(row.visit_fee ?? 180),
+    dataProcessingFee: Number(row.data_processing_fee ?? 30),
+    totalFee: Number(row.total_fee ?? 210),
+    status: (String(row.status) === "exported" ? "exported" : "locked") as "locked" | "exported",
+  }));
+}
+
 function mapPriorityToRisk(priority: string): ElderCase["riskLevel"] {
   if (priority === "高" || priority === "urgent") return "high";
   if (priority === "低" || priority === "low") return "low";
@@ -526,16 +540,42 @@ export const gasRepository: AppRepository = {
   },
 
   async getPaymentBatchPreview() {
-    return {
-      batch: createPaymentBatchPreview([]),
-      feeRule: paymentFeeRules,
-    } satisfies PaymentBatchData;
+    try {
+      const preview = await gasClient.payments.visitBatchPreview();
+      const batch = createPaymentBatchPreview(mapGasVisitPaymentItems(preview.items ?? []));
+      return {
+        batch: {
+          ...batch,
+          batchNo: String(preview.batch_no ?? batch.batchNo),
+          warnings: preview.warnings?.length ? preview.warnings : batch.warnings,
+        },
+        feeRule: paymentFeeRules,
+      } satisfies PaymentBatchData;
+    } catch {
+      return {
+        batch: createPaymentBatchPreview([]),
+        feeRule: paymentFeeRules,
+      } satisfies PaymentBatchData;
+    }
   },
 
   async createPaymentBatch() {
-    return {
-      batch: createPaymentBatchPreview([]),
-      feeRule: paymentFeeRules,
-    } satisfies PaymentBatchData;
+    try {
+      const created = await gasClient.payments.createVisitBatch();
+      const batch = createPaymentBatchPreview(mapGasVisitPaymentItems(created.items ?? []));
+      return {
+        batch: {
+          ...batch,
+          id: String(created.payment_id ?? created.batch_no ?? batch.id),
+          batchNo: String(created.payment_id ?? created.batch_no ?? batch.batchNo),
+        },
+        feeRule: paymentFeeRules,
+      } satisfies PaymentBatchData;
+    } catch {
+      return {
+        batch: createPaymentBatchPreview([]),
+        feeRule: paymentFeeRules,
+      } satisfies PaymentBatchData;
+    }
   },
 };

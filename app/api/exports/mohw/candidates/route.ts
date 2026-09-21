@@ -4,7 +4,7 @@ import { requireCapability } from "@/lib/api/authorization";
 import { GasApiError, gasClient, isGasConfigured } from "@/lib/gas-client";
 import { mohwLifeCareSampleAnswers } from "@/lib/domain/mohw-life-care-ui";
 import { validateMohwLifeCareRow } from "@/lib/domain/mohw-life-care-validation";
-import type { MohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
+import { mapMohwExportCandidate, type MohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
 import { getSystemStatus } from "@/lib/system/env";
 
 export type { MohwExportCandidate };
@@ -51,29 +51,6 @@ function demoCandidates(): MohwExportCandidate[] {
   ];
 }
 
-function mapGasItem(raw: Record<string, unknown>): MohwExportCandidate {
-  return {
-    caseId: String(raw.case_id ?? ""),
-    encodedId: String(raw.encoded_id ?? ""),
-    externalId: String(raw.external_id ?? ""),
-    name: String(raw.name ?? ""),
-    district: String(raw.visit_district ?? ""),
-    village: String(raw.visit_village ?? ""),
-    careformId: String(raw.careform_id ?? ""),
-    careformStatus: String(raw.careform_status ?? ""),
-    visitResult: String(raw.visit_result ?? ""),
-    submittedAt: String(raw.submitted_at ?? ""),
-    auditedAt: String(raw.audited_at ?? ""),
-    auditDecision: String(raw.audit_decision ?? ""),
-    exportReady: Boolean(raw.export_ready),
-    validationOk: Boolean(raw.validation_ok),
-    errorCount: Number(raw.error_count ?? 0),
-    errorLines: Array.isArray(raw.error_lines)
-      ? raw.error_lines.map(String)
-      : [],
-  };
-}
-
 export async function GET(request: NextRequest) {
   const forbidden = requireCapability(request, "exports.create");
   if (forbidden) return forbidden;
@@ -89,7 +66,7 @@ export async function GET(request: NextRequest) {
         ...(onlyAudited ? { only_audited: "true" } : {}),
       });
       const items = (result.items ?? []).map((item) =>
-        mapGasItem(item as Record<string, unknown>),
+        mapMohwExportCandidate(item as Record<string, unknown>),
       );
       return NextResponse.json({
         data: {

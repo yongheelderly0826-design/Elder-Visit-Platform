@@ -69,6 +69,7 @@ var ApiRouter = (function () {
 
     'export.lifeCareXlsx': function (p, b) { return ExportModule.exportLifeCareXlsx(b); },
     'export.listCandidates': function (p) { return ExportModule.listCandidates(p); },
+    'export.managerBundle': function (p) { return ExportModule.managerBundle(p); },
     'export.history': function (p) { return ExportModule.history(p); },
 
     'reports.kpi': function (p) { return ReportModule.kpi(p); },
@@ -81,6 +82,8 @@ var ApiRouter = (function () {
 
     'payments.calculate': function (p, b) { return PaymentModule.calculate(b); },
     'payments.lock': function (p, b) { return PaymentModule.lock(b); },
+    'payments.visitBatchPreview': function () { return PaymentModule.visitBatchPreview(); },
+    'payments.createVisitBatch': function (p, b) { return PaymentModule.createVisitBatch(b); },
   };
 
   function dispatch(action, params, body) {

@@ -3,11 +3,19 @@ import { ClipboardCheck, FileText, ShieldCheck, UserRoundCog } from "lucide-reac
 
 type ManagementStep = "assignments" | "follow_up" | "audit" | "exports";
 
+export type ManagementWorkflowCounts = {
+  pendingAssignments?: string;
+  pendingFollowUp?: string;
+  pendingAudit?: string;
+  pendingExport?: string;
+};
+
 const steps = [
   {
     key: "assignments" as const,
     label: "待派案",
     detail: "18 件",
+    countKey: "pendingAssignments" as const,
     href: "/manager/assignments",
     icon: UserRoundCog,
   },
@@ -15,6 +23,7 @@ const steps = [
     key: "follow_up" as const,
     label: "待補件",
     detail: "6 件",
+    countKey: "pendingFollowUp" as const,
     href: "/manager/notifications",
     icon: ClipboardCheck,
   },
@@ -22,6 +31,7 @@ const steps = [
     key: "audit" as const,
     label: "待稽核",
     detail: "27 件",
+    countKey: "pendingAudit" as const,
     href: "/manager/audit",
     icon: ShieldCheck,
   },
@@ -29,12 +39,19 @@ const steps = [
     key: "exports" as const,
     label: "待核銷",
     detail: "2 批",
+    countKey: "pendingExport" as const,
     href: "/manager/exports",
     icon: FileText,
   },
 ];
 
-export function ManagementWorkflowBar({ active }: { active: ManagementStep }) {
+export function ManagementWorkflowBar({
+  active,
+  counts,
+}: {
+  active: ManagementStep;
+  counts?: ManagementWorkflowCounts;
+}) {
   return (
     <section className="rounded-lg border bg-card p-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -54,7 +71,9 @@ export function ManagementWorkflowBar({ active }: { active: ManagementStep }) {
                   <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                   <p className="text-sm font-semibold">{step.label}</p>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{step.detail}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {counts?.[step.countKey] ?? step.detail}
+                </p>
               </div>
             </Link>
           );

@@ -12,7 +12,8 @@ var IdEncoder = (function () {
     var maxNum = 0;
     cases.forEach(function (c) {
       if (c.encoded_id && c.encoded_id.indexOf(prefix) === 0) {
-        var num = parseInt(c.encoded_id.split('-').pop(), 10);
+        var match = String(c.encoded_id).match(/A(\d+)$/i);
+        var num = match ? parseInt(match[1], 10) : NaN;
         if (!isNaN(num) && num > maxNum) maxNum = num;
       }
     });

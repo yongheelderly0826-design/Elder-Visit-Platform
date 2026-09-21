@@ -52,14 +52,30 @@ function downloadToComputer(url: string, filename?: string) {
   link.remove();
 }
 
-export function MohwExportPanel() {
+export function MohwExportPanel({
+  items: controlledItems,
+  mode: controlledMode,
+  note: controlledNote,
+  loading: controlledLoading,
+  onlyAudited: controlledOnlyAudited,
+  onOnlyAuditedChange,
+  onRefresh,
+}: {
+  items?: MohwExportCandidate[];
+  mode?: "gas" | "demo";
+  note?: string | null;
+  loading?: boolean;
+  onlyAudited?: boolean;
+  onOnlyAuditedChange?: (value: boolean) => void;
+  onRefresh?: () => void;
+} = {}) {
   const canCreateExport = useCan("exports.create");
-  const [items, setItems] = useState<MohwExportCandidate[]>([]);
-  const [mode, setMode] = useState<"gas" | "demo">("demo");
-  const [note, setNote] = useState<string | null>(null);
-  const [onlyAudited, setOnlyAudited] = useState(true);
+  const [internalItems, setInternalItems] = useState<MohwExportCandidate[]>([]);
+  const [internalMode, setInternalMode] = useState<"gas" | "demo">("demo");
+  const [internalNote, setInternalNote] = useState<string | null>(null);
+  const [internalOnlyAudited, setInternalOnlyAudited] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const [internalLoading, setInternalLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorLines, setErrorLines] = useState<string[]>([]);
@@ -71,33 +87,48 @@ export function MohwExportPanel() {
   const [destination, setDestination] = useState<ExportDestination>("drive");
 
   const loadCandidates = useCallback(async () => {
-    setLoading(true);
+    if (onRefresh) {
+      onRefresh();
+      return;
+    }
+    setInternalLoading(true);
     setMessage(null);
     try {
       const res = await fetch(
-        `/api/exports/mohw/candidates?onlyAudited=${onlyAudited ? "true" : "false"}`,
+        `/api/exports/mohw/candidates?onlyAudited=${internalOnlyAudited ? "true" : "false"}`,
       );
       const json = (await res.json()) as CandidatesResponse;
       if (!res.ok) {
-        setItems([]);
+        setInternalItems([]);
         setMessage(json.error?.message ?? "讀取候選清單失敗");
         return;
       }
       const nextItems = json.data?.items ?? [];
-      setItems(nextItems);
-      setMode(json.data?.mode ?? "demo");
-      setNote(json.data?.note ?? null);
+      setInternalItems(nextItems);
+      setInternalMode(json.data?.mode ?? "demo");
+      setInternalNote(json.data?.note ?? null);
       setSelected(new Set(nextItems.filter((item) => item.exportReady).map((item) => item.caseId)));
     } catch {
       setMessage("讀取候選清單失敗");
     } finally {
-      setLoading(false);
+      setInternalLoading(false);
     }
-  }, [onlyAudited]);
+  }, [internalOnlyAudited, onRefresh]);
 
   useEffect(() => {
+    if (onRefresh) return;
     void loadCandidates();
-  }, [loadCandidates]);
+  }, [loadCandidates, onRefresh]);
+
+  const items = controlledItems ?? internalItems;
+  const mode = controlledMode ?? internalMode;
+  const note = controlledNote ?? internalNote;
+  const loading = controlledLoading ?? internalLoading;
+  const onlyAudited = controlledOnlyAudited ?? internalOnlyAudited;
+
+  useEffect(() => {
+    setSelected(new Set(items.filter((item) => item.exportReady).map((item) => item.caseId)));
+  }, [items]);
 
   const readyCount = useMemo(
     () => items.filter((item) => item.exportReady).length,
@@ -240,7 +271,11 @@ export function MohwExportPanel() {
           <input
             type="checkbox"
             checked={onlyAudited}
-            onChange={(event) => setOnlyAudited(event.target.checked)}
+            onChange={(event) => {
+              const next = event.target.checked;
+              onOnlyAuditedChange?.(next);
+              if (!onOnlyAuditedChange) setInternalOnlyAudited(next);
+            }}
           />
           只顯示稽核通過
         </label>
@@ -306,7 +341,7 @@ export function MohwExportPanel() {
             {items.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
-                  {loading ? "載入中…" : "目前沒有可匯出候選"}
+                  {loading ? "載入中…" : "目前沒有可匯出候選。核准後的個案會出現在這裡。"}
                 </td>
               </tr>
             ) : (
