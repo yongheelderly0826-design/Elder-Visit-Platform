@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
 import { SignaturePad } from "@/components/consent/signature-pad";
 import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
@@ -23,7 +23,10 @@ import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import {
+  careFieldDomId,
+  mapMohwErrorsToFields,
   validateMohwLifeCareRow,
+  visitorFacingMohwError,
   type MohwValidationError,
 } from "@/lib/domain/mohw-life-care-validation";
 import {
@@ -70,6 +73,11 @@ export function VisitDialogueForm({
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() =>
     createInitialMohwAnswers(elderCase, schedule),
   );
+  const [openSectionTitles, setOpenSectionTitles] = useState<string[]>(() =>
+    mohwLifeCareSections
+      .filter((section) => section.title.startsWith("一、"))
+      .map((section) => section.title),
+  );
   const draftKey = getVisitDraftKey(schedule.id);
   const careFormDraftKey = `${draftKey}:mohw_life_care_form`;
   const validation = useMemo(
@@ -106,6 +114,17 @@ export function VisitDialogueForm({
         { row: 2 },
       ),
     [careFormAnswers, submission],
+  );
+  const displayedMohwErrors = useMemo(() => {
+    const byId = new Map<string, MohwValidationError>();
+    for (const error of [...mohwValidation.errors, ...mohwErrors]) {
+      byId.set(`${error.key}:${error.code}`, error);
+    }
+    return [...byId.values()];
+  }, [mohwErrors, mohwValidation.errors]);
+  const mohwErrorByField = useMemo(
+    () => mapMohwErrorsToFields(displayedMohwErrors),
+    [displayedMohwErrors],
   );
   const isMissedVisit = submission.visitResult === "未遇";
   const activePhotoCategories = isMissedVisit ? missedVisitPhotoCategories : optionalPhotoCategories;
@@ -171,12 +190,12 @@ export function VisitDialogueForm({
     const localCheck = validateMohwLifeCareRow(mohwAnswers, { row: 2 });
     if (!localCheck.ok) {
       setMohwErrors(localCheck.errors);
-      setResult(
-        `驗證失敗：${localCheck.errorLines.slice(0, 3).join("；")}${
-          localCheck.errorLines.length > 3 ? "…" : ""
-        }`,
-      );
+      setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
       setIsSubmitting(false);
+      const firstError = localCheck.errors[0];
+      if (firstError) {
+        openAndJumpToCareField(firstError.key, setOpenSectionTitles);
+      }
       return;
     }
 
@@ -207,10 +226,16 @@ export function VisitDialogueForm({
     };
 
     if (!response.ok) {
-      if (data.error?.errors?.length) {
-        setMohwErrors(data.error.errors);
+      const serverErrors = data.error?.errors ?? [];
+      if (serverErrors.length) {
+        setMohwErrors(serverErrors);
+        openAndJumpToCareField(serverErrors[0].key, setOpenSectionTitles);
       }
-      setResult(data.error?.message ?? "送出失敗");
+      setResult(
+        serverErrors.length
+          ? `關懷表還有 ${serverErrors.length} 項需要修改，請看紅字說明`
+          : (data.error?.message ?? "送出失敗"),
+      );
       setIsSubmitting(false);
       return;
     }
@@ -354,11 +379,13 @@ export function VisitDialogueForm({
                 必填 {careFormCompletion.completed}/{careFormCompletion.required}
               </p>
               <p
-                className={`mt-1 text-xs ${
-                  mohwValidation.ok ? "text-emerald-700" : "text-amber-800"
+                className={`mt-1 text-sm ${
+                  displayedMohwErrors.length === 0 ? "text-emerald-700" : "text-amber-800"
                 }`}
               >
-                MOHW 驗證 {mohwValidation.ok ? "通過" : `${mohwValidation.errors.length} 項錯誤`}
+                {displayedMohwErrors.length === 0
+                  ? "欄位檢查通過"
+                  : `${displayedMohwErrors.length} 項需修改`}
               </p>
             </div>
           </div>
@@ -373,15 +400,26 @@ export function VisitDialogueForm({
               尚缺必填：{careFormCompletion.missingLabels.join("、")}
             </p>
           )}
-          {(mohwErrors.length > 0 || (!mohwValidation.ok && mohwValidation.errorLines.length > 0)) && (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-900">
-              <p className="font-medium">MOHW 驗證錯誤（含儲存格座標）</p>
-              <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-auto pl-4 font-mono">
-                {(mohwErrors.length ? mohwErrors.map((e) => e.display) : mohwValidation.errorLines)
-                  .slice(0, 20)
-                  .map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
+          {displayedMohwErrors.length > 0 && (
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-950">
+              <p className="text-sm font-medium">
+                有 {displayedMohwErrors.length} 項需要修改
+              </p>
+              <p className="mt-1 text-sm leading-6 text-red-900/80">
+                點選項目會跳到那一欄，欄位下方也有說明。
+              </p>
+              <ul className="mt-2 max-h-56 space-y-1 overflow-auto">
+                {displayedMohwErrors.map((error) => (
+                  <li key={`${error.key}:${error.code}:${error.message}`}>
+                    <button
+                      type="button"
+                      className="w-full rounded-md px-2 py-1.5 text-left text-sm leading-6 hover:bg-red-100"
+                      onClick={() => openAndJumpToCareField(error.key, setOpenSectionTitles)}
+                    >
+                      {visitorFacingMohwError(error)}
+                    </button>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -429,15 +467,25 @@ export function VisitDialogueForm({
           <div className="mt-4 rounded-lg border bg-card p-3">
             <p className="text-sm font-semibold">快速查看區段</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {mohwLifeCareSections.map((section, index) => (
-                <a
-                  key={`jump-${section.title}`}
-                  href={`#care-form-section-${index + 1}`}
-                  className="rounded-md bg-secondary px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
-                >
-                  {section.title}
-                </a>
-              ))}
+              {mohwLifeCareSections.map((section, index) => {
+                const sectionErrorCount = section.fields.filter((field) =>
+                  mohwErrorByField.has(field.key),
+                ).length;
+                return (
+                  <a
+                    key={`jump-${section.title}`}
+                    href={`#care-form-section-${index + 1}`}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-primary hover:text-primary-foreground ${
+                      sectionErrorCount > 0
+                        ? "bg-red-50 text-red-900"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {section.title}
+                    {sectionErrorCount > 0 ? ` · ${sectionErrorCount} 項` : ""}
+                  </a>
+                );
+              })}
             </div>
           </div>
 
@@ -446,17 +494,40 @@ export function VisitDialogueForm({
               const sectionCompletion = careFormCompletion.sections.find(
                 (item) => item.title === section.title,
               );
+              const sectionErrorCount = section.fields.filter((field) =>
+                mohwErrorByField.has(field.key),
+              ).length;
               return (
                 <details
                   id={`care-form-section-${index + 1}`}
                   key={section.title}
-                  className="scroll-mt-24 rounded-lg border bg-card"
-                  open={section.title.startsWith("一、")}
+                  className={`scroll-mt-24 rounded-lg border bg-card ${
+                    sectionErrorCount > 0 ? "border-destructive/40" : ""
+                  }`}
+                  open={openSectionTitles.includes(section.title)}
+                  onToggle={(event) => {
+                    const nextOpen = event.currentTarget.open;
+                    setOpenSectionTitles((current) => {
+                      if (nextOpen) {
+                        return current.includes(section.title)
+                          ? current
+                          : [...current, section.title];
+                      }
+                      return current.filter((title) => title !== section.title);
+                    });
+                  }}
                 >
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
                     <span>{section.title}</span>
-                    <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">
-                      {sectionCompletion?.completed ?? 0}/{sectionCompletion?.required ?? 0}
+                    <span className="flex items-center gap-2">
+                      {sectionErrorCount > 0 && (
+                        <span className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-900">
+                          需修改 {sectionErrorCount}
+                        </span>
+                      )}
+                      <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">
+                        {sectionCompletion?.completed ?? 0}/{sectionCompletion?.required ?? 0}
+                      </span>
                     </span>
                   </summary>
                   <div className="grid gap-3 border-t p-3 md:grid-cols-2 xl:grid-cols-3">
@@ -467,6 +538,7 @@ export function VisitDialogueForm({
                         key={field.key}
                         field={field}
                         value={careFormAnswers[field.key]}
+                        error={mohwErrorByField.get(field.key)}
                         onChange={(value) =>
                           setCareFormAnswers((current) => ({ ...current, [field.key]: value }))
                         }
@@ -656,6 +728,7 @@ export function VisitDialogueForm({
           validationMissing={validation.missing}
           careFormPercent={careFormCompletion.percent}
           careFormMissing={careFormCompletion.missingLabels}
+          mohwErrorCount={displayedMohwErrors.length}
           result={result}
         />
         <SubmitVisitButton
@@ -691,6 +764,7 @@ export function VisitDialogueForm({
             validationMissing={validation.missing}
             careFormPercent={careFormCompletion.percent}
             careFormMissing={careFormCompletion.missingLabels}
+            mohwErrorCount={displayedMohwErrors.length}
             result={result}
           />
           <SubmitVisitButton
@@ -801,22 +875,71 @@ function GuideFact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function sectionTitleForCareField(key: string): string | undefined {
+  return mohwLifeCareSections.find((section) =>
+    section.fields.some((field) => field.key === key),
+  )?.title;
+}
+
+function openAndJumpToCareField(
+  key: string,
+  setOpenSectionTitles: Dispatch<SetStateAction<string[]>>,
+) {
+  const sectionTitle = sectionTitleForCareField(key);
+  if (sectionTitle) {
+    setOpenSectionTitles((current) =>
+      current.includes(sectionTitle) ? current : [...current, sectionTitle],
+    );
+  }
+  window.requestAnimationFrame(() => {
+    const fieldEl = document.getElementById(careFieldDomId(key));
+    if (!fieldEl) return;
+    const details = fieldEl.closest("details");
+    if (details instanceof HTMLDetailsElement) {
+      details.open = true;
+    }
+    fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    const focusable = fieldEl.querySelector<HTMLElement>("input, select, textarea, button");
+    focusable?.focus({ preventScroll: true });
+  });
+}
+
 function CareFormInput({
   field,
   value,
+  error,
   onChange,
 }: {
   field: MohwFormField;
   value: MohwLifeCareAnswers[string];
+  error?: MohwValidationError;
   onChange: (value: MohwLifeCareAnswers[string]) => void;
 }) {
   const requiredMark = field.required ? <span className="text-destructive"> *</span> : null;
   const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
+  const fieldId = careFieldDomId(field.key);
+  const errorId = `${fieldId}-error`;
+  const controlClass = `h-10 rounded-md bg-card px-3 text-sm ${
+    error
+      ? "border border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+      : "border"
+  }`;
+
+  const errorText = error ? (
+    <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
+      {visitorFacingMohwError(error)}
+    </p>
+  ) : null;
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];
     return (
-      <div className="rounded-md border bg-background p-3">
+      <div
+        id={fieldId}
+        className={`scroll-mt-28 rounded-md border p-3 ${
+          error ? "border-destructive bg-destructive/5" : "bg-background"
+        }`}
+      >
         <p className="text-sm font-medium">
           {field.label}
           {requiredMark}
@@ -845,18 +968,21 @@ function CareFormInput({
             );
           })}
         </div>
+        {errorText ? <div className="mt-2">{errorText}</div> : null}
       </div>
     );
   }
 
   if (field.type === "single_choice") {
     return (
-      <label className="grid gap-1 text-sm font-medium">
+      <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
         {field.label}
         {requiredMark}
         <select
-          className="h-10 rounded-md border bg-card px-3 text-sm"
+          className={controlClass}
           value={typeof value === "string" ? value : ""}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           onChange={(event) => onChange(event.target.value)}
         >
           <option value="">請選擇</option>
@@ -866,19 +992,22 @@ function CareFormInput({
             </option>
           ))}
         </select>
+        {errorText}
       </label>
     );
   }
 
   return (
-    <label className="grid gap-1 text-sm font-medium">
+    <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
       {field.label}
       {requiredMark}
       <input
-        className="h-10 rounded-md border bg-card px-3 text-sm"
+        className={controlClass}
         type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
         placeholder={isTimeField ? "HH:mm（24小時制）" : undefined}
         value={typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : ""}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         onChange={(event) => onChange(event.target.value)}
         onBlur={
           field.mohwKey.endsWith("national_id")
@@ -893,6 +1022,7 @@ function CareFormInput({
             : undefined
         }
       />
+      {errorText}
     </label>
   );
 }
@@ -902,6 +1032,7 @@ function SubmissionStatus({
   validationMissing,
   careFormPercent,
   careFormMissing,
+  mohwErrorCount,
   result,
   compact = false,
 }: {
@@ -909,6 +1040,7 @@ function SubmissionStatus({
   validationMissing: string[];
   careFormPercent: number;
   careFormMissing: string[];
+  mohwErrorCount: number;
   result: string | null;
   compact?: boolean;
 }) {
@@ -918,14 +1050,19 @@ function SubmissionStatus({
         <p className="text-destructive">尚缺：{validationMissing.join("、")}</p>
       )}
       {careFormPercent < 100 && (
-        <p className="text-destructive">衛福部關懷表尚缺必填：{careFormMissing.join("、")}</p>
+        <p className="text-destructive">關懷表尚缺必填：{careFormMissing.join("、")}</p>
       )}
-      {result && (
+      {mohwErrorCount > 0 && (
+        <p className="text-destructive">關懷表有 {mohwErrorCount} 項需修改，請看紅字說明</p>
+      )}
+      {result && (result.includes("需") || result.includes("失敗") ? (
+        <p className="font-medium text-destructive">{result}</p>
+      ) : (
         <p className="flex items-center gap-2 font-medium text-primary">
           <CheckCircle2 className="h-4 w-4" />
           {result}
         </p>
-      )}
+      ))}
     </div>
   );
 }

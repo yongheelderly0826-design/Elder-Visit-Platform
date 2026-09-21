@@ -29,7 +29,7 @@ export type MohwValidationError = {
     | "PHONE_OR_MOBILE"
     | "VISITOR_REQUIRED";
   message: string;
-  /** Full MOHW-style message: `I3 身分證號碼格式不正確` */
+  /** Manager / export message with Excel cell: `I3 身分證號碼格式不正確` */
   display: string;
 };
 
@@ -611,4 +611,62 @@ export function validateMohwLifeCareBatch(
     results,
     errorLines: results.flatMap((result) => result.errorLines),
   };
+}
+
+export function careFieldDomId(key: string): string {
+  return `care-field-${key}`;
+}
+
+/** Attach shared errors to the fields a visitor actually sees. */
+export function mapMohwErrorsToFields(
+  errors: MohwValidationError[],
+): Map<string, MohwValidationError> {
+  const map = new Map<string, MohwValidationError>();
+  for (const error of errors) {
+    if (!map.has(error.key)) map.set(error.key, error);
+    if (error.code === "PHONE_OR_MOBILE" && !map.has("mobile")) {
+      map.set("mobile", error);
+    }
+    if (error.code === "VISITOR_REQUIRED" && !map.has("civil_worker_role")) {
+      map.set("civil_worker_role", error);
+    }
+  }
+  return map;
+}
+
+/** Plain-language copy for 訪查員. Keep Excel coordinates on manager export only. */
+export function visitorFacingMohwError(error: MohwValidationError): string {
+  switch (error.code) {
+    case "REQUIRED":
+      if (error.message.includes("已填社政")) {
+        return `已開始填社政訪查人，請補齊「${error.label}」`;
+      }
+      if (error.message.includes("已填民政")) {
+        return `已開始填民政訪查人，請補齊「${error.label}」`;
+      }
+      if (error.message.includes("條件")) {
+        return `依前面的答案，請補填「${error.label}」`;
+      }
+      return `請填寫「${error.label}」`;
+    case "INVALID_NATIONAL_ID":
+      return `「${error.label}」請填 10 碼身分證（1 個英文字加 9 個數字），不要填案號或姓名`;
+    case "INVALID_DATE":
+      return "日期請用民國年，例如 115/09/21";
+    case "INVALID_TIME":
+      return "時間請用 24 小時制，例如 09:30";
+    case "INVALID_NUMBER":
+      return "這一欄請填數字";
+    case "INVALID_MULTI":
+      return "多選請直接點畫面上的選項";
+    case "INVALID_OPTION":
+      return `「${error.label}」請改選畫面上的選項`;
+    case "MAX_LENGTH":
+      return error.message.startsWith("字數") ? error.message : "字數太多，請縮短";
+    case "PHONE_OR_MOBILE":
+      return "電話或手機請至少填一項";
+    case "VISITOR_REQUIRED":
+      return "社政訪查人或民政訪查人請擇一填寫";
+    default:
+      return error.message;
+  }
 }

@@ -189,6 +189,14 @@
 - **Evidence:** `gas/src/modules/ReportModule.gs`, `gas/src/triggers/OnEditTriggers.gs`, and `lib/daily-visit-report-service.ts`.
 - **Added on:** 2026-09-16
 
+## Lesson: Visitor care-form errors belong on the field, not in Excel coordinates
+
+- **Trigger:** 高齡訪查員 saw `I2` / `CV2` and “MOHW 驗證錯誤（含儲存格座標）” and could not tell which box to fix.
+- **Cause:** Validation already had `key` / `label` / `message`, but the visitor form only rendered `display` (cell + jargon) in a top list. Inputs had no error state.
+- **Rule:** On the visitor care form, show a plain-language reason under the field, rewrite the top list with Chinese labels, and jump to that field on tap. Keep Excel coordinates on manager export / audit only.
+- **Evidence:** `components/visitor/visit-dialogue-form.tsx` and `lib/domain/mohw-life-care-validation.ts` (`visitorFacingMohwError`).
+- **Added on:** 2026-09-21
+
 ## Lesson: Volunteer transport fees use hour brackets or per-trip, never hourly multiplication
 
 - **Trigger:** Yonghe volunteer reimbursement was still a TODO (`amount: 0`) while the 115.07.01 plan already had quarterly/annual tables, and meal delivery was missing.
