@@ -3,6 +3,18 @@ var AssignmentModule = (function () {
   var ACTIVE_STATUSES = { '待接案': true, '進行中': true, '空訪續訪': true };
 
   function list(params) {
+    params = params || {};
+    var cacheKey = ReadCache.key(
+      'asgL:' +
+        String(params.visitor_id || '') +
+        ':' +
+        String(params.status || '') +
+        ':' +
+        String(params.active_only || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.visitor_id) {
       var wantedVisitor = String(params.visitor_id).trim();
@@ -16,6 +28,7 @@ var AssignmentModule = (function () {
     if (params.active_only === true || params.active_only === 'true') {
       rows = rows.filter(function (r) { return ACTIVE_STATUSES[r.status]; });
     }
+    ReadCache.putJson(cacheKey, rows);
     return rows;
   }
 

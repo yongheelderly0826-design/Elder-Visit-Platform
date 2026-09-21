@@ -390,76 +390,81 @@ export const gasRepository: AppRepository = {
   },
 
   async getAssignmentDashboard() {
-    const [caseRows, visitorRows, assignmentRows] = await Promise.all([
-      gasClient.cases.list({ district: "永和區" }) as Promise<GasCaseRow[]>,
-      gasClient.visitors.list() as Promise<GasCaseRow[]>,
-      gasClient.assignments.list({ active_only: "true" }) as Promise<GasAssignmentRow[]>,
-    ]);
+    return cachedRead(
+      ["assignment-dashboard"],
+      [GAS_READ_TAGS.assignmentDashboard],
+      async () => {
+        const [caseRows, visitorRows, assignmentRows] = await Promise.all([
+          gasClient.cases.list({ district: "永和區" }) as Promise<GasCaseRow[]>,
+          gasClient.visitors.list() as Promise<GasCaseRow[]>,
+          gasClient.assignments.list({ active_only: "true" }) as Promise<GasAssignmentRow[]>,
+        ]);
 
-    const activeCountByVisitor = new Map<string, number>();
-    for (const row of assignmentRows) {
-      const visitorId = String(row.visitor_id ?? "");
-      if (!visitorId) continue;
-      activeCountByVisitor.set(visitorId, (activeCountByVisitor.get(visitorId) ?? 0) + 1);
-    }
+        const activeCountByVisitor = new Map<string, number>();
+        for (const row of assignmentRows) {
+          const visitorId = String(row.visitor_id ?? "");
+          if (!visitorId) continue;
+          activeCountByVisitor.set(visitorId, (activeCountByVisitor.get(visitorId) ?? 0) + 1);
+        }
 
-    const activeCaseIds = new Set(
-      assignmentRows
-        .map((row) => String(row.case_id ?? "").trim())
-        .filter(Boolean),
-    );
-
-    const pendingRows = caseRows.filter((row) => {
-      const caseId = String(row.case_id ?? "");
-      if (activeCaseIds.has(caseId)) return false;
-      const status = String(row.visit_status ?? "");
-      return status === "待訪" || status === "待派案" || status === "" || status === "pending";
-    });
-    const cases = pendingRows.map(toElderCase);
-
-    // Prefer assignable visitors first; keep inactive visible but sorted later
-    const visitors = visitorRows
-      .map((v) => {
-        const visitorId = String(v.visitor_id ?? "");
-        return {
-          id: visitorId,
-          fullName: String(v.name ?? ""),
-          workerType: "general" as const,
-          districtCoverage: String(v.service_areas ?? "")
-            .split(",")
-            .map((s) => s.trim())
+        const activeCaseIds = new Set(
+          assignmentRows
+            .map((row) => String(row.case_id ?? "").trim())
             .filter(Boolean),
-          villageCoverage: [],
-          activeTaskCount: activeCountByVisitor.get(visitorId) ?? 0,
-          maxDailyTasks: 8,
-          trainedModules: ["assignment", "visit_form"] as VisitorProfile["trainedModules"],
-          visitorCertificateNo: v.badge_no ? String(v.badge_no) : null,
-          certificateStatus: v.badge_no ? ("valid" as const) : ("missing" as const),
-          trainingDate: null,
-          bankAccountLast5: null,
-          remittanceReady: false,
-          status: v.status === "已核准" ? ("available" as const) : ("inactive" as const),
-        };
-      })
-      .sort((a, b) => Number(b.status === "available") - Number(a.status === "available"));
+        );
 
-    return {
-      cases,
-      visitors,
-      recommendations: cases.slice(0, 40).map((elderCase, index) => ({
-        id: `rec-${elderCase.id}`,
-        caseId: elderCase.id,
-        scheduleId: `sch-${elderCase.id}`,
-        visitorId: "",
-        score: 80 - index,
-        status: "recommended" as const,
-        reasons: [
-          elderCase.village,
-          elderCase.riskLevel === "high" ? "高風險優先" : "待派案",
-        ].filter(Boolean),
-        warnings: [],
-      })),
-    } satisfies AssignmentDashboardData;
+        const pendingRows = caseRows.filter((row) => {
+          const caseId = String(row.case_id ?? "");
+          if (activeCaseIds.has(caseId)) return false;
+          const status = String(row.visit_status ?? "");
+          return status === "待訪" || status === "待派案" || status === "" || status === "pending";
+        });
+        const cases = pendingRows.map(toElderCase);
+
+        const visitors = visitorRows
+          .map((v) => {
+            const visitorId = String(v.visitor_id ?? "");
+            return {
+              id: visitorId,
+              fullName: String(v.name ?? ""),
+              workerType: "general" as const,
+              districtCoverage: String(v.service_areas ?? "")
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+              villageCoverage: [],
+              activeTaskCount: activeCountByVisitor.get(visitorId) ?? 0,
+              maxDailyTasks: 8,
+              trainedModules: ["assignment", "visit_form"] as VisitorProfile["trainedModules"],
+              visitorCertificateNo: v.badge_no ? String(v.badge_no) : null,
+              certificateStatus: v.badge_no ? ("valid" as const) : ("missing" as const),
+              trainingDate: null,
+              bankAccountLast5: null,
+              remittanceReady: false,
+              status: v.status === "已核准" ? ("available" as const) : ("inactive" as const),
+            };
+          })
+          .sort((a, b) => Number(b.status === "available") - Number(a.status === "available"));
+
+        return {
+          cases,
+          visitors,
+          recommendations: cases.slice(0, 40).map((elderCase, index) => ({
+            id: `rec-${elderCase.id}`,
+            caseId: elderCase.id,
+            scheduleId: `sch-${elderCase.id}`,
+            visitorId: "",
+            score: 80 - index,
+            status: "recommended" as const,
+            reasons: [
+              elderCase.village,
+              elderCase.riskLevel === "high" ? "高風險優先" : "待派案",
+            ].filter(Boolean),
+            warnings: [],
+          })),
+        } satisfies AssignmentDashboardData;
+      },
+    );
   },
 
   async confirmAssignment(recommendationId: string, visitorId?: string) {

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { gasClient } from "@/lib/gas-client";
+import { cachedRead, GAS_READ_TAGS, invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { highCareDemoRecords, summarizeHighCareRecords } from "@/lib/domain/high-care-demo";
 import { HIGH_CARE_STATUSES, type HighCareStatus } from "@/lib/domain/high-care-rules";
 import { getSystemStatus } from "@/lib/system/env";
@@ -16,10 +17,15 @@ export async function GET(request: NextRequest) {
 
   if (system.dataMode === "gas_ready") {
     try {
-      const [items, stats] = await Promise.all([
-        gasClient.highCare.list({ color: color || undefined, status: status || undefined }),
-        gasClient.highCare.stats(),
-      ]);
+      const [items, stats] = await cachedRead(
+        ["high-care", color, status],
+        [GAS_READ_TAGS.highCare],
+        () =>
+          Promise.all([
+            gasClient.highCare.list({ color: color || undefined, status: status || undefined }),
+            gasClient.highCare.stats(),
+          ]),
+      );
       return NextResponse.json({ data: { items, stats, source: "gas" } });
     } catch (error) {
       const message = error instanceof Error ? error.message : "高關懷名冊讀取失敗";
@@ -69,6 +75,7 @@ export async function POST(request: NextRequest) {
         owner: body.owner,
         note: body.note,
       });
+      invalidateGasReadCaches();
       return NextResponse.json({ data: { record, source: "gas" } });
     } catch (error) {
       const message = error instanceof Error ? error.message : "高關懷更新失敗";

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { GasApiError, gasClient, isGasConfigured, isUnknownGasAction } from "@/lib/gas-client";
 import { mapMohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
+import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 function paymentsFromCandidates(items: ReturnType<typeof mapMohwExportCandidate>[]) {
@@ -55,7 +56,27 @@ export async function GET(request: NextRequest) {
     let counts = { pending_audit: 0, approved: 0, returned: 0 };
 
     try {
-      const result = await gasClient.export.managerBundle(params);
+      const result = await cachedRead(
+        ["manager-bundle", onlyAudited ? "1" : "0", district],
+        [GAS_READ_TAGS.managerExports],
+        async () => {
+          try {
+            return await gasClient.export.managerBundle(params);
+          } catch (error) {
+            if (!isUnknownGasAction(error)) throw error;
+            const fallback = await gasClient.export.listCandidates(params);
+            return {
+              candidates: {
+                total: fallback.total,
+                ready_count: fallback.ready_count,
+                items: fallback.items,
+              },
+              payments: null,
+              counts: null,
+            };
+          }
+        },
+      );
       candidatesRaw = result.candidates?.items ?? [];
       if (result.payments?.items?.length) {
         payments = {
@@ -79,9 +100,7 @@ export async function GET(request: NextRequest) {
       }
       if (result.counts) counts = result.counts;
     } catch (error) {
-      if (!isUnknownGasAction(error)) throw error;
-      const result = await gasClient.export.listCandidates(params);
-      candidatesRaw = result.items ?? [];
+      throw error;
     }
 
     const items = candidatesRaw.map((item) => mapMohwExportCandidate(item));

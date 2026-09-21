@@ -2,6 +2,18 @@ var CaseModule = (function () {
   var SHEET = Config.SHEET_NAMES.CASES;
 
   function list(params) {
+    params = params || {};
+    var cacheKey = ReadCache.key(
+      'caseL:' +
+        String(params.district || '') +
+        ':' +
+        String(params.case_type || '') +
+        ':' +
+        String(params.visit_status || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.district) {
       rows = rows.filter(function (r) {
@@ -14,6 +26,7 @@ var CaseModule = (function () {
     if (params.visit_status) {
       rows = rows.filter(function (r) { return r.visit_status === params.visit_status; });
     }
+    ReadCache.putJson(cacheKey, rows);
     return rows;
   }
 
@@ -51,6 +64,7 @@ var CaseModule = (function () {
       SheetHelper.appendRow(SHEET, row);
       imported.push(row.case_id);
     });
+    ReadCache.bump();
     return { imported: imported.length, case_ids: imported };
   }
 

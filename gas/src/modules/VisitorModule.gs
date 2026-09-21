@@ -2,11 +2,17 @@ var VisitorModule = (function () {
   var SHEET = Config.SHEET_NAMES.VISITORS;
 
   function list(params) {
+    params = params || {};
+    var cacheKey = ReadCache.key('visL:' + String(params.status || ''));
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.status) {
       rows = rows.filter(function (r) { return r.status === params.status; });
     }
+    ReadCache.putJson(cacheKey, rows);
     return rows;
   }
 

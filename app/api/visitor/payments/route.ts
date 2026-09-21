@@ -37,11 +37,12 @@ export async function GET(request: NextRequest) {
 
   if (getSystemStatus().dataMode === "gas_ready" && visitorId) {
     try {
-      const approved = await gasClient.audit.queue({ decision: "通過" });
-      const pending = await gasClient.audit.queue({ decision: "pending" });
-      const mine = [...approved, ...pending].filter(
-        (row) => String(row.visitor_id ?? "").trim() === visitorId,
-      );
+      const rows = await gasClient.audit.queue({ decision: "all" });
+      const mine = rows.filter((row) => {
+        if (String(row.visitor_id ?? "").trim() !== visitorId) return false;
+        const decision = String(row.decision ?? "");
+        return !decision || decision === "通過";
+      });
 
       auditItems = mine.map((row) => {
         const decision = String(row.decision ?? "");

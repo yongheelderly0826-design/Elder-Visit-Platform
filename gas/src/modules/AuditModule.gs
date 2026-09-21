@@ -17,8 +17,13 @@ var AuditModule = (function () {
   }
 
   function queue(params) {
-    var index = VisitRecordIndex.build();
     params = params || {};
+    var decisionKey = params.decision ? String(params.decision) : 'pending';
+    var cacheKey = ReadCache.key('auditQ:' + decisionKey);
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
+    var index = VisitRecordIndex.build();
     var rows = index.audits;
     if (params.decision === 'all') {
       // keep all
@@ -31,9 +36,11 @@ var AuditModule = (function () {
         return !r.decision;
       });
     }
-    return rows.map(function (audit) {
+    var result = rows.map(function (audit) {
       return enrichFromIndex_(index, audit);
     });
+    ReadCache.putJson(cacheKey, result);
+    return result;
   }
 
   function enrichFromIndex_(index, audit) {

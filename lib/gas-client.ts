@@ -140,7 +140,11 @@ async function gasFetch<T>(
 export const gasClient = {
   visitors: {
     list: (params?: { status?: string }) =>
-      gasFetch<unknown[]>("visitors.list", { params: params as Record<string, string> }),
+      gasFetch<unknown[]>("visitors.list", {
+        params: params as Record<string, string>,
+        revalidateSeconds: 20,
+        tags: ["gas-assignment-dashboard"],
+      }),
     get: (id: string) => gasFetch<unknown>("visitors.get", { params: { id } }),
     getByIdNumber: (idNumber: string) =>
       gasFetch<unknown>("visitors.getByIdNumber", { params: { id_number: idNumber } }),
@@ -209,7 +213,11 @@ export const gasClient = {
   },
   cases: {
     list: (params?: { district?: string; case_type?: string; visit_status?: string }) =>
-      gasFetch<unknown[]>("cases.list", { params: params as Record<string, string> }),
+      gasFetch<unknown[]>("cases.list", {
+        params: params as Record<string, string>,
+        revalidateSeconds: 20,
+        tags: ["gas-assignment-dashboard"],
+      }),
     get: (id: string) => gasFetch<unknown>("cases.get", { params: { id } }),
     getEncoded: (code: string) => gasFetch<unknown>("cases.getEncoded", { params: { code } }),
     import: (body: { rows: unknown[] }) =>
@@ -217,7 +225,11 @@ export const gasClient = {
   },
   assignments: {
     list: (params?: { visitor_id?: string; status?: string; active_only?: string }) =>
-      gasFetch<unknown[]>("assignments.list", { params: params as Record<string, string> }),
+      gasFetch<unknown[]>("assignments.list", {
+        params: params as Record<string, string>,
+        revalidateSeconds: 20,
+        tags: ["gas-assignment-dashboard"],
+      }),
     visitorTasksBundle: (params: { visitor_id?: string; active_only?: string }) =>
       gasFetch<{
         visitor_id?: string;
@@ -240,9 +252,14 @@ export const gasClient = {
     list: (params?: { color?: string; status?: string }) =>
       gasFetch<Array<Record<string, unknown>>>("highcare.list", {
         params: params as Record<string, string> | undefined,
+        revalidateSeconds: 20,
+        tags: ["gas-high-care"],
       }),
     stats: () =>
-      gasFetch<Record<string, number>>("highcare.stats"),
+      gasFetch<Record<string, number>>("highcare.stats", {
+        revalidateSeconds: 20,
+        tags: ["gas-high-care"],
+      }),
     update: (body: { high_care_id: string; status?: string; owner?: string; note?: string }) =>
       gasFetch<Record<string, unknown>>("highcare.update", { method: "POST", body }),
   },
@@ -371,6 +388,8 @@ export const gasClient = {
     queue: (params?: { decision?: string }) =>
       gasFetch<Array<Record<string, unknown>>>("audit.queue", {
         params: params as Record<string, string> | undefined,
+        revalidateSeconds: 20,
+        tags: ["gas-audit-queue"],
       }),
     decide: (body: {
       audit_id: string;

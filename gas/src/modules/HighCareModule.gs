@@ -70,18 +70,29 @@ var HighCareModule = (function () {
   }
 
   function list(params) {
+    params = params || {};
+    var color = params.color || '';
+    var status = params.status || '';
+    var cacheKey = ReadCache.key('hcL:' + color + ':' + status);
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     ensureSheet();
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
-    var color = params && params.color;
-    var status = params && params.status;
-    return rows.filter(function (row) {
+    rows = rows.filter(function (row) {
       if (color && String(row.colors || '').indexOf(color) === -1) return false;
       if (status && String(row.status) !== String(status)) return false;
       return true;
     });
+    ReadCache.putJson(cacheKey, rows);
+    return rows;
   }
 
   function stats() {
+    var cacheKey = ReadCache.key('hcS');
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     var rows = list({});
     var summary = { total: rows.length, 橘: 0, 黃: 0, 綠: 0, 追蹤中: 0, 已轉介: 0, 已結案: 0 };
     rows.forEach(function (row) {
@@ -90,6 +101,7 @@ var HighCareModule = (function () {
       });
       if (summary[row.status] !== undefined) summary[row.status] += 1;
     });
+    ReadCache.putJson(cacheKey, summary);
     return summary;
   }
 
@@ -157,7 +169,9 @@ var HighCareModule = (function () {
     if (data.status) patch.status = data.status;
     if (data.owner !== undefined) patch.owner = data.owner;
     if (data.note !== undefined) patch.note = data.note;
-    return SheetHelper.updateByKey(SHEET, 'high_care_id', data.high_care_id, patch);
+    var updated = SheetHelper.updateByKey(SHEET, 'high_care_id', data.high_care_id, patch);
+    ReadCache.bump();
+    return updated;
   }
 
   return {

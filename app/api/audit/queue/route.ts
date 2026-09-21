@@ -4,6 +4,7 @@ import { requireAnyCapability } from "@/lib/api/authorization";
 import { auditQueue } from "@/lib/domain/audit-data";
 import { mapGasAuditQueueItem } from "@/lib/domain/gas-audit";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 export async function GET(request: NextRequest) {
@@ -15,7 +16,11 @@ export async function GET(request: NextRequest) {
 
   if (status.dataMode === "gas_ready") {
     try {
-      const rows = await gasClient.audit.queue({ decision });
+      const rows = await cachedRead(
+        ["audit-queue", decision],
+        [GAS_READ_TAGS.auditQueue],
+        () => gasClient.audit.queue({ decision }),
+      );
       const items = rows.map(mapGasAuditQueueItem);
       return NextResponse.json({
         data: {
