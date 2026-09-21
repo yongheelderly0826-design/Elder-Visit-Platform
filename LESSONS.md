@@ -188,3 +188,11 @@
 - **Rule:** Keep `報表快照` as one row per day (`report_type=daily_visit`, `period=YYYY-MM-DD`) and back up to Drive `報表快照/每日訪視統計/YYYY-MM-DD.json`. Rebuild a few seconds after dispatch, visit clock, care-form submit, or audit decide; do not create a new spreadsheet per day.
 - **Evidence:** `gas/src/modules/ReportModule.gs`, `gas/src/triggers/OnEditTriggers.gs`, and `lib/daily-visit-report-service.ts`.
 - **Added on:** 2026-09-16
+
+## Lesson: Volunteer transport fees use hour brackets or per-trip, never hourly multiplication
+
+- **Trigger:** Yonghe volunteer reimbursement was still a TODO (`amount: 0`) while the 115.07.01 plan already had quarterly/annual tables, and meal delivery was missing.
+- **Cause:** The plan tables look like they include an hourly rate, but payment is the lump sum of the highest reached hour bracket. Meal delivery is 100 NTD per breakfast/lunch/dinner trip.
+- **Rule:** Look up the volunteer group, accumulate hours or meal trips in the settlement period, and pay the matching bracket total or `trips × 100`. Do not compute `hours × hourly rate`.
+- **Evidence:** `lib/domain/volunteer-transport-fees.ts`, `gas/src/utils/VolunteerTransportFees.gs`, and `gas/src/modules/PaymentModule.gs`.
+- **Added on:** 2026-09-18

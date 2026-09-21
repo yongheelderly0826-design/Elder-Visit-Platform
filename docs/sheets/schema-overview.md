@@ -210,9 +210,11 @@
 | payment_id | 核銷編號 | text | ✅ | |
 | visitor_id | 訪查員 | text | ✅ | |
 | period | 期間 | text | | 115-Q1 |
-| visit_count | 訪視件數 | number | | |
-| total_hours | 總時數 | number | | |
-| amount | 金額 | number | | |
+| visit_count | 訪視件數／送餐次數 | number | | 送餐組為早中晚次數 |
+| total_hours | 總時數 | number | | 達標核銷用累積時數 |
+| amount | 金額 | number | | 達標檔總額或送餐次數 × 100，不按小時乘算 |
+| rule_code | 規則代碼 | text | | meal / quarterly / annual / none |
+| rule_label | 核銷說明 | text | | 套用的級距或次數 |
 | status | 狀態 | enum | | 待計算/已鎖定/已匯款 |
 | locked_at | 鎖定時間 | datetime | | |
 

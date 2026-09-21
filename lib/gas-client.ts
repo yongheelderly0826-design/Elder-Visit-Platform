@@ -424,6 +424,12 @@ export const gasClient = {
         body: { consent_id: consentId },
       }),
   },
+  payments: {
+    calculate: (body: { visitor_id: string; period: string; group?: string }) =>
+      gasFetch<Record<string, unknown>>("payments.calculate", { method: "POST", body }),
+    lock: (body: { payment_id: string }) =>
+      gasFetch<Record<string, unknown>>("payments.lock", { method: "POST", body }),
+  },
 };
 
 export function isGasConfigured(): boolean {

@@ -153,7 +153,7 @@ X-Workspace-Id: WS-YH-115
 
 | Method | Path | 說明 |
 |--------|------|------|
-| POST | `?action=payments.calculate` | 計算 |
+| POST | `?action=payments.calculate` | 志工交通費核銷：送餐按早中晚次數 × 100；其餘組別依累積達標時數取檔，不按小時乘算 |
 | POST | `?action=payments.lock` | 鎖定批次 |
 
 ---

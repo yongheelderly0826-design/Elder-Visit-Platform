@@ -102,7 +102,7 @@ var SheetHelper = (function () {
       '高關懷名冊': ['high_care_id', 'case_id', 'careform_id', 'assignment_id', 'encoded_id', 'elder_name', 'colors', 'primary_color', 'trigger_keys', 'trigger_labels', 'trigger_values', 'opened_at', 'status', 'owner', 'note', 'last_visit_triggered', 'updated_at'],
       '空訪紀錄': ['missed_visit_id', 'assignment_id', 'encoded_id', 'visitor_id', 'photo_urls', 'notes', 'recorded_at'],
       '稽核佇列': ['audit_id', 'careform_id', 'reviewer', 'decision', 'reason', 'decided_at'],
-      '車馬費核銷': ['payment_id', 'visitor_id', 'period', 'visit_count', 'total_hours', 'amount', 'status', 'locked_at'],
+      '車馬費核銷': ['payment_id', 'visitor_id', 'period', 'visit_count', 'total_hours', 'amount', 'rule_code', 'rule_label', 'status', 'locked_at'],
       '匯出紀錄': ['export_id', 'export_type', 'case_count', 'file_url', 'exported_by', 'exported_at'],
       '報表快照': ['snapshot_id', 'report_type', 'period', 'data_json', 'created_at'],
       '電子同意書': ['consent_id', 'template_id', 'template_version', 'title', 'signer_name', 'signer_role', 'visitor_id', 'case_id', 'schedule_id', 'external_ref', 'signature_file_id', 'signature_file_url', 'signature_mime_type', 'signature_file_name', 'signed_at', 'is_test', 'field_values_json', 'metadata_json', 'pdf_file_id', 'pdf_file_url', 'pdf_file_name', 'pdf_generated_at', 'pdf_template_key', 'signature_folder_id', 'signature_folder_url', 'pdf_folder_id', 'pdf_folder_url'],
