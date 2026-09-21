@@ -246,19 +246,30 @@ export function mohwCellRef(col: number, row: number): string {
   return `${colIndexToLetter(col)}${row}`;
 }
 
-/** Taiwan national ID / ROC ID check digit (same algorithm as GAS Validation.gs). */
+/** Strip spaces, dashes and full-width digits; keep A–Z + 0–9. */
+export function normalizeTaiwanId(id: string): string {
+  return String(id ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/** Taiwan national ID / resident certificate check digit (same algorithm as GAS Validation.gs). */
 export function validateTaiwanId(id: string): boolean {
-  if (!id || id.length !== 10) return false;
+  const normalized = normalizeTaiwanId(id);
+  if (!normalized || normalized.length !== 10) return false;
   const letters = "ABCDEFGHJKLMNPQRSTUVXYWZIO";
-  const letterIndex = letters.indexOf(id.charAt(0).toUpperCase());
+  const letterIndex = letters.indexOf(normalized.charAt(0));
   if (letterIndex === -1) return false;
-  if (!/^[A-Z][12]\d{8}$/i.test(id)) return false;
+  // 1/2 = 本國身分證；8/9 = 新式外來人口統一證號
+  if (!/^[A-Z][1289]\d{8}$/.test(normalized)) return false;
 
   const nums = [Math.floor(letterIndex / 10) + 1, letterIndex % 10];
   for (let i = 1; i < 9; i++) {
-    nums.push(Number.parseInt(id.charAt(i), 10));
+    nums.push(Number.parseInt(normalized.charAt(i), 10));
   }
-  const checksum = Number.parseInt(id.charAt(9), 10);
+  const checksum = Number.parseInt(normalized.charAt(9), 10);
   let sum = nums[0] + nums[1] * 9;
   for (let j = 2; j < 10; j++) {
     sum += nums[j] * (10 - j);
@@ -472,11 +483,12 @@ export function validateMohwLifeCareRow(
     const text = asString(raw);
 
     if (NATIONAL_ID_KEYS.has(column.key) && !validateTaiwanId(text)) {
+      const label = column.header.replace(/\s*\*+$/, "").replace(/\*$/, "");
       pushError(errors, {
         key: column.key,
         row,
         code: "INVALID_NATIONAL_ID",
-        message: "身分證號碼格式不正確",
+        message: `${label}格式不正確（須 1 碼英文 + 9 碼數字，檢查碼須正確；勿填案號或姓名）`,
       });
     }
 

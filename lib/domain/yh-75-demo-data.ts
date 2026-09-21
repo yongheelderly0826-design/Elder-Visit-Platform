@@ -2469,6 +2469,7 @@ export const yh75DemoElderCases: ElderCase[] = sourceRows.map((row, index) => {
     name: row.name,
     age,
     gender: row.gender,
+    nationalId: row.nationalId,
     phone: row.phone ?? row.mobilePhone ?? "未提供",
     mobilePhone: row.mobilePhone,
     address: row.residenceAddress || row.householdAddress,

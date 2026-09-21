@@ -214,6 +214,7 @@ export function createInitialMohwAnswers(
     visit_status: "已完成",
     name: elderCase.name,
     gender: elderCase.gender ?? "",
+    national_id: elderCase.nationalId ?? "",
     phone: elderCase.phone,
     mobile: elderCase.mobilePhone ?? "",
     line_id_status: elderCase.lineIdStatus ?? "",

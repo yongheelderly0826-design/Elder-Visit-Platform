@@ -139,6 +139,7 @@ var MohwLifeCareMapper = (function () {
 
     if (caseRow.name && !answers.name) answers.name = caseRow.name;
     if (caseRow.national_id && !answers.national_id) answers.national_id = caseRow.national_id;
+    if (caseRow.id_number && !answers.national_id) answers.national_id = caseRow.id_number;
     if (caseRow.birth_date && !answers.birth_date) answers.birth_date = caseRow.birth_date;
     if (caseRow.phone && !answers.phone) answers.phone = caseRow.phone;
     if (caseRow.mobile && !answers.mobile) answers.mobile = caseRow.mobile;

@@ -375,6 +375,7 @@ export type ElderCase = {
   name: string;
   age: number;
   gender: string | null;
+  nationalId?: string | null;
   phone: string;
   mobilePhone: string | null;
   address: string;

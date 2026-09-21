@@ -252,7 +252,8 @@ var MohwLifeCareValidator = (function () {
       var text = asString(answers[k2]);
 
       if (ID_KEYS[k2] && !Validation.validateTaiwanId(text)) {
-        pushErr(errors, k2, row, '身分證號碼格式不正確');
+        var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
+        pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
       }
       if (DATE_KEYS[k2] && !isRocDate(text)) {
         pushErr(errors, k2, row, '日期格式不正確（請用民國年 yyy/MM/dd 或 yyyy-MM-dd）');

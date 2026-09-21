@@ -880,6 +880,18 @@ function CareFormInput({
         placeholder={isTimeField ? "HH:mm（24小時制）" : undefined}
         value={typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : ""}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={
+          field.mohwKey.endsWith("national_id")
+            ? (event) => {
+                const normalized = event.target.value
+                  .normalize("NFKC")
+                  .trim()
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, "");
+                if (normalized !== event.target.value) onChange(normalized);
+              }
+            : undefined
+        }
       />
     </label>
   );

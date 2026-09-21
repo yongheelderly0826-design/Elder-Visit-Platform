@@ -56,6 +56,7 @@ function toElderCase(row: GasCaseRow): ElderCase {
     name: String(row.name ?? ""),
     age: Number(row.age) || 0,
     gender: row.gender ? String(row.gender) : null,
+    nationalId: row.id_number ? String(row.id_number) : null,
     phone: String(row.primary_phone ?? ""),
     mobilePhone: row.secondary_phone ? String(row.secondary_phone) : null,
     address: String(row.address ?? ""),
