@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Camera, ClipboardList, QrCode, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PhysicalVisitorBadge } from "@/components/visitor/physical-visitor-badge";
 import { isLikelyInAppBrowser, startQrScan, type QrScanHandle } from "@/lib/client/qr-scan";
 import { getAttendanceSite, isAttendanceSiteId, OFFICE_KIOSK_SITE_ID } from "@/lib/domain/volunteer-attendance";
 
@@ -14,6 +15,7 @@ export type BadgeData = {
   badgeNo: string;
   payload: string;
   qrUrl: string;
+  email?: string;
 };
 
 type CachedBadge = {
@@ -36,9 +38,11 @@ function parseSiteId(raw: string) {
 export function VisitorHomePanel({
   cacheIdentity,
   initialBadge = null,
+  visitorEmail = "",
 }: {
   cacheIdentity: string;
   initialBadge?: BadgeData | null;
+  visitorEmail?: string;
 }) {
   const [badge, setBadge] = useState<BadgeData | null>(initialBadge);
   const [message, setMessage] = useState<string | null>(null);
@@ -231,7 +235,7 @@ export function VisitorHomePanel({
         <p className="text-sm font-medium text-primary">訪員首頁</p>
         <h1 className="mt-1 text-2xl font-semibold">我的訪員證</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          登入後預設顯示個人 QR。可出示給報到櫃檯掃描，或開啟相機掃描櫃檯／集合點 QR。
+          手機畫面比照實體訪員證格式顯示。下方 QR 可出示給報到櫃檯掃描，也可開啟相機掃描集合點 QR。
         </p>
       </section>
 
@@ -243,65 +247,73 @@ export function VisitorHomePanel({
           </Button>
         </section>
       ) : (
-        <section className="grid gap-4 rounded-lg border bg-card p-5 text-center">
-          <div>
-            <p className="text-sm text-muted-foreground">{badge.groupName || "訪員"}</p>
-            <p className="mt-1 text-3xl font-semibold">{badge.name}</p>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">{badge.visitorId}</p>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={badge.qrUrl}
-            alt={`${badge.name} 訪員證 QR`}
-            className="mx-auto h-64 w-64 rounded-md border bg-white p-2"
+        <>
+          <PhysicalVisitorBadge
+            visitorId={badge.visitorId}
+            email={badge.email || visitorEmail}
+            name={badge.name}
           />
-          <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <QrCode className="h-4 w-4" />
-            請將此畫面面向櫃檯掃描槍
-          </p>
-          <p className="break-all font-mono text-[11px] text-muted-foreground">{badge.payload}</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button type="button" variant="secondary" onClick={() => void loadBadge(false)} disabled={busy}>
-              重新整理 QR
-            </Button>
-            <Button type="button" onClick={() => void startScan()} disabled={busy || scanning}>
-              <Camera className="h-4 w-4" />
-              掃櫃檯／集合點 QR
-            </Button>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              event.target.value = "";
-              void onPickImage(file);
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            相簿／拍照掃碼（相機打不開時用）
-          </Button>
-          <div className={scanning ? "grid gap-2" : "hidden"}>
-            <video
-              ref={videoRef}
-              className="h-56 w-full rounded-md bg-black object-cover"
-              muted
-              playsInline
-              autoPlay
+
+          <section className="grid gap-4 rounded-lg border bg-card p-5 text-center">
+            <div>
+              <p className="text-sm font-medium text-slate-800">報到用 QR</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {badge.name} · {badge.visitorId}
+              </p>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={badge.qrUrl}
+              alt={`${badge.name} 訪員證 QR`}
+              className="mx-auto h-52 w-52 rounded-md border bg-white p-2"
             />
-            <Button type="button" variant="outline" onClick={stopScan}>
-              關閉鏡頭
+            <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <QrCode className="h-4 w-4" />
+              請將此畫面面向櫃檯掃描槍
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button type="button" variant="secondary" onClick={() => void loadBadge(false)} disabled={busy}>
+                重新整理 QR
+              </Button>
+              <Button type="button" onClick={() => void startScan()} disabled={busy || scanning}>
+                <Camera className="h-4 w-4" />
+                掃櫃檯／集合點 QR
+              </Button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                void onPickImage(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              相簿／拍照掃碼（相機打不開時用）
             </Button>
-          </div>
-        </section>
+            <div className={scanning ? "grid gap-2" : "hidden"}>
+              <video
+                ref={videoRef}
+                className="h-56 w-full rounded-md bg-black object-cover"
+                muted
+                playsInline
+                autoPlay
+              />
+              <Button type="button" variant="outline" onClick={stopScan}>
+                關閉鏡頭
+              </Button>
+            </div>
+          </section>
+        </>
       )}
 
       {message ? <p className="text-sm leading-6 text-muted-foreground">{message}</p> : null}

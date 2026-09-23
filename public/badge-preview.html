@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>訪員證示意圖</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #f3f4f6;
+      color: #0f172a;
+      padding: 24px 16px 48px;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 8px; }
+    .note { color: #64748b; font-size: 0.875rem; margin-bottom: 24px; }
+    .grid {
+      display: grid;
+      gap: 28px;
+      max-width: 720px;
+      margin: 0 auto;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .card {
+      max-width: 22rem;
+      margin: 0 auto;
+      width: 100%;
+      overflow: hidden;
+      border-radius: 1rem;
+      border: 1px solid rgba(251, 113, 133, 0.45);
+      background: #fff;
+      box-shadow: 0 10px 28px rgba(120, 40, 55, 0.12);
+    }
+    .header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #f7d3d8;
+      padding: 12px 16px;
+    }
+    .seal { width: 48px; height: 48px; flex-shrink: 0; }
+    .header-text { flex: 1; text-align: right; padding-top: 2px; }
+    .year { font-size: 0.875rem; font-weight: 600; }
+    .program { margin-top: 4px; font-size: 15px; font-weight: 700; line-height: 1.35; }
+    .body { display: flex; flex-direction: column; align-items: center; padding: 16px 20px 20px; }
+    .title {
+      font-size: 1.65rem;
+      font-weight: 900;
+      letter-spacing: 0.35em;
+      margin: 0;
+    }
+    .photo-wrap {
+      margin-top: 16px;
+      width: 58%;
+      overflow: hidden;
+      border-radius: 2px;
+      border: 1px solid #cbd5e1;
+      background: #f1f5f9;
+    }
+    .photo-wrap img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      object-fit: cover;
+      object-position: top;
+    }
+    .name {
+      margin: 16px 0 0;
+      font-size: 1.75rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-align: center;
+    }
+    .footer {
+      padding: 0 20px 20px;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #334155;
+    }
+    .caption {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <h1>訪員證手機示意圖（模擬）</h1>
+  <p class="note">比照實體證卡：粉紅抬頭、證件照、姓名、新北市／永和區公所。照片為模擬，非正式證件照。</p>
+  <div class="grid">
+    <div>
+      <article class="card" aria-label="Joe訪員 訪員證">
+        <header class="header">
+          <svg class="seal" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="30" fill="#f4c4cb" stroke="#9a3d4a" stroke-width="2"/>
+            <circle cx="32" cy="32" r="24" fill="none" stroke="#b85a68" stroke-width="1.5"/>
+            <path d="M32 14c-6 4-10 10-10 16 0 8 6 14 10 18 4-4 10-10 10-18 0-6-4-12-10-16z" fill="#c45c6a" opacity="0.85"/>
+            <circle cx="32" cy="28" r="5" fill="#fff5f6"/>
+            <path d="M22 44h20v3H22z" fill="#9a3d4a"/>
+            <text x="32" y="52" text-anchor="middle" font-size="7" fill="#6b2a34" font-family="system-ui,sans-serif" font-weight="700">衛福</text>
+          </svg>
+          <div class="header-text">
+            <div class="year">115-116年度</div>
+            <div class="program">擴大獨居老人服務訪查</div>
+          </div>
+        </header>
+        <div class="body">
+          <h2 class="title">訪員證</h2>
+          <div class="photo-wrap">
+            <img src="/badges/joe-visitor-portrait.jpg" alt="Joe訪員 證件照（模擬）" />
+          </div>
+          <p class="name">Joe訪員</p>
+        </div>
+        <footer class="footer">
+          <div>新北市政府</div>
+          <div>永和區公所</div>
+          <div>查詢電話：(02)2928-2828#118</div>
+        </footer>
+      </article>
+      <p class="caption">Joe訪員 · joe@elder.org</p>
+    </div>
+
+    <div>
+      <article class="card" aria-label="張教授 訪員證">
+        <header class="header">
+          <svg class="seal" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="30" fill="#f4c4cb" stroke="#9a3d4a" stroke-width="2"/>
+            <circle cx="32" cy="32" r="24" fill="none" stroke="#b85a68" stroke-width="1.5"/>
+            <path d="M32 14c-6 4-10 10-10 16 0 8 6 14 10 18 4-4 10-10 10-18 0-6-4-12-10-16z" fill="#c45c6a" opacity="0.85"/>
+            <circle cx="32" cy="28" r="5" fill="#fff5f6"/>
+            <path d="M22 44h20v3H22z" fill="#9a3d4a"/>
+            <text x="32" y="52" text-anchor="middle" font-size="7" fill="#6b2a34" font-family="system-ui,sans-serif" font-weight="700">衛福</text>
+          </svg>
+          <div class="header-text">
+            <div class="year">115-116年度</div>
+            <div class="program">擴大獨居老人服務訪查</div>
+          </div>
+        </header>
+        <div class="body">
+          <h2 class="title">訪員證</h2>
+          <div class="photo-wrap">
+            <img src="/badges/zhang-visitor-portrait.jpg" alt="張教授 證件照（模擬）" />
+          </div>
+          <p class="name">張教授</p>
+        </div>
+        <footer class="footer">
+          <div>新北市政府</div>
+          <div>永和區公所</div>
+          <div>查詢電話：(02)2928-2828#118</div>
+        </footer>
+      </article>
+      <p class="caption">張教授 · chatgpt.cjcu@gmail.com</p>
+    </div>
+  </div>
+</body>
+</html>

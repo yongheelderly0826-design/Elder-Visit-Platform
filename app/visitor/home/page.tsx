@@ -5,6 +5,7 @@ import {
   type BadgeData,
 } from "@/components/visitor/visitor-home-panel";
 import { requireVisitorSession } from "@/lib/auth/visitor-guard";
+import { resolvePhysicalBadgeProfile } from "@/lib/domain/physical-visitor-badge";
 import { buildVolunteerBadgePayload } from "@/lib/domain/volunteer-badge-qr";
 
 export default async function VisitorHomePage() {
@@ -12,14 +13,20 @@ export default async function VisitorHomePage() {
   let initialBadge: BadgeData | null = null;
 
   if (session.visitorId) {
+    const physical = resolvePhysicalBadgeProfile({
+      visitorId: session.visitorId,
+      email: session.email,
+      name: session.name,
+    });
     const payload = buildVolunteerBadgePayload(session.visitorId);
     initialBadge = {
       visitorId: session.visitorId,
-      name: session.name || "訪員",
+      name: physical.displayName || session.name || "訪員",
       groupName: "",
       badgeNo: "",
       payload,
       qrUrl: await QRCode.toDataURL(payload, { width: 480, margin: 1 }),
+      email: session.email,
     };
   }
 
@@ -28,6 +35,7 @@ export default async function VisitorHomePage() {
       <VisitorHomePanel
         cacheIdentity={session.visitorId}
         initialBadge={initialBadge}
+        visitorEmail={session.email}
       />
     </AppShell>
   );
