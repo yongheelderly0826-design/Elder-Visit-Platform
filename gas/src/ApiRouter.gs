@@ -21,6 +21,7 @@ var ApiRouter = (function () {
     'accounts.issueToken': function (p, b) { return UserAccountModule.accounts.issueToken(b); },
     'accounts.setPassword': function (p, b) { return UserAccountModule.accounts.setPassword(b); },
     'accounts.markLogin': function (p, b) { return UserAccountModule.accounts.markLogin(b); },
+    'accounts.upsertAuth': function (p, b) { return UserAccountModule.accounts.upsertAuth(b); },
 
     'cases.list': function (p) { return CaseModule.list(p); },
     'cases.get': function (p) { return CaseModule.get(p.id); },

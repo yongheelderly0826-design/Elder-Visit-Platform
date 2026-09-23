@@ -119,7 +119,7 @@ async function main() {
   const report = {
     ok: true,
     email: JOE.email,
-    password: "123456",
+    password: "joejoe123456",
     visitor_id: visitor.visitor_id,
     name: visitor.name || JOE.name,
     id_number: JOE.id_number,

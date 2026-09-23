@@ -462,6 +462,56 @@ var UserAccountModule = (function () {
     });
   }
 
+  function upsertAuth(data) {
+    return withLock_(function () {
+      ensureSchema_();
+      Validation.requireFields(data, [
+        'email',
+        'visitor_id',
+        'password_hash',
+        'password_salt',
+        'password_params',
+      ]);
+      var email = normalizeEmail_(data.email);
+      var visitor = VisitorModule.get(String(data.visitor_id));
+      if (!visitor) throw error_('NOT_FOUND', '找不到訪查員：' + data.visitor_id);
+      var account = findAccountByEmail_(email);
+      var now = now_();
+      var accountId = account
+        ? String(account.account_id)
+        : 'acct_' + Utilities.getUuid().slice(0, 8);
+      var patch = {
+        account_id: accountId,
+        email: email,
+        visitor_id: String(data.visitor_id),
+        full_name: String(data.full_name || visitor.name || ''),
+        role_key: String(data.role_key || 'visitor'),
+        status: 'active',
+        password_hash: String(data.password_hash),
+        password_salt: String(data.password_salt),
+        password_params: String(data.password_params),
+        password_updated_at: now,
+        invite_token_hash: '',
+        invite_expires_at: '',
+        reset_token_hash: '',
+        reset_expires_at: '',
+        last_login_at: account ? String(account.last_login_at || '') : '',
+        created_at: account ? String(account.created_at || now) : now,
+        updated_at: now,
+      };
+      if (account) SheetHelper.updateByKey(ACCOUNTS, 'account_id', account.account_id, patch);
+      else SheetHelper.appendRow(ACCOUNTS, patch);
+      return {
+        account_id: accountId,
+        email: email,
+        visitor_id: String(data.visitor_id),
+        full_name: patch.full_name,
+        role_key: patch.role_key,
+        status: 'active',
+      };
+    });
+  }
+
   return {
     registrations: {
       list: listRegistrations,
@@ -475,6 +525,7 @@ var UserAccountModule = (function () {
       issueToken: issueToken,
       setPassword: setPassword,
       markLogin: markLogin,
+      upsertAuth: upsertAuth,
     },
   };
 })();

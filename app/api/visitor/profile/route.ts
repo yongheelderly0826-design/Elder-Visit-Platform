@@ -255,6 +255,7 @@ function getDemoVisitorProfile(request: NextRequest) {
     name ||
     (email === "joe@elder.org" ? "Joe訪員" : "王訪員");
   const visitorCode = visitorId || "EV-115-YH-CIV-0001";
+  const isJoe = email === "joe@elder.org";
 
   const data: VisitorSelfProfile = {
     id: visitorId ? `demo_${visitorId}` : "demo_visitor_profile",
@@ -262,24 +263,26 @@ function getDemoVisitorProfile(request: NextRequest) {
     displayName: `永和區公所民政課-${fullName}`,
     visitorCode,
     officialEmail: email,
-    phone: email === "joe@elder.org" ? "0912-000-888" : "0912-000-001",
+    phone: isJoe ? "0912-000-888" : "0912-000-001",
     rootUnitName: "永和區公所",
     departmentName: "民政課",
     jobTitle: "訪員",
     workerType: "civil_affairs",
     headshotProcessedUrl: null,
-    emergencyContactName: "",
-    emergencyContactPhone: "",
-    bankAccountLast5: "",
-    bankName: "",
-    bankCode: "",
-    bankBranchName: "",
+    emergencyContactName: isJoe ? "陳美玲" : "",
+    emergencyContactPhone: isJoe ? "0912-111-222" : "",
+    bankAccountLast5: isJoe ? "12345" : "",
+    bankName: isJoe ? "台灣銀行" : "",
+    bankCode: isJoe ? "004" : "",
+    bankBranchName: isJoe ? "永和分行" : "",
     bankAccountName: fullName,
     passbookCoverUrl: null,
     passbookUploadedAt: null,
-    remittanceReviewStatus: "pending",
-    serviceAvailability: { weekday: "平日白天", villages: "可依派案調整" },
-    profileCompletionStatus: "incomplete",
+    remittanceReviewStatus: isJoe ? "approved" : "pending",
+    serviceAvailability: isJoe
+      ? { weekday: "平日白天", villages: "永和區各里", note: "Joe示範訪員" }
+      : { weekday: "平日白天", villages: "可依派案調整" },
+    profileCompletionStatus: isJoe ? "complete" : "incomplete",
     qrCodePayload: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://elder-visit-platform-ruby.vercel.app"}/verify/visitor/${encodeURIComponent(visitorCode)}`,
   };
 

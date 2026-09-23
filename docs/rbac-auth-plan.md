@@ -15,7 +15,7 @@
 | 承辦管理者 | manager@eldervisit.org | manager123 | /dashboard |
 | 督導 | supervisor@eldervisit.org | supervisor123 | /manager/audit |
 | 訪員 | visitor@eldervisit.org | visitor123 | /visitor/home |
-| 訪員（Joe） | joe@elder.org | 123456 | /visitor/home |
+| 訪員（Joe） | joe@elder.org | joejoe123456 | /visitor/home |
 | 稽核人員 | auditor@eldervisit.org | auditor123 | /manager/audit |
 | 唯讀檢視者 | viewer@eldervisit.org | viewer123 | /dashboard |
 

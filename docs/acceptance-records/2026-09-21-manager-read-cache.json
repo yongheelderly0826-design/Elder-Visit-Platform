@@ -1,0 +1,73 @@
+{
+  "executed_at": "2026-09-21T09:54:53.227Z",
+  "environment": "https://elder-visit-platform-ruby.vercel.app",
+  "visitor": {
+    "email": "joe@elder.org",
+    "visitor_id": "V-YH-834059",
+    "name": "Joe訪員"
+  },
+  "flows": [
+    {
+      "case_id": "CASE-YH-43d2b7cb",
+      "external_id": "DL-010",
+      "name": "李冰",
+      "assignment_id": "ASG-e5c3bcc6",
+      "careform_id": "CF-26e0ec16",
+      "audit_id": "AUD-0b090143",
+      "submit": "ok",
+      "audit_decision": "通過",
+      "careform_status": "已稽核"
+    },
+    {
+      "case_id": "CASE-YH-c18cdb3e",
+      "external_id": "DL-011",
+      "name": "簡哲三",
+      "assignment_id": "ASG-220de86b",
+      "careform_id": "CF-5dd1ac3c",
+      "audit_id": "AUD-2e6bf96c",
+      "submit": "ok",
+      "audit_decision": "通過",
+      "careform_status": "已稽核"
+    }
+  ],
+  "timings": {
+    "gas": {
+      "manager_bundle_cold_s": 2.279,
+      "manager_bundle_warm_s": 1.299,
+      "audit_queue_cold_s": 3.357,
+      "audit_queue_warm_s": 2.499
+    },
+    "production_api": {
+      "manager_bundle_cold_s": 1.975,
+      "manager_bundle_warm_s": 0.628,
+      "audit_queue_cold_s": 2.401,
+      "audit_queue_warm_s": 0.456,
+      "assignments_cold_s": 3.964,
+      "assignments_warm_s": 1.18
+    },
+    "production_ui": {
+      "exports_refresh_1_s": 5.4,
+      "exports_refresh_2_s": 0.4
+    }
+  },
+  "production": {
+    "manager_bundle_total": 5,
+    "manager_bundle_payments": 5,
+    "manager_bundle_amount": 1050,
+    "visitor_payments_items": 3,
+    "visitor_payments_sample": [
+      { "caseName": "蕭金芝", "status": "locked", "totalFee": 210 },
+      { "caseName": "李冰", "status": "approved", "totalFee": 210 },
+      { "caseName": "簡哲三", "status": "approved", "totalFee": 210 }
+    ]
+  },
+  "checks": {
+    "p1_export_has_rows": true,
+    "p3_payments_visible": true,
+    "p4_bundle_warm_under_5s": true,
+    "p5_audit_warm_faster": true,
+    "p6_assign_warm_faster": true,
+    "p7_visitor_payments": true
+  },
+  "ok": true
+}

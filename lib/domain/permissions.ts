@@ -229,7 +229,7 @@ export const demoLoginAccounts: DemoLoginAccount[] = [
   },
   {
     email: "joe@elder.org",
-    password: "123456",
+    password: "joejoe123456",
     fullName: "Joe訪員",
     roleKey: "visitor",
     landingPath: "/visitor/home",

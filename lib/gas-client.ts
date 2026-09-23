@@ -210,6 +210,15 @@ export const gasClient = {
       }>("accounts.setPassword", { method: "POST", body }),
     markLogin: (email: string) =>
       gasFetch<boolean>("accounts.markLogin", { method: "POST", body: { email } }),
+    upsertAuth: (body: {
+      email: string;
+      visitor_id: string;
+      full_name?: string;
+      role_key?: string;
+      password_hash: string;
+      password_salt: string;
+      password_params: string;
+    }) => gasFetch<GasAuthAccount>("accounts.upsertAuth", { method: "POST", body }),
   },
   cases: {
     list: (params?: { district?: string; case_type?: string; visit_status?: string }) =>
