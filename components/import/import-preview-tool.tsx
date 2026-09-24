@@ -1,22 +1,42 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Database, FileSpreadsheet, Upload } from "lucide-react";
-import { parseCsvPreview, type ImportPreview } from "@/lib/domain/imports";
-
-const sampleCsv = `姓名,電話,地址,行政區,風險等級
-王美玉,0912-111-001,臺中市北區進化路 12 號,北區,高
-李國雄,0912-111-002,臺中市北區學士路 88 號,北區,中
-陳秀琴,0912-111-003,臺中市北區崇德路 45 號,北區,低`;
+import { CheckCircle2, Database, Download, FileSpreadsheet, RotateCcw, Upload } from "lucide-react";
+import {
+  parseCsvPreview,
+  SAMPLE_ELDER_CASE_IMPORT_CSV,
+  SAMPLE_ELDER_CASE_IMPORT_FILENAME,
+  type ImportPreview,
+} from "@/lib/domain/imports";
 
 export function ImportPreviewTool({ compact = false }: { compact?: boolean }) {
-  const [csvText, setCsvText] = useState(sampleCsv);
+  const [csvText, setCsvText] = useState(SAMPLE_ELDER_CASE_IMPORT_CSV);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadedPreview, setUploadedPreview] = useState<ImportPreview | null>(null);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<ImportCommitResult | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
   const preview = useMemo(() => uploadedPreview ?? parseCsvPreview(csvText), [csvText, uploadedPreview]);
+
+  function resetToSample() {
+    setCsvText(SAMPLE_ELDER_CASE_IMPORT_CSV);
+    setFileName(SAMPLE_ELDER_CASE_IMPORT_FILENAME);
+    setUploadedPreview(null);
+    setCommitResult(null);
+    setCommitError(null);
+  }
+
+  function downloadSample() {
+    const blob = new Blob([`${SAMPLE_ELDER_CASE_IMPORT_CSV}\n`], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = SAMPLE_ELDER_CASE_IMPORT_FILENAME;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function readImportFile(file: File | null) {
     if (!file) return;
@@ -90,6 +110,30 @@ export function ImportPreviewTool({ compact = false }: { compact?: boolean }) {
         <p className="mt-2 text-sm text-muted-foreground">
           可上傳 CSV/TXT 名冊檔或直接貼上內容；系統先偵測第一列欄位，管理者確認對應後才寫入名冊。
         </p>
+        <div className="mt-3 rounded-md border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">必填欄位</p>
+          <p className="mt-1">測試編號（或案號）、姓名、訪視地址（或地址）、訪視行政區（或行政區）</p>
+          <p className="mt-2 font-medium text-foreground">建議欄位</p>
+          <p className="mt-1">個案類型、年齡、戶籍里、主要電話、備用電話、派案優先級</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-secondary"
+            onClick={downloadSample}
+          >
+            <Download className="h-4 w-4" />
+            下載匯入範例 CSV
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-secondary"
+            onClick={resetToSample}
+          >
+            <RotateCcw className="h-4 w-4" />
+            載入範例到編輯區
+          </button>
+        </div>
         <label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-background p-4 text-center text-sm transition-colors hover:bg-secondary">
           <Upload className="h-5 w-5 text-primary" />
           <span className="font-medium">上傳名冊檔</span>
@@ -117,7 +161,11 @@ export function ImportPreviewTool({ compact = false }: { compact?: boolean }) {
             setCommitError(null);
             setCsvText(event.target.value);
           }}
+          aria-label="名冊 CSV 內容"
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          預設已載入 3 筆永和示範資料（案號 DEMO-YH-*）；正式清冊請替換成實際案號後再寫入。
+        </p>
       </section>
 
       <section className="rounded-lg border bg-card p-4">

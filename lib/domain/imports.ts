@@ -14,6 +14,14 @@ export type ImportPreview = {
   };
 };
 
+/** 名冊匯入內建範例（含必填欄，可通過檢核；案號以 DEMO- 開頭避免撞正式案號） */
+export const SAMPLE_ELDER_CASE_IMPORT_CSV = `測試編號,個案類型,姓名,年齡,戶籍里,訪視行政區,訪視地址,主要電話,備用電話,派案優先級
+DEMO-YH-001,獨老,王美玉,82,豫溪里,永和區,新北市永和區豫溪街 12 號,0912-111-001,02-2928-1001,高
+DEMO-YH-002,獨老,李國雄,79,竹林里,永和區,新北市永和區竹林路 88 號,0912-111-002,02-2928-1002,中
+DEMO-YH-003,中老,陳秀琴,68,安樂里,永和區,新北市永和區安樂路 45 號,0912-111-003,,低`;
+
+export const SAMPLE_ELDER_CASE_IMPORT_FILENAME = "elder-case-import-sample.csv";
+
 const targetHints = [
   { targetField: "case_code", labels: ["測試編號", "個案編號", "個案編碼", "編碼", "案號", "case_code"] },
   { targetField: "case_type", labels: ["個案類型"] },
