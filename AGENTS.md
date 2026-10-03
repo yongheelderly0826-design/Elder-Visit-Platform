@@ -38,7 +38,7 @@ The **operational architecture** for 永和區落地 is:
 ## Project-Specific Rules
 
 - Prefer the existing calm, care-oriented visual language before inventing new UI patterns.
-- Photos and location are required only when `visitResult === "未遇"`.
+- Photos and location are required only when `visitResult === "未遇"`（未遇需 **3–5 個不同時段**各一張佐證照＋定位）.
 - Keep demo-role accounts under `@eldervisit.org`.
 - Treat `docs/spec-v2.4.pdf` as the governing product reference when behavior is ambiguous.
 - Use `npm run typecheck`, `npm run lint`, and `npm run build` as the standard verification gate before publish work.

@@ -9,9 +9,20 @@ import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import { validateMohwLifeCareRow } from "@/lib/domain/mohw-life-care-validation";
 import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
-import { getPaymentEligibility, validateVisitSubmission } from "@/lib/domain/visits";
+import {
+  countMissedVisitPhotoSlots,
+  getPaymentEligibility,
+  missedVisitMinSlots,
+  validateVisitSubmission,
+} from "@/lib/domain/visits";
 import { getSystemStatus } from "@/lib/system/env";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
+
+type MissedVisitPhotoPayload = {
+  slot: string;
+  fileName: string;
+  dataUrl: string;
+};
 
 type VisitSubmitPayload = VisitSubmission & {
   assignmentId?: string;
@@ -19,6 +30,7 @@ type VisitSubmitPayload = VisitSubmission & {
   encodedId?: string;
   caseCode?: string;
   careFormAnswers?: MohwLifeCareAnswers;
+  missedVisitPhotos?: MissedVisitPhotoPayload[];
 };
 
 export async function POST(request: NextRequest) {
@@ -60,10 +72,12 @@ export async function POST(request: NextRequest) {
     ? calculateMohwCareFormCompletion(careFormAnswers)
     : null;
 
-  const mohwValidation = careFormAnswers
-    ? validateMohwLifeCareRow(careFormAnswers, { row: 2 })
-    : null;
-  const highCare = careFormAnswers ? evaluateHighCare(careFormAnswers) : null;
+  const isMissedVisit = submission.visitResult === "未遇";
+  const mohwValidation =
+    careFormAnswers && !isMissedVisit
+      ? validateMohwLifeCareRow(careFormAnswers, { row: 2 })
+      : null;
+  const highCare = careFormAnswers && !isMissedVisit ? evaluateHighCare(careFormAnswers) : null;
 
   if (mohwValidation && !mohwValidation.ok) {
     return NextResponse.json(
@@ -96,21 +110,44 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (isMissedVisit && countMissedVisitPhotoSlots(submission.photoNames) < missedVisitMinSlots) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "MISSED_VISIT_SLOTS_REQUIRED",
+          message: `未遇需至少 ${missedVisitMinSlots} 個不同時段的佐證照片`,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const paymentEligibility = getPaymentEligibility(submission);
   const status = getSystemStatus();
   let gasResult: unknown = null;
 
-  if (status.dataMode === "gas_ready" && careFormAnswers) {
+  const missedVisitPhotos = Array.isArray(body.missedVisitPhotos)
+    ? body.missedVisitPhotos.filter(
+        (item) => item && typeof item.slot === "string" && typeof item.dataUrl === "string",
+      )
+    : [];
+
+  if (status.dataMode === "gas_ready" && (careFormAnswers || isMissedVisit)) {
     try {
       gasResult = await gasClient.careform.submit({
         assignment_id: body.assignmentId ?? body.scheduleId,
         visitor_id: body.visitorId ?? "visitor-unknown",
         encoded_id: body.encodedId ?? body.caseCode ?? body.scheduleId,
+        case_id: body.caseCode,
         visit_result: submission.visitResult,
-        completion_pct: careFormCompletion?.percent ?? 0,
-        answers: careFormAnswers,
+        completion_pct: isMissedVisit ? careFormCompletion?.percent ?? 0 : careFormCompletion?.percent ?? 0,
+        answers: careFormAnswers ?? {},
         consent_signed: submission.consentSigned,
         photos: submission.photoNames,
+        missed_visit_photos: missedVisitPhotos,
+        gps_lat: submission.gpsLat,
+        gps_lng: submission.gpsLng,
+        notes: submission.notes,
       });
       invalidateGasReadCaches();
     } catch (error) {

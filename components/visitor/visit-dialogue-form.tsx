@@ -30,11 +30,53 @@ import {
   type MohwValidationError,
 } from "@/lib/domain/mohw-life-care-validation";
 import {
+  countMissedVisitPhotoSlots,
   getMissedVisitPolicy,
   getPaymentEligibility,
+  missedVisitMaxSlots,
+  missedVisitMinSlots,
+  missedVisitTimeSlots,
+  type MissedVisitTimeSlot,
   validateVisitSubmission,
 } from "@/lib/domain/visits";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
+
+type MissedSlotPhoto = {
+  slot: MissedVisitTimeSlot;
+  fileName: string;
+  dataUrl: string;
+};
+
+async function compressEvidencePhoto(file: File) {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const maxEdge = 1280;
+      const scale = Math.min(maxEdge / image.width, maxEdge / image.height, 1);
+      const width = Math.max(1, Math.round(image.width * scale));
+      const height = Math.max(1, Math.round(image.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("無法處理照片"));
+        return;
+      }
+      context.drawImage(image, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.72));
+    };
+    image.onerror = () => reject(new Error("照片無法讀取"));
+    image.src = dataUrl;
+  });
+}
 
 const initialSubmission: Omit<VisitSubmission, "scheduleId"> = {
   visitResult: "訪視成功",
@@ -56,6 +98,8 @@ const consentScopeOptions = [
   { key: "research_use", label: "健康資料串聯" },
 ];
 
+const optionalPhotoCategories = ["補充照片", "本人同意照片", "環境補充", "其他"];
+
 export function VisitDialogueForm({
   elderCase,
   schedule,
@@ -70,6 +114,10 @@ export function VisitDialogueForm({
   const [mohwErrors, setMohwErrors] = useState<MohwValidationError[]>([]);
   const [exportResult, setExportResult] = useState<string | null>(null);
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "captured" | "unavailable">("idle");
+  const [missedSlotPhotos, setMissedSlotPhotos] = useState<Partial<Record<MissedVisitTimeSlot, MissedSlotPhoto>>>(
+    {},
+  );
+  const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() =>
     createInitialMohwAnswers(elderCase, schedule),
   );
@@ -127,10 +175,15 @@ export function VisitDialogueForm({
     [displayedMohwErrors],
   );
   const isMissedVisit = submission.visitResult === "未遇";
-  const activePhotoCategories = isMissedVisit ? missedVisitPhotoCategories : optionalPhotoCategories;
+  const activePhotoCategories = optionalPhotoCategories;
   const hasVisitGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
+  const missedSlotCount = countMissedVisitPhotoSlots(submission.photoNames);
   const needsMissedVisitEvidence =
-    isMissedVisit && (submission.photoNames.length === 0 || !hasVisitGps);
+    isMissedVisit && (missedSlotCount < missedVisitMinSlots || !hasVisitGps);
+  const canSubmitVisit =
+    validation.ok &&
+    !isSubmitting &&
+    (isMissedVisit || (careFormCompletion.percent >= 100 && mohwValidation.ok));
   const locationLabel =
     typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number"
       ? `${submission.gpsLat.toFixed(5)}, ${submission.gpsLng.toFixed(5)}`
@@ -187,17 +240,23 @@ export function VisitDialogueForm({
       ),
     );
 
-    const localCheck = validateMohwLifeCareRow(mohwAnswers, { row: 2 });
-    if (!localCheck.ok) {
-      setMohwErrors(localCheck.errors);
-      setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
-      setIsSubmitting(false);
-      const firstError = localCheck.errors[0];
-      if (firstError) {
-        openAndJumpToCareField(firstError.key, setOpenSectionTitles);
+    if (submission.visitResult !== "未遇") {
+      const localCheck = validateMohwLifeCareRow(mohwAnswers, { row: 2 });
+      if (!localCheck.ok) {
+        setMohwErrors(localCheck.errors);
+        setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
+        setIsSubmitting(false);
+        const firstError = localCheck.errors[0];
+        if (firstError) {
+          openAndJumpToCareField(firstError.key, setOpenSectionTitles);
+        }
+        return;
       }
-      return;
     }
+
+    const missedPhotos = missedVisitTimeSlots
+      .map((slot) => missedSlotPhotos[slot])
+      .filter((item): item is MissedSlotPhoto => Boolean(item));
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
@@ -209,6 +268,11 @@ export function VisitDialogueForm({
         encodedId: elderCase.caseCode,
         caseCode: elderCase.caseCode,
         careFormAnswers: mohwAnswers,
+        missedVisitPhotos: missedPhotos.map((item) => ({
+          slot: item.slot,
+          fileName: item.fileName,
+          dataUrl: item.dataUrl,
+        })),
         ...submission,
       }),
     });
@@ -285,6 +349,46 @@ export function VisitDialogueForm({
     setSubmission((current) => ({
       ...current,
       photoNames: [...current.photoNames, ...photoNames],
+    }));
+  }
+
+  async function setMissedVisitSlotPhoto(slot: MissedVisitTimeSlot, files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+
+    setSlotPhotoBusy(slot);
+    try {
+      const dataUrl = await compressEvidencePhoto(file);
+      captureLocation();
+      const nextPhoto: MissedSlotPhoto = {
+        slot,
+        fileName: file.name || `${slot}.jpg`,
+        dataUrl,
+      };
+      setMissedSlotPhotos((current) => ({ ...current, [slot]: nextPhoto }));
+      setSubmission((current) => {
+        const others = current.photoNames.filter((name) => !name.startsWith(`${slot}：`));
+        return {
+          ...current,
+          photoNames: [...others, `${slot}：${nextPhoto.fileName}`],
+        };
+      });
+    } catch {
+      setResult("時段照片無法讀取，請重拍或改選其他圖片");
+    } finally {
+      setSlotPhotoBusy(null);
+    }
+  }
+
+  function clearMissedVisitSlotPhoto(slot: MissedVisitTimeSlot) {
+    setMissedSlotPhotos((current) => {
+      const next = { ...current };
+      delete next[slot];
+      return next;
+    });
+    setSubmission((current) => ({
+      ...current,
+      photoNames: current.photoNames.filter((name) => !name.startsWith(`${slot}：`)),
     }));
   }
 
@@ -656,44 +760,121 @@ export function VisitDialogueForm({
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold">
-              {isMissedVisit ? "未遇佐證拍照與自動定位" : "拍照上傳（未遇案件必要）"}
+              {isMissedVisit ? "未遇時段佐證（3–5 時段拍照）" : "拍照上傳（選填）"}
             </h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {isMissedVisit
-              ? "訪視未遇時請至少留下門口、門牌、現場環境或通知留置紀錄照片；選擇照片時系統會自動取得定位。"
-              : "一般訪視照片為選填，主要用於未遇、拒訪、地址疑義或主管要求補證時留下紀錄。"}
+              ? `訪視未遇時，請在不同時段各拍一張門口／現場照片作為空訪紀錄（至少 ${missedVisitMinSlots} 個時段，最多 ${missedVisitMaxSlots} 個）。選照片時會自動取得定位並上傳存檔。`
+              : "一般訪視照片為選填；若結果改為「未遇」，需改填下方 3–5 個時段佐證。"}
           </p>
-          {needsMissedVisitEvidence && (
-            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-              未遇案件送出前需至少 1 張佐證照片，並完成自動定位。
-            </p>
-          )}
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {activePhotoCategories.map((category) => (
-              <label
-                key={category}
-                className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+          {isMissedVisit && (
+            <>
+              <p
+                className={`mt-3 rounded-md border p-2 text-xs ${
+                  needsMissedVisitEvidence
+                    ? "border-amber-200 bg-amber-50 text-amber-900"
+                    : "border-primary/20 bg-primary/5 text-primary"
+                }`}
               >
-                <Camera className="h-4 w-4" />
-                拍照 / 上傳{category}
-                <input
-                  className="hidden"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  onChange={(event) => addVisitPhotos(category, event.target.files)}
-                />
-              </label>
-            ))}
-          </div>
+                時段進度：{missedSlotCount}／{missedVisitMaxSlots}
+                （至少需 {missedVisitMinSlots} 個時段）
+                {hasVisitGps ? " · 定位已取得" : " · 尚缺定位"}
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {missedVisitTimeSlots.map((slot) => {
+                  const photo = missedSlotPhotos[slot];
+                  const busy = slotPhotoBusy === slot;
+                  return (
+                    <div key={slot} className="rounded-md border bg-card p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{slot}</p>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[11px] ${
+                            photo
+                              ? "bg-primary/10 text-primary"
+                              : "bg-secondary text-muted-foreground"
+                          }`}
+                        >
+                          {photo ? "已上傳" : "未拍"}
+                        </span>
+                      </div>
+                      {photo?.dataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photo.dataUrl}
+                          alt={`${slot}佐證`}
+                          className="mt-2 h-28 w-full rounded-md object-cover"
+                        />
+                      ) : (
+                        <div className="mt-2 flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                          請拍門口／現場
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <label className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary">
+                          <Camera className="h-3.5 w-3.5" />
+                          {busy ? "處理中…" : photo ? "重拍／更換" : "拍照／上傳"}
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            disabled={busy}
+                            onChange={(event) => {
+                              void setMissedVisitSlotPhoto(slot, event.target.files);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {photo ? (
+                          <button
+                            type="button"
+                            className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary"
+                            onClick={() => clearMissedVisitSlotPhoto(slot)}
+                          >
+                            清除
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {!isMissedVisit && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {activePhotoCategories.map((category) => (
+                <label
+                  key={category}
+                  className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                >
+                  <Camera className="h-4 w-4" />
+                  拍照 / 上傳{category}
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    onChange={(event) => addVisitPhotos(category, event.target.files)}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
           <div className="mt-3 space-y-2 text-sm text-muted-foreground">
             <p>
               定位：
               {locationLabel}
             </p>
-            <p>照片：{submission.photoNames.length > 0 ? submission.photoNames.join("、") : "尚未加入"}</p>
+            {!isMissedVisit && (
+              <p>
+                照片：
+                {submission.photoNames.length > 0 ? submission.photoNames.join("、") : "尚未加入"}
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -731,9 +912,10 @@ export function VisitDialogueForm({
           careFormMissing={careFormCompletion.missingLabels}
           mohwErrorCount={displayedMohwErrors.length}
           result={result}
+          isMissedVisit={isMissedVisit}
         />
         <SubmitVisitButton
-          disabled={!validation.ok || careFormCompletion.percent < 100 || !mohwValidation.ok || isSubmitting}
+          disabled={!canSubmitVisit}
           isSubmitting={isSubmitting}
           onClick={submitVisit}
         />
@@ -767,10 +949,11 @@ export function VisitDialogueForm({
             careFormMissing={careFormCompletion.missingLabels}
             mohwErrorCount={displayedMohwErrors.length}
             result={result}
+            isMissedVisit={isMissedVisit}
           />
           <SubmitVisitButton
             className="w-full"
-            disabled={!validation.ok || careFormCompletion.percent < 100 || !mohwValidation.ok || isSubmitting}
+            disabled={!canSubmitVisit}
             isSubmitting={isSubmitting}
             onClick={submitVisit}
           />
@@ -779,9 +962,6 @@ export function VisitDialogueForm({
     </section>
   );
 }
-
-const missedVisitPhotoCategories = ["門口/門牌", "現場環境", "通知或留置紀錄", "其他佐證"];
-const optionalPhotoCategories = ["補充照片", "本人同意照片", "環境補充", "其他"];
 
 function VisitGuidePanel({ elderCase }: { elderCase: ElderCase }) {
   return (
@@ -1035,6 +1215,7 @@ function SubmissionStatus({
   careFormMissing,
   mohwErrorCount,
   result,
+  isMissedVisit = false,
   compact = false,
 }: {
   validationOk: boolean;
@@ -1043,6 +1224,7 @@ function SubmissionStatus({
   careFormMissing: string[];
   mohwErrorCount: number;
   result: string | null;
+  isMissedVisit?: boolean;
   compact?: boolean;
 }) {
   return (
@@ -1050,11 +1232,14 @@ function SubmissionStatus({
       {!validationOk && (
         <p className="text-destructive">尚缺：{validationMissing.join("、")}</p>
       )}
-      {careFormPercent < 100 && (
+      {!isMissedVisit && careFormPercent < 100 && (
         <p className="text-destructive">關懷表尚缺必填：{careFormMissing.join("、")}</p>
       )}
-      {mohwErrorCount > 0 && (
+      {!isMissedVisit && mohwErrorCount > 0 && (
         <p className="text-destructive">關懷表有 {mohwErrorCount} 項需修改，請看紅字說明</p>
+      )}
+      {isMissedVisit && validationOk && (
+        <p className="text-muted-foreground">未遇：已備齊時段佐證與定位，可送出空訪紀錄</p>
       )}
       {result && (result.includes("需") || result.includes("失敗") ? (
         <p className="font-medium text-destructive">{result}</p>

@@ -2,6 +2,28 @@ import type { ElderCase, VisitSchedule, VisitSubmission } from "@/lib/domain/typ
 
 export const missedVisitClosureAttempt = 3;
 
+/** 未遇佐證時段：至少 3、最多 5 個不同時段各留一張現場照。 */
+export const missedVisitTimeSlots = ["上午", "中午", "下午", "傍晚", "夜間"] as const;
+export type MissedVisitTimeSlot = (typeof missedVisitTimeSlots)[number];
+export const missedVisitMinSlots = 3;
+export const missedVisitMaxSlots = missedVisitTimeSlots.length;
+
+export function parseMissedVisitPhotoSlot(photoName: string): MissedVisitTimeSlot | null {
+  const label = String(photoName ?? "").split("：")[0]?.trim();
+  return (missedVisitTimeSlots as readonly string[]).includes(label ?? "")
+    ? (label as MissedVisitTimeSlot)
+    : null;
+}
+
+export function countMissedVisitPhotoSlots(photoNames: string[]) {
+  const slots = new Set<MissedVisitTimeSlot>();
+  for (const name of photoNames) {
+    const slot = parseMissedVisitPhotoSlot(name);
+    if (slot) slots.add(slot);
+  }
+  return slots.size;
+}
+
 export function getRiskLabel(riskLevel: ElderCase["riskLevel"]) {
   const labels = {
     low: "低風險",
@@ -37,8 +59,9 @@ export function validateVisitSubmission(submission: VisitSubmission) {
     missing.push("生活支持狀態");
   }
   if (submission.visitResult === "未遇") {
-    if (submission.photoNames.length === 0) {
-      missing.push("未遇佐證照片");
+    const slotCount = countMissedVisitPhotoSlots(submission.photoNames);
+    if (slotCount < missedVisitMinSlots) {
+      missing.push(`未遇時段佐證照片（需 ${missedVisitMinSlots}–${missedVisitMaxSlots} 個不同時段）`);
     }
     if (!hasGps) {
       missing.push("未遇定位");

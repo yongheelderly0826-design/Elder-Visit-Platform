@@ -13,6 +13,14 @@
 - **Evidence:** `lib/domain/visits.ts` and `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-05-17
 
+## Lesson: Missed-visit needs multi-slot photos
+
+- **Trigger:** A single doorway photo was not enough to document repeated empty visits at different times of day.
+- **Cause:** Validation only required `photoNames.length >= 1`.
+- **Rule:** When `visitResult === "未遇"`, require photos covering **3–5** distinct time slots (`上午／中午／下午／傍晚／夜間`), with GPS; upload slot images to Drive and write `空訪紀錄`.
+- **Evidence:** `lib/domain/visits.ts`, `components/visitor/visit-dialogue-form.tsx`, `gas/src/modules/CareFormModule.gs`.
+- **Added on:** 2026-10-03
+
 ## Lesson: Build success is not deployment confirmation
 
 - **Trigger:** A completed local build could be mistaken for a published site.

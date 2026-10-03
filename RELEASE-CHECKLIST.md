@@ -27,6 +27,6 @@
 
 - [ ] Login works for the intended demo or real account.
 - [ ] Relevant role sees the expected navigation and actions.
-- [ ] Missed-visit flow still requires evidence only for `未遇`.
+- [ ] Missed-visit flow still requires evidence only for `未遇`（3–5 distinct time-slot photos + GPS）.
 - [ ] Any changed manager / visitor / audit route loads correctly.
 - [ ] If PWA assets changed, add-to-home-screen behavior was checked on target devices when possible.
