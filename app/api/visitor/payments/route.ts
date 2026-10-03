@@ -6,6 +6,11 @@ import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { listDemoVisitorPayments } from "@/lib/domain/demo-visitor-payments";
 import { paymentFeeRules } from "@/lib/domain/payments";
 import { gasClient } from "@/lib/gas-client";
+import {
+  cachedRead,
+  GAS_READ_CACHE_SECONDS_FAST,
+  GAS_READ_TAGS,
+} from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 export async function GET(request: NextRequest) {
@@ -37,7 +42,14 @@ export async function GET(request: NextRequest) {
 
   if (getSystemStatus().dataMode === "gas_ready" && visitorId) {
     try {
-      const rows = await gasClient.audit.queue({ decision: "all" });
+      // Visitor payments: 3s read cache (fresher than manager 20s bundles).
+      // Still tagged auditQueue so audit decide / visit submit / payment lock invalidate it.
+      const rows = await cachedRead(
+        ["audit-queue", "all", "visitor-payments"],
+        [GAS_READ_TAGS.auditQueue],
+        () => gasClient.audit.queue({ decision: "all" }),
+        GAS_READ_CACHE_SECONDS_FAST,
+      );
       const mine = rows.filter((row) => {
         if (String(row.visitor_id ?? "").trim() !== visitorId) return false;
         const decision = String(row.decision ?? "");
