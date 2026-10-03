@@ -65,6 +65,7 @@ export type AttendanceRecord = {
   siteId: string;
   siteName: string;
   source: string;
+  checkinPhotoUrl?: string;
 };
 
 export type VolunteerClockStatus = {

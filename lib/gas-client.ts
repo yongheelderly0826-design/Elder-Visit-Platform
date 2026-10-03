@@ -429,6 +429,8 @@ export const gasClient = {
       lng?: string;
       assignment_id?: string;
       session_type?: string;
+      checkin_photo_base64?: string;
+      doorplate_photo?: string;
     }) => gasFetch<Record<string, unknown>>("attendance.clock", { method: "POST", body }),
     list: (params?: {
       period?: string;

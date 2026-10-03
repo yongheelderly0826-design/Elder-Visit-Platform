@@ -134,7 +134,8 @@
 | checkin_lng | 簽到經度 | number | | |
 | checkout_lat | 簽退緯度 | number | | |
 | checkout_lng | 簽退經度 | number | | |
-| session_type | 類型 | enum | | 志工出勤／現場／視訊 |
+| checkin_photo_url | 簽到門牌照 | text | 訪查簽到 | Drive 連結；到宅簽到必填門牌／門口照 |
+| session_type | 類型 | enum | | 志工出勤／訪查 |
 | duration_minutes | 時數(分) | number | | 簽退時自動計算 |
 | channel | 簽到通道 | enum | | qr／barcode |
 | site_id | 地點代碼 | text | | 如 SITE-MEAL、SITE-KIOSK |

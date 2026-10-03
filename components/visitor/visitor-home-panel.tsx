@@ -235,7 +235,8 @@ export function VisitorHomePanel({
         <p className="text-sm font-medium text-primary">訪員首頁</p>
         <h1 className="mt-1 text-2xl font-semibold">我的訪員證</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          手機畫面比照實體訪員證格式顯示。下方 QR 可出示給報到櫃檯掃描，也可開啟相機掃描集合點 QR。
+          手機畫面比照實體訪員證格式顯示；整張含完整黑框並自動縮小，證件照不超出灰框線。下方 QR
+          可出示給報到櫃檯掃描，也可開啟相機掃描集合點 QR。
         </p>
       </section>
 

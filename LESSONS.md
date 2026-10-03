@@ -212,3 +212,11 @@
 - **Rule:** Look up the volunteer group, accumulate hours or meal trips in the settlement period, and pay the matching bracket total or `trips × 100`. Do not compute `hours × hourly rate`.
 - **Evidence:** `lib/domain/volunteer-transport-fees.ts`, `gas/src/utils/VolunteerTransportFees.gs`, and `gas/src/modules/PaymentModule.gs`.
 - **Added on:** 2026-09-18
+
+## Lesson: Doorplate check-in is not missed-visit evidence
+
+- **Trigger:** Stakeholders asked for address/doorplate photo as arrival check-in, while 未遇 already required 門口/門牌 photos.
+- **Cause:** Mixing the two makes ordinary visits look like they always need evidence photos, and hides the arrival check-in step.
+- **Rule:** Require doorplate/entrance photo + GPS on **visit session check-in** (`session_type=訪查`, `checkin_photo_url`). Keep 未遇 photo categories only when `visitResult === "未遇"`. Day-end volunteer checkout stays **manual confirm**, never silent auto-checkout.
+- **Evidence:** `components/visitor/visit-assignment-clock.tsx`, `gas/src/modules/AttendanceModule.gs`, `components/visitor/day-complete-panel.tsx`.
+- **Added on:** 2026-10-03

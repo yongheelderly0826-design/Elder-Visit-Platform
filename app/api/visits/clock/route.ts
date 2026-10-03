@@ -38,6 +38,7 @@ function payloadFromRecords(open: AttendanceRecord | null, latest: AttendanceRec
     visitDate: record?.sessionDate ?? "",
     visitStartTime: record?.checkinAt ? taipeiHm(record.checkinAt) : "",
     visitEndTime: record?.checkoutAt ? taipeiHm(record.checkoutAt) : "",
+    checkinPhotoUrl: record?.checkinPhotoUrl ?? "",
   };
 }
 
@@ -106,6 +107,8 @@ export async function POST(request: NextRequest) {
     visitorId?: string;
     lat?: string | number | null;
     lng?: string | number | null;
+    doorplatePhoto?: string | null;
+    checkinPhotoBase64?: string | null;
   };
 
   const assignmentId = String(body.assignmentId ?? "").trim();
@@ -118,9 +121,23 @@ export async function POST(request: NextRequest) {
 
   const lat = body.lat == null || body.lat === "" ? undefined : String(body.lat);
   const lng = body.lng == null || body.lng === "" ? undefined : String(body.lng);
+  const doorplatePhoto = String(body.doorplatePhoto || body.checkinPhotoBase64 || "").trim();
 
   try {
     if (getSystemStatus().dataMode === "gas_ready") {
+      // Probe open session: checkout does not need photo; checkin does.
+      const status = await gasClient.attendance.status({
+        assignment_id: assignmentId,
+        session_type: VISIT_SESSION_TYPE,
+      });
+      const open = status.open as Record<string, unknown> | null | undefined;
+      if (!open && !doorplatePhoto) {
+        return NextResponse.json(
+          { error: { code: "VALIDATION_ERROR", message: "到宅簽到請先拍攝門牌或門口照片" } },
+          { status: 400 },
+        );
+      }
+
       const result = await gasClient.attendance.clock({
         assignment_id: assignmentId,
         visitor_id: body.visitorId || undefined,
@@ -130,6 +147,7 @@ export async function POST(request: NextRequest) {
         source: "visit",
         lat,
         lng,
+        checkin_photo_base64: open ? undefined : doorplatePhoto,
       });
       const visitor = mapGasClockStatus({
         visitor: (result.visitor as Record<string, unknown> | undefined) ?? result,
@@ -148,12 +166,13 @@ export async function POST(request: NextRequest) {
           visitDate: record?.sessionDate ?? "",
           visitStartTime: record?.checkinAt ? taipeiHm(record.checkinAt) : "",
           visitEndTime: record?.checkoutAt ? taipeiHm(record.checkoutAt) : "",
+          checkinPhotoUrl: record?.checkinPhotoUrl ?? "",
         },
       });
     }
 
     const result = mockClockAttendance({
-      visitorId: body.visitorId || "V-YH-MEAL01",
+      visitorId: body.visitorId || "V-YH-834059",
       assignmentId,
       sessionType: VISIT_SESSION_TYPE,
       siteId: VISIT_SITE_ID,
@@ -161,6 +180,7 @@ export async function POST(request: NextRequest) {
       source: "visit",
       lat,
       lng,
+      checkinPhotoBase64: doorplatePhoto || undefined,
     });
     return NextResponse.json({
       data: {
@@ -169,9 +189,20 @@ export async function POST(request: NextRequest) {
         visitDate: result.record.sessionDate,
         visitStartTime: result.record.checkinAt ? taipeiHm(result.record.checkinAt) : "",
         visitEndTime: result.record.checkoutAt ? taipeiHm(result.record.checkoutAt) : "",
+        checkinPhotoUrl: result.record.checkinPhotoUrl ?? "",
       },
     });
   } catch (error) {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "訪查簽到退失敗";
+    if (message.includes("門牌")) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION_ERROR", message } },
+        { status: 400 },
+      );
+    }
     return gasErrorResponse(error instanceof GasApiError ? error : error, "訪查簽到退失敗");
   }
 }

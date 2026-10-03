@@ -352,6 +352,7 @@ export function VisitDialogueForm({
         <VisitAssignmentClock
           assignmentId={schedule.id}
           visitorId={schedule.visitorId}
+          visitAddress={elderCase.address}
           onTimesChange={({ visitDate, visitStartTime, visitEndTime }) => {
             setCareFormAnswers((current) => ({
               ...current,

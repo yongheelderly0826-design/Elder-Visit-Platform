@@ -9,6 +9,7 @@ var AttendanceModule = (function () {
     'worker_name',
     'id_number',
     'source',
+    'checkin_photo_url',
   ];
   var SESSION_VOLUNTEER = '志工出勤';
   var SESSION_VISIT = '訪查';
@@ -151,6 +152,24 @@ var AttendanceModule = (function () {
     return assignment;
   }
 
+  function persistCheckinPhoto_(dataUrl, attendanceId) {
+    var value = String(dataUrl || '');
+    if (!value) return '';
+    var match = value.match(/^data:(image\/[A-Za-z0-9.+-]+);base64,(.+)$/);
+    if (!match) return value;
+    var folders = DriveApp.getFoldersByName('_訪查門牌簽到');
+    var folder = folders.hasNext()
+      ? folders.next()
+      : DriveApp.getRootFolder().createFolder('_訪查門牌簽到');
+    var extension = match[1].indexOf('png') >= 0 ? 'png' : 'jpg';
+    var blob = Utilities.newBlob(
+      Utilities.base64Decode(match[2].replace(/\s/g, '')),
+      match[1],
+      attendanceId + '-doorplate.' + extension
+    );
+    return folder.createFile(blob).getUrl();
+  }
+
   function checkin(data) {
     ensureSchema_();
     var sessionType = normalizeSessionType_(data.session_type);
@@ -168,6 +187,10 @@ var AttendanceModule = (function () {
         }
       }
       if (!visitor) throwError_('NOT_FOUND', '派案尚未指定訪員');
+      var photoInput = data.checkin_photo_base64 || data.doorplate_photo || '';
+      if (!String(photoInput).trim()) {
+        throwError_('VALIDATION_ERROR', '到宅簽到請先拍攝門牌或門口照片');
+      }
     }
 
     var open = findOpen_(visitor.visitor_id, sessionDate, {
@@ -185,9 +208,17 @@ var AttendanceModule = (function () {
     var site = resolveSite_(data.site_id, isKiosk, isVisit);
     var groupId = visitor.volunteer_group || site.group_id || '';
     var group = VolunteerAttendanceCatalog.getGroup(groupId);
+    var attendanceId = 'ATT-' + Utilities.getUuid().slice(0, 8);
+    var photoUrl = '';
+    if (isVisit) {
+      photoUrl = persistCheckinPhoto_(
+        data.checkin_photo_base64 || data.doorplate_photo || '',
+        attendanceId
+      );
+    }
 
     var record = {
-      attendance_id: 'ATT-' + Utilities.getUuid().slice(0, 8),
+      attendance_id: attendanceId,
       visitor_id: visitor.visitor_id,
       assignment_id: isVisit ? assignmentId : (data.assignment_id || ''),
       session_date: sessionDate,
@@ -207,6 +238,7 @@ var AttendanceModule = (function () {
       worker_name: visitor.name || '',
       id_number: visitor.id_number || '',
       source: data.source || (isVisit ? 'visit' : (isKiosk ? 'office_kiosk' : 'field_qr')),
+      checkin_photo_url: photoUrl,
     };
     return SheetHelper.appendRow(SHEET, record);
   }

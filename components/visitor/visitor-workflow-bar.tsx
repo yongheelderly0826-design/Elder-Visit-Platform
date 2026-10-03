@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardCheck, FilePenLine, IdCard, Wallet } from "lucide-react";
+import { ClipboardCheck, Clock3, FilePenLine, IdCard, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getVisitDraftKey } from "@/lib/domain/offline-drafts";
 import { visitSchedules } from "@/lib/domain/mock-data";
 
-type WorkflowStep = "home" | "profile" | "tasks" | "visit" | "drafts" | "submitted" | "payments";
+type WorkflowStep =
+  | "home"
+  | "profile"
+  | "tasks"
+  | "visit"
+  | "drafts"
+  | "submitted"
+  | "payments"
+  | "hours";
 
 export function VisitorWorkflowBar({
   active,
@@ -42,14 +50,21 @@ export function VisitorWorkflowBar({
     {
       key: "visit" as const,
       label: "填報",
-      detail: "完成訪查",
+      detail: "門牌簽到＋表單",
       href: null,
       icon: FilePenLine,
     },
     {
+      key: "hours" as const,
+      label: "時數",
+      detail: "簽到退／車馬費",
+      href: "/visitor/hours",
+      icon: Clock3,
+    },
+    {
       key: "payments" as const,
       label: "核銷",
-      detail: "查看通過狀態",
+      detail: "訪視費狀態",
       href: "/visitor/payments",
       icon: Wallet,
     },
@@ -64,7 +79,7 @@ export function VisitorWorkflowBar({
 
   return (
     <section className="rounded-lg border bg-card p-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {steps.map((step) => {
           const Icon = step.icon;
           const isActive = step.key === active;

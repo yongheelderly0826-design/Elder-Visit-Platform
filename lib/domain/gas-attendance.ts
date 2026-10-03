@@ -68,6 +68,7 @@ export function mapGasAttendanceRecord(
     siteId: text(row.site_id),
     siteName: text(row.site_name),
     source,
+    checkinPhotoUrl: text(row.checkin_photo_url) || undefined,
   };
 }
 

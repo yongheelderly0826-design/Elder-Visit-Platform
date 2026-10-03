@@ -20,26 +20,38 @@
       gap: 28px;
       max-width: 760px;
       margin: 0 auto;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     }
-    .card-wrap { max-width: 22rem; margin: 0 auto; width: 100%; }
+    .card-wrap {
+      container-type: inline-size;
+      margin: 0 auto;
+      width: 100%;
+      max-width: min(100%, 22rem, calc((100dvh - 8rem) * 781 / 1076));
+    }
     .card {
       position: relative;
       width: 100%;
-      aspect-ratio: 873 / 1250;
-      border-radius: 0.75rem;
+      max-width: 100%;
+      aspect-ratio: 781 / 1076;
       overflow: hidden;
-      border: 1px solid rgba(251, 113, 133, 0.45);
-      box-shadow: 0 10px 28px rgba(120, 40, 55, 0.12);
-      background-size: cover;
-      background-position: center;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(120, 40, 55, 0.1);
+    }
+    .card > .sleeve {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      display: block;
+      pointer-events: none;
     }
     .photo {
       position: absolute;
-      left: 41.58%;
-      top: 43.28%;
-      width: 35.05%;
-      height: 31.12%;
+      left: 33.03%;
+      top: 38.20%;
+      width: 37.77%;
+      height: 35.32%;
       overflow: hidden;
       background: #fff;
     }
@@ -52,15 +64,18 @@
     }
     .name {
       position: absolute;
-      left: 41.58%;
-      width: 35.05%;
-      top: 75.4%;
+      left: 33.03%;
+      width: 37.77%;
+      top: 74.81%;
       text-align: center;
       font-weight: 900;
-      font-size: clamp(1.05rem, 5.2vw, 1.35rem);
-      letter-spacing: 0.06em;
+      font-size: clamp(1.15rem, 8.5cqw, 1.85rem);
+      letter-spacing: 0.08em;
       margin: 0;
       line-height: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .caption {
       text-align: center;
@@ -72,19 +87,23 @@
 </head>
 <body>
   <h1>永和證件套模板示意圖</h1>
-  <p class="note">背景來自《永和_證件套模板》官方裁切；證件照與姓名為模擬疊加。</p>
+  <p class="note">
+    單張裁切含完整黑框；證件照疊在灰框內不蓋過框線。整張會依手機可視範圍自動縮小，不超出畫面與證件黑框。
+  </p>
   <div class="grid">
     <div class="card-wrap">
-      <article class="card" style="background-image:url('/badges/yonghe-badge-sleeve-front.jpg')" aria-label="Joe訪員 訪員證">
+      <article class="card" aria-label="Joe訪員 訪員證">
+        <img class="sleeve" src="/badges/yonghe-badge-sleeve-front.jpg" alt="" />
         <div class="photo">
           <img src="/badges/joe-visitor-portrait.jpg" alt="Joe訪員 證件照（模擬）" />
         </div>
         <p class="name">Joe訪員</p>
       </article>
-      <p class="caption">正面 · Joe訪員</p>
+      <p class="caption">正面 · Joe訪員（含完整黑框）</p>
     </div>
     <div class="card-wrap">
-      <article class="card" style="background-image:url('/badges/yonghe-badge-sleeve-front.jpg')" aria-label="張教授 訪員證">
+      <article class="card" aria-label="張教授 訪員證">
+        <img class="sleeve" src="/badges/yonghe-badge-sleeve-front.jpg" alt="" />
         <div class="photo">
           <img src="/badges/zhang-visitor-portrait.jpg" alt="張教授 證件照（模擬）" />
         </div>
@@ -93,7 +112,9 @@
       <p class="caption">正面 · 張教授</p>
     </div>
     <div class="card-wrap">
-      <article class="card" style="background-image:url('/badges/yonghe-badge-sleeve-back.jpg')" aria-label="訪員證背面"></article>
+      <article class="card" aria-label="訪員證背面">
+        <img class="sleeve" src="/badges/yonghe-badge-sleeve-back.jpg" alt="" />
+      </article>
       <p class="caption">背面守則（點手機證卡可翻面）</p>
     </div>
   </div>

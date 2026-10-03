@@ -18,6 +18,26 @@ type MockAttendance = AttendanceRecord;
 
 const volunteers: MockVolunteer[] = [
   {
+    visitorId: "V-YH-834059",
+    name: "Joe訪員",
+    phone: "0912-000-001",
+    idNumber: "A100000001",
+    groupId: "elder_care",
+    groupName: "獨居關懷組",
+    status: "已核准",
+    badgeNo: "BADGE-JOE",
+  },
+  {
+    visitorId: "EV-115-YH-CIV-620827",
+    name: "張教授",
+    phone: "0912-000-002",
+    idNumber: "A100000002",
+    groupId: "elder_care",
+    groupName: "獨居關懷組",
+    status: "已核准",
+    badgeNo: "BADGE-ZHANG",
+  },
+  {
     visitorId: "V-YH-MEAL01",
     name: "林送餐",
     phone: "0912-111-001",
@@ -76,14 +96,20 @@ function findVolunteer(input: { visitorId?: string; idNumber?: string }) {
   return null;
 }
 
-function findOpen(visitorId: string, sessionDate: string, sessionType = "志工出勤") {
+function findOpen(
+  visitorId: string,
+  sessionDate: string,
+  sessionType = "志工出勤",
+  assignmentId?: string,
+) {
   for (let i = records.length - 1; i >= 0; i -= 1) {
     const row = records[i];
     if (
       row.visitorId === visitorId &&
       row.sessionDate === sessionDate &&
       !row.checkoutAt &&
-      (row.sessionType || "志工出勤") === sessionType
+      (row.sessionType || "志工出勤") === sessionType &&
+      (sessionType !== "訪查" || !assignmentId || row.assignmentId === assignmentId)
     ) {
       return row;
     }
@@ -128,6 +154,7 @@ export function mockClockAttendance(input: {
   lng?: string;
   assignmentId?: string;
   sessionType?: string;
+  checkinPhotoBase64?: string;
 }): { action: AttendanceAction; record: AttendanceRecord; visitor: VolunteerWorker } {
   const visitor = findVolunteer(input);
   if (!visitor) {
@@ -135,7 +162,7 @@ export function mockClockAttendance(input: {
   }
   const today = taipeiToday();
   const sessionType = input.sessionType || "志工出勤";
-  const open = findOpen(visitor.visitorId, today, sessionType);
+  const open = findOpen(visitor.visitorId, today, sessionType, input.assignmentId);
   if (open) {
     const checkoutAt = new Date().toISOString();
     const durationMinutes = Math.max(
@@ -149,6 +176,11 @@ export function mockClockAttendance(input: {
   }
 
   const isVisit = sessionType === "訪查";
+  if (isVisit && !String(input.checkinPhotoBase64 || "").trim()) {
+    throw Object.assign(new Error("到宅簽到請先拍攝門牌或門口照片"), {
+      code: "VALIDATION_ERROR",
+    });
+  }
   const isKiosk = input.channel === "barcode" || input.source === "office_kiosk";
   const site = isVisit
     ? { id: "SITE-VISIT", name: "到宅訪查", groupId: "elder_care" as const }
@@ -181,6 +213,7 @@ export function mockClockAttendance(input: {
     siteId: site.id,
     siteName: site.name,
     source: input.source || (isVisit ? "visit" : isKiosk ? "office_kiosk" : "field_qr"),
+    checkinPhotoUrl: input.checkinPhotoBase64 || undefined,
   };
   records.push(record);
   return { action: "checkin", record: { ...record }, visitor: cloneWorker(visitor) };
