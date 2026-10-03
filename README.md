@@ -46,6 +46,28 @@
 - 承辦工作台可見待派案、待補件、待稽核、待核銷等進度卡  
 - 匯出頁可篩選「只顯示稽核通過」後批次匯出
 
+### 示範／測試帳號（給社會局同仁演練）
+
+> 以下為**試運行示範帳號**，僅供介紹與操作演練，非正式個人帳號。演練後請登出；請勿外流至公開社群。
+
+| 用途 | 入口網址 | Email／識別 | 密碼／說明 | 建議體驗 |
+|------|----------|-------------|------------|----------|
+| **訪查員／志工（建議）** | [/visitor/login](https://elder-visit-platform-ruby.vercel.app/visitor/login) | `visitor@eldervisit.org` | `visitor123` | 訪員證、任務、關懷表、時數／核銷 |
+| **訪查員（Joe，含證件照）** | 同上 | `joe@elder.org` | `joejoe123456` | 官方證件套樣式訪員證、到宅簽到 |
+| **承辦管理者（示範）** | [/login](https://elder-visit-platform-ruby.vercel.app/login) | `manager@eldervisit.org` | `manager123` | 工作台、名冊、派案、匯出 |
+| **督導（示範）** | [/login](https://elder-visit-platform-ruby.vercel.app/login) | `supervisor@eldervisit.org` | `supervisor123` | 稽核通過／退回 |
+| **稽核（示範）** | [/login](https://elder-visit-platform-ruby.vercel.app/login) | `auditor@eldervisit.org` | `auditor123` | 稽核佇列檢視 |
+| **唯讀檢視（示範）** | [/login](https://elder-visit-platform-ruby.vercel.app/login) | `viewer@eldervisit.org` | `viewer123` | 總覽唯讀 |
+
+**志工出勤（免 Email，身分證演練）**
+
+| 代號 | 姓名 | 身分證（測試號） | 組別 | 入口 |
+|------|------|------------------|------|------|
+| T-MEAL | 測試送餐甲 | `A123456789` | 送餐服務組 | [/volunteer/clock](https://elder-visit-platform-ruby.vercel.app/volunteer/clock)（外勤掃 QR） |
+| T-OFF | 測試內勤乙 | `B234567894` | 行政內勤組 | [/office/kiosk](https://elder-visit-platform-ruby.vercel.app/office/kiosk)（公所刷證，需先承辦登入） |
+
+> 正式承辦日常作業另可用公所 Google 帳號登入後台；上表示範帳號不需 Google。
+
 ---
 
 ## 三、系統架構（長官版）
@@ -179,11 +201,14 @@
 
 <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin:12px 0 20px;">
 <img src="docs/briefings/assets/thumbs/06-visitor-login.png" alt="訪員登入" width="200" style="display:block;margin:0;flex:0 0 auto;" />
-<img src="docs/briefings/assets/thumbs/09-visitor-badge-sample.jpg" alt="訪員證示意（含證件照）" width="180" style="display:block;margin:0;flex:0 0 auto;" />
-<img src="docs/briefings/assets/thumbs/08-badge-sleeve-back.jpg" alt="證件套背面守則" width="160" style="display:block;margin:0;flex:0 0 auto;" />
+<img src="docs/briefings/assets/thumbs/09-badge-front-back-pair.jpg" alt="訪員證正面與背面（同尺寸並排）" width="360" style="display:block;margin:0;flex:0 0 auto;" />
 </div>
 
-訪員登入：https://elder-visit-platform-ruby.vercel.app/visitor/login
+訪員證正／背面裁切比例相同（781×1076），示意圖以同尺寸並排顯示。
+
+- 訪員登入：https://elder-visit-platform-ruby.vercel.app/visitor/login
+- 測試帳號：`visitor@eldervisit.org`／`visitor123`
+- 含證件照示範：`joe@elder.org`／`joejoe123456`（詳見上文「示範／測試帳號」）
 
 ### 6.3 督導／稽核
 
@@ -221,6 +246,53 @@
 | 高關懷 | 橘／黃／綠列管 | `/manager/high-care` |
 | 志工出勤 | QR／刷證、月結 Excel | `/manager/attendance`、`/volunteer/clock` |
 | 通報 | 公告、跑馬燈 | `/manager/notifications` |
+
+### 7.1 可填寫／可匯出報表一覽（已完成）
+
+以下為目前**已上線、可實際操作**的填寫與匯出項目（長官／承辦對照用）。「部分」代表有入口但檔案格式或完整度尚在補強。
+
+#### A. 可填寫（登打／送出）
+
+| 名稱 | 角色 | 入口 | 說明 |
+|------|------|------|------|
+| 衛福部生活關懷表 | 訪查員 | `/visitor/visits/...` | 手機登打；草稿可離線暫存 |
+| 空訪（未遇） | 訪查員 | 同上 | 未遇須照片＋定位 |
+| 到宅門牌簽到退 | 訪查員 | 訪視頁簽到區 | 門牌／門口照＋GPS，綁單案 |
+| 電子同意書（個資／社政保密／民政保密） | 訪查員 | `/visitor/consents` | 手機手寫簽名 |
+| 訪員註冊申請 | 準訪員 | `/register` | 含證件照 |
+| 訪員資料補完（含銀行／存摺） | 訪查員 | `/visitor/profile` | 匯款資料待承辦審核 |
+| 志工／訪員出勤打卡 | 訪查員／志工 | `/volunteer/clock`、訪員證 QR | 集合點掃碼或公所刷證 |
+| 稽核核准／退回 | 督導／承辦 | `/manager/audit` | 通過後才可匯出／核銷 |
+| 名冊 CSV 匯入 | 承辦 | `/manager/import` | 預覽後正式寫入 |
+| 高關懷列管狀態 | 承辦 | `/manager/high-care` | 橘／黃／綠追蹤 |
+
+#### B. 可匯出／下載（檔案或列印）
+
+| 名稱 | 角色 | 入口 | 格式 | 狀態 |
+|------|------|------|------|------|
+| 衛福部／中央 102 欄關懷表 | 承辦 | `/manager/exports` | **xlsx**（可存 Drive） | ✅ 已上線 |
+| 關懷表 NTPC A3 PDF | 訪查員／承辦 | 訪視頁下載；API care-form | **PDF** | ✅ 已上線 |
+| 電子同意書 PDF／列印 | 承辦 | `/manager/consent` | **PDF／瀏覽器列印** | ✅ 已上線 |
+| 志工出勤月結 | 承辦 | `/manager/attendance` | **xlsx** | ✅ 已上線 |
+| 每日訪視統計／明細 | 承辦 | `/manager/daily-visits` | 畫面＋**xlsx** | ✅ 已上線 |
+| 訪員名冊 CSV／JSON | 承辦 | `/workspace/users` | **CSV／JSON** | ✅ 已上線 |
+| 訪員證件照 ZIP | 承辦 | `/workspace/users` | **ZIP** | ✅ 已上線 |
+| 訪員存摺附件 ZIP | 承辦 | `/workspace/users` | **ZIP** | ✅ 已上線 |
+| 訪員證列印／領取圖 | 承辦／訪員 | 列印頁、領取連結 | **列印／PNG** | ✅ 已上線 |
+| 核銷批次（訪視費＋資料費） | 承辦 | `/manager/exports` | 畫面批次／鎖定 | △ 部分（檔案下載弱） |
+| 訪查成果／核銷泛用模板 | 承辦 | `/manager/exports`（ExportTool） | CSV 預覽為主 | △ 部分 |
+| 關懷表欄位清單／DOCX 對照 | 訪查員／承辦 | 訪視頁／匯出工具 | 文字清單；DOCX 未完整 | △ 部分 |
+
+#### C. 檢視（非檔案，但屬成果報表）
+
+| 名稱 | 角色 | 入口 |
+|------|------|------|
+| 我的核銷狀態（稽核／訪視費） | 訪查員 | `/visitor/payments` |
+| 我的簽到退時數／車馬費試算 | 訪查員 | `/visitor/hours` |
+| 承辦工作台四步驟進度 | 承辦 | `/dashboard` |
+| KPI／成果檢視 | 承辦 | `/manager/kpi`（部分） |
+
+**匯出閘道**：關懷表 102 欄與核銷批次預設需**稽核通過**後才進入候選，避免未完成案件上報或請款。
 
 ---
 
