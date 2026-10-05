@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
   if (status.dataMode !== "gas_ready" || !isGasConfigured()) {
     const empty: ManagementWorkflowCountValues = {
       pendingAssignments: 0,
+      inProgressVisits: 0,
       pendingFollowUp: 0,
       pendingAudit: 0,
       pendingExport: 0,
@@ -66,6 +67,10 @@ export async function GET(request: NextRequest) {
     const pendingAssignments = caseRows.filter((row) => {
       const visitStatus = asString(row.visit_status);
       return visitStatus === "待訪" || visitStatus === "待派案" || visitStatus === "";
+    }).length;
+
+    const inProgressVisits = caseRows.filter((row) => {
+      return asString(row.visit_status) === "進行中";
     }).length;
 
     const pendingAudit = uniqueCount(
@@ -105,6 +110,7 @@ export async function GET(request: NextRequest) {
 
     const values: ManagementWorkflowCountValues = {
       pendingAssignments,
+      inProgressVisits,
       pendingFollowUp,
       pendingAudit,
       pendingExport,

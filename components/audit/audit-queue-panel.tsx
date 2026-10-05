@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardCheck, Loader2, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { AuditQueueCard } from "@/components/audit/audit-queue-card";
-import {
-  ManagementWorkflowBar,
-  type ManagementWorkflowCounts,
-} from "@/components/manage/management-workflow-bar";
+import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { AuditQueueItem } from "@/lib/domain/types";
@@ -19,7 +16,6 @@ type QueueResponse = {
     pendingItems?: AuditQueueItem[];
     supplementItems?: AuditQueueItem[];
     approvedItems?: AuditQueueItem[];
-    counts?: ManagementWorkflowCounts;
     note?: string;
   };
   error?: { message?: string };
@@ -39,7 +35,6 @@ function groupByVisitor(items: AuditQueueItem[]) {
 export function AuditQueuePanel() {
   const [pendingItems, setPendingItems] = useState<AuditQueueItem[]>([]);
   const [supplementItems, setSupplementItems] = useState<AuditQueueItem[]>([]);
-  const [counts, setCounts] = useState<ManagementWorkflowCounts | undefined>();
   const [mode, setMode] = useState<"gas" | "demo">("demo");
   const [note, setNote] = useState<string | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -60,7 +55,6 @@ export function AuditQueuePanel() {
       }
       setPendingItems(json.data?.pendingItems ?? json.data?.items ?? []);
       setSupplementItems(json.data?.supplementItems ?? []);
-      setCounts(json.data?.counts);
       setHiddenIds(new Set());
       setMode(json.data?.mode ?? "demo");
       setNote(json.data?.note ?? null);
@@ -83,7 +77,7 @@ export function AuditQueuePanel() {
 
   return (
     <div className="grid gap-3">
-      <ManagementWorkflowBar active="audit" counts={counts} />
+      <ManagementWorkflowBar active="audit" />
 
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
