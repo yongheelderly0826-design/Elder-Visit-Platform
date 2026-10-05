@@ -13,6 +13,14 @@
 - **Evidence:** `lib/domain/visits.ts` and `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-05-17
 
+## Lesson: Assignment confirm must honor completion status
+
+- **Trigger:** Joe’s payments showed audited/completed visits, but `/visitor/tasks` still listed them as `填報中`.
+- **Cause:** `AssignmentModule.confirm` ignored `status` from care-form submit and always wrote `進行中`; the live Web App also needed a versioned redeploy after `clasp push`.
+- **Rule:** When completing a visit, set assignment to `已完成`/`空訪`; audit pass should close the assignment; redeploy the production Web App deployment ID, not only `@HEAD`.
+- **Evidence:** `gas/src/modules/AssignmentModule.gs`, `gas/src/modules/AuditModule.gs`, `gas/src/modules/CareFormModule.gs`.
+- **Added on:** 2026-10-05
+
 ## Lesson: Missed-visit needs multi-slot photos
 
 - **Trigger:** A single doorway photo was not enough to document repeated empty visits at different times of day.
