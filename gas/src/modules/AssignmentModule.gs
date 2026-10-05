@@ -89,13 +89,31 @@ var AssignmentModule = (function () {
     return saved;
   }
 
+  function caseVisitStatusForAssignment_(assignmentStatus) {
+    if (assignmentStatus === '已完成' || assignmentStatus === '已送出' || assignmentStatus === '已稽核') {
+      return '已完成';
+    }
+    if (assignmentStatus === '空訪' || assignmentStatus === '空訪續訪') {
+      return '空訪';
+    }
+    if (assignmentStatus === '待接案') {
+      return '待訪';
+    }
+    return '進行中';
+  }
+
   function confirm(data) {
     Validation.requireFields(data, ['assignment_id']);
+    // CareFormModule.submit 會傳 status=已完成／空訪；接案確認則預設進行中。
+    // 舊版忽略傳入 status、一律寫回「進行中」，導致核銷已完成的案仍出現在訪員「填報中」。
+    var nextStatus = String(data.status || '進行中').trim() || '進行中';
     var patch = {
-      status: '進行中',
-      confirmed_at: new Date().toISOString(),
+      status: nextStatus,
       updated_at: new Date().toISOString(),
     };
+    if (nextStatus === '進行中' || nextStatus === '待接案') {
+      patch.confirmed_at = new Date().toISOString();
+    }
     if (data.notes) patch.notes = data.notes;
     var updated = SheetHelper.updateByKey(SHEET, 'assignment_id', data.assignment_id, patch);
     if (!updated) {
@@ -105,7 +123,7 @@ var AssignmentModule = (function () {
     }
     if (updated.case_id) {
       SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', updated.case_id, {
-        visit_status: '進行中',
+        visit_status: caseVisitStatusForAssignment_(nextStatus),
         updated_at: new Date().toISOString(),
       });
     }

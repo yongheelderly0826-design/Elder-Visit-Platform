@@ -62,9 +62,13 @@ export function TaskCard({
         </div>
       )}
 
-      <Button asChild className="mt-4 w-full">
+      <Button asChild className="mt-4 w-full" variant={schedule.status === "submitted" ? "outline" : "default"}>
         <Link href={`/visitor/visits/${schedule.id}`}>
-          {schedule.status === "needs_follow_up" ? "接續訪視" : "開始填報"}
+          {schedule.status === "needs_follow_up"
+            ? "接續訪視"
+            : schedule.status === "submitted"
+              ? "查看已送出紀錄"
+              : "開始填報"}
         </Link>
       </Button>
     </article>

@@ -166,6 +166,18 @@ var AuditModule = (function () {
       }
     }
 
+    // 稽核通過後關閉派案，避免訪員任務仍顯示「填報中」
+    if (decision === '通過' && preview.assignment_id) {
+      try {
+        AssignmentModule.confirm({
+          assignment_id: preview.assignment_id,
+          status: '已完成',
+        });
+      } catch (e) {
+        // 派案更新失敗不阻斷稽核決定
+      }
+    }
+
     ReadCache.bump();
     if (preview.assignment_id) {
       var assignment = AssignmentModule.get(preview.assignment_id);

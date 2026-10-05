@@ -55,7 +55,9 @@ function mapVisitStatus(status: string): ElderCase["status"] {
 
 function mapAssignmentStatus(status: string): VisitSchedule["status"] {
   if (status === "進行中") return "in_progress";
-  if (status === "已完成" || status === "已送出") return "submitted";
+  if (status === "已完成" || status === "已送出" || status === "已稽核" || status === "空訪") {
+    return "submitted";
+  }
   if (status === "空訪續訪") return "needs_follow_up";
   return "pending";
 }
