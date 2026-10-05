@@ -9,6 +9,7 @@ import { VisitorWorkflowBar } from "@/components/visitor/visitor-workflow-bar";
 import type { VisitDraft } from "@/lib/domain/offline-drafts";
 import { elderCases, visitSchedules } from "@/lib/domain/mock-data";
 import { getVisitDraftKey } from "@/lib/domain/offline-drafts";
+import { maskPersonName } from "@/lib/domain/person-name";
 
 type DraftItem = {
   scheduleId: string;
@@ -61,7 +62,7 @@ export function DraftList() {
           {drafts.map((item) => (
             <article key={item.scheduleId} className="rounded-lg border bg-card p-4">
               <h2 className="font-semibold">
-                {getDraftCaseName(item.scheduleId) ?? item.scheduleId}
+                {maskPersonName(getDraftCaseName(item.scheduleId)) || item.scheduleId}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 {item.draft.visitResult} · {item.draft.healthStatus} ·{" "}

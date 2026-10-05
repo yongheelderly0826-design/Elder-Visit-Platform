@@ -40,6 +40,7 @@ import {
   validateVisitSubmission,
 } from "@/lib/domain/visits";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
+import { maskPersonName } from "@/lib/domain/person-name";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -437,7 +438,7 @@ export function VisitDialogueForm({
     <section className="rounded-lg border bg-card p-4 pb-28 sm:pb-4">
       <div>
         <p className="text-sm font-medium text-primary">對話式填報流程</p>
-        <h1 className="mt-2 text-2xl font-semibold">{elderCase.name}</h1>
+        <h1 className="mt-2 text-2xl font-semibold">{maskPersonName(elderCase.name)}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {elderCase.caseCode} · {elderCase.district} · {elderCase.village} · 第{" "}
           {schedule.visitAttempt} 次訪視
@@ -979,7 +980,7 @@ function VisitGuidePanel({ elderCase }: { elderCase: ElderCase }) {
           <p className="font-semibold">{visitGuidePrecheck.title}</p>
           <p className="mt-1 leading-5 text-muted-foreground">{visitGuidePrecheck.goal}</p>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
-            <GuideFact label="個案" value={elderCase.name} />
+            <GuideFact label="個案" value={maskPersonName(elderCase.name)} />
             <GuideFact label="案號" value={elderCase.caseCode} />
             <GuideFact label="區里" value={`${elderCase.district} ${elderCase.village}`} />
             <GuideFact label="地址" value={elderCase.address} />
@@ -1105,12 +1106,40 @@ function CareFormInput({
       ? "border border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
       : "border"
   }`;
+  const rawText = typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : "";
+  const isMaskedNameField =
+    field.key === "name" ||
+    field.mohwKey === "name" ||
+    field.key === "emergency_contact_name" ||
+    field.mohwKey === "emergency_contact_name";
 
   const errorText = error ? (
     <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
       {visitorFacingMohwError(error)}
     </p>
   ) : null;
+
+  // 訪員端畫面只顯示姓氏；完整姓名仍留在 answers 供送出／衛福部匯出
+  if (isMaskedNameField) {
+    return (
+      <div
+        id={fieldId}
+        className={`grid scroll-mt-28 gap-1 rounded-md border p-3 text-sm ${
+          error ? "border-destructive bg-destructive/5" : "bg-background"
+        }`}
+      >
+        <p className="font-medium">
+          {field.label}
+          {requiredMark}
+        </p>
+        <p className="text-base font-semibold">{maskPersonName(rawText) || "—"}</p>
+        <p className="text-xs leading-5 text-muted-foreground">
+          畫面僅顯示姓氏；送出與匯出仍使用完整姓名。
+        </p>
+        {errorText}
+      </div>
+    );
+  }
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];

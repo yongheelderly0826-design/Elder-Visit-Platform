@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock3, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { maskPersonName } from "@/lib/domain/person-name";
 
 type PaymentItem = {
   id: string;
@@ -104,7 +105,9 @@ export function VisitorPaymentsPanel() {
               <article key={item.id} className="rounded-lg border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-lg font-semibold">{item.caseName || item.caseId}</p>
+                    <p className="text-lg font-semibold">
+                      {maskPersonName(item.caseName) || item.caseId}
+                    </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {item.visitResult || "訪視"} · {item.assignmentId}
                     </p>
