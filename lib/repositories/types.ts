@@ -52,6 +52,11 @@ export type AppRepository = {
   getDashboardMetrics(): Promise<DashboardMetric[]>;
   getActivityItems(): Promise<ActivityItem[]>;
   getVisitorTasks(visitorId?: string): Promise<VisitorTask[]>;
+  getVisitorVisitStats(visitorId?: string): Promise<{
+    pending: number;
+    completed: number;
+    total: number;
+  }>;
   getVisitTask(scheduleId: string): Promise<VisitorTask | null>;
   getCaseRegistry(): Promise<CaseRegistryItem[]>;
   getCaseRegistrySummary(): Promise<CaseRegistrySummary>;

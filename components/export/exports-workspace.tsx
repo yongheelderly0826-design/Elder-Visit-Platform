@@ -56,7 +56,6 @@ export function ExportsWorkspace() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [payment, setPayment] = useState(() => mapPaymentBatch(undefined));
-  const [counts, setCounts] = useState({ pending_audit: 0, approved: 0, returned: 0 });
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
 
   const loadBundle = useCallback(async () => {
@@ -79,7 +78,6 @@ export function ExportsWorkspace() {
       setItems(nextItems);
       setMode(json.data?.mode ?? "gas");
       setPayment(mapPaymentBatch(json.data));
-      setCounts(json.data?.counts ?? { pending_audit: 0, approved: 0, returned: 0 });
       setNote(
         nextItems.length === 0
           ? onlyAudited
@@ -101,14 +99,7 @@ export function ExportsWorkspace() {
 
   return (
     <div className="space-y-4">
-      <ManagementWorkflowBar
-        active="exports"
-        counts={{
-          pendingAudit: `${counts.pending_audit} 件`,
-          pendingExport: `${counts.approved} 件已核准`,
-          pendingFollowUp: `${counts.returned} 件`,
-        }}
-      />
+      <ManagementWorkflowBar active="exports" />
       {elapsedMs != null ? (
         <p className="text-xs text-muted-foreground">
           這次讀取 {Math.round(elapsedMs / 100) / 10} 秒

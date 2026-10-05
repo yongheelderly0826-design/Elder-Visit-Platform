@@ -36,6 +36,17 @@ export const mockRepository: AppRepository = {
       return [{ schedule, elderCase }];
     });
   },
+  async getVisitorVisitStats() {
+    const tasks = await this.getVisitorTasks();
+    const pending = tasks.filter(
+      ({ schedule }) =>
+        schedule.status === "pending" ||
+        schedule.status === "in_progress" ||
+        schedule.status === "needs_follow_up",
+    ).length;
+    const completed = tasks.filter(({ schedule }) => schedule.status === "submitted").length;
+    return { pending, completed, total: tasks.length };
+  },
   async getVisitTask(scheduleId: string) {
     const tasks = await this.getVisitorTasks();
     return tasks.find((task) => task.schedule.id === scheduleId) ?? null;

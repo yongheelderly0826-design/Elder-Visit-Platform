@@ -568,6 +568,9 @@ export type AuditQueueItem = {
   completionPct?: number;
   errorLines?: string[];
   exportReady?: boolean;
+  visitorId?: string;
+  visitorName?: string;
+  decision?: string;
 };
 
 export type AuditDecision = {

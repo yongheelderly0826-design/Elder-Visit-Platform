@@ -229,6 +229,15 @@ export const gasClient = {
       }),
     get: (id: string) => gasFetch<unknown>("cases.get", { params: { id } }),
     getEncoded: (code: string) => gasFetch<unknown>("cases.getEncoded", { params: { code } }),
+    reencode: () =>
+      gasFetch<{
+        cases: number;
+        changed: number;
+        assignments: number;
+        careforms: number;
+        high_care: number;
+        missed: number;
+      }>("cases.reencode", { method: "POST", body: {} }),
     import: (body: { rows: unknown[] }) =>
       gasFetch<{ imported: number; case_ids: string[] }>("cases.import", { method: "POST", body }),
   },

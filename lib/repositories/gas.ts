@@ -369,6 +369,42 @@ export const gasRepository: AppRepository = {
     }
   },
 
+  async getVisitorVisitStats(visitorId?: string) {
+    const resolvedVisitorId = String(visitorId || "").trim();
+    if (!resolvedVisitorId) return { pending: 0, completed: 0, total: 0 };
+    try {
+      return await cachedRead(
+        ["visitor-visit-stats", resolvedVisitorId],
+        [GAS_READ_TAGS.visitorTasks],
+        async () => {
+          const rows =
+            ((await gasClient.assignments.list({
+              visitor_id: resolvedVisitorId,
+            })) as GasAssignmentRow[]) || [];
+          const pending = rows.filter((row) => {
+            const status = String(row.status ?? "");
+            return status === "待接案" || status === "進行中" || status === "空訪續訪";
+          }).length;
+          const completed = rows.filter((row) => {
+            const status = String(row.status ?? "");
+            return (
+              status === "已完成" || status === "已送出" || status === "已稽核" || status === "空訪"
+            );
+          }).length;
+          return {
+            pending,
+            completed,
+            total: rows.length,
+          };
+        },
+        GAS_READ_CACHE_SECONDS_FAST,
+      );
+    } catch (error) {
+      console.error("getVisitorVisitStats failed", visitorId, error);
+      return { pending: 0, completed: 0, total: 0 };
+    }
+  },
+
   async getVisitTask(scheduleId: string) {
     const workspaceId = process.env.GAS_WORKSPACE_ID ?? "WS-YH-115";
     try {

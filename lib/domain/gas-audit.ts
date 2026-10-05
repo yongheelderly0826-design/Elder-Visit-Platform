@@ -70,7 +70,7 @@ export function mapGasAuditQueueItem(raw: GasAuditRow): AuditQueueItem {
     id: asString(raw.audit_id),
     visitRecordId: asString(raw.careform_id),
     scheduleId: asString(raw.assignment_id),
-    caseCode: asString(raw.external_id || raw.encoded_id || raw.case_id),
+    caseCode: asString(raw.encoded_id || raw.external_id || raw.case_id),
     elderName: asString(raw.name) || "未知名",
     submittedAt: asString(raw.submitted_at) || asString(raw.decided_at) || new Date().toISOString(),
     auditState,
@@ -85,6 +85,9 @@ export function mapGasAuditQueueItem(raw: GasAuditRow): AuditQueueItem {
     completionPct: Number(raw.completion_pct ?? 0),
     errorLines,
     exportReady: auditState === "approved" && raw.validation_ok !== false,
+    visitorId: asString(raw.visitor_id) || undefined,
+    visitorName: asString(raw.visitor_name) || undefined,
+    decision: asString(raw.decision) || undefined,
   };
 }
 

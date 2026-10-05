@@ -27,6 +27,7 @@ var ApiRouter = (function () {
     'cases.get': function (p) { return CaseModule.get(p.id); },
     'cases.getEncoded': function (p) { return CaseModule.getByEncoded(p.code); },
     'cases.import': function (p, b) { return CaseModule.importBatch(b); },
+    'cases.reencode': function () { return CaseModule.reencodeAll(); },
 
     'assignments.list': function (p) { return AssignmentModule.list(p); },
     'assignments.get': function (p) { return AssignmentModule.get(p.assignment_id || p.id); },

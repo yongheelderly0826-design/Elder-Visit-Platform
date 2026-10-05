@@ -51,17 +51,26 @@ var VisitRecordIndex = (function () {
       auditsByCareform[careformId].push(row);
     });
 
+    var visitors = rows_(Config.SHEET_NAMES.VISITORS);
+    var visitorById = {};
+    visitors.forEach(function (row) {
+      var id = String(row.visitor_id || '').trim();
+      if (id) visitorById[id] = row;
+    });
+
     return {
       cases: cases,
       assignments: assignments,
       careforms: careforms,
       audits: audits,
+      visitors: visitors,
       caseById: caseById,
       assignmentById: assignmentById,
       assignmentsByCase: assignmentsByCase,
       careformById: careformById,
       careformsByAssignment: careformsByAssignment,
       auditsByCareform: auditsByCareform,
+      visitorById: visitorById,
     };
   }
 

@@ -61,6 +61,11 @@ var AuditModule = (function () {
       validation = MohwLifeCareValidator.validateRow(answers, 2);
     }
 
+    var visitorId = String(
+      careform.visitor_id || assignment.visitor_id || ''
+    ).trim();
+    var visitor = (index.visitorById && index.visitorById[visitorId]) || {};
+
     return {
       audit_id: audit.audit_id,
       careform_id: audit.careform_id,
@@ -80,7 +85,8 @@ var AuditModule = (function () {
       completion_pct: careform.completion_pct || 0,
       careform_status: careform.status || '',
       submitted_at: careform.submitted_at || '',
-      visitor_id: careform.visitor_id || '',
+      visitor_id: visitorId,
+      visitor_name: visitor.name || '',
       validation_ok: validation.ok,
       error_count: (validation.errors && validation.errors.length) || 0,
       error_lines: (validation.errorLines || []).slice(0, 8),

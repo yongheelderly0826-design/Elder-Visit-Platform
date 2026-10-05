@@ -95,6 +95,13 @@ export function AuditQueueCard({
         <div>
           <h2 className="font-semibold">{item.elderName}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{item.caseCode}</p>
+          {item.visitorName || item.visitorId ? (
+            <p className="mt-1 text-sm text-foreground">
+              訪員：{item.visitorName || item.visitorId}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-amber-800">訪員：尚未對到派案資料</p>
+          )}
           {item.village ? (
             <p className="mt-1 text-xs text-muted-foreground">{item.village}</p>
           ) : null}

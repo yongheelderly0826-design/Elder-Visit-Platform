@@ -41,6 +41,9 @@ export const supabaseRepository: AppRepository = {
   async getVisitorTasks() {
     return mockRepository.getVisitorTasks();
   },
+  async getVisitorVisitStats() {
+    return mockRepository.getVisitorVisitStats();
+  },
   async getVisitTask(scheduleId: string) {
     return mockRepository.getVisitTask(scheduleId);
   },
