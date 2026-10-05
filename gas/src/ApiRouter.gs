@@ -49,6 +49,9 @@ var ApiRouter = (function () {
     },
     'attendance.catalog': function () { return AttendanceModule.catalog(); },
     'attendance.sites.create': function (p, b) { return AttendanceModule.createSite(b || p); },
+    'attendance.seedCompletedVisit': function (p, b) {
+      return AttendanceModule.seedCompletedVisit(b || p);
+    },
 
     'careform.get': function (p) { return CareFormModule.get(p.assignment_id); },
     'careform.saveDraft': function (p, b) { return CareFormModule.saveDraft(b); },

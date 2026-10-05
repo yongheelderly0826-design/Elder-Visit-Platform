@@ -54,24 +54,26 @@ export async function GET(request: NextRequest) {
 
   try {
     if (getSystemStatus().dataMode === "gas_ready") {
-      const [rows, transport] = await Promise.all([
+      // 明細取訪員全部簽到退；本月彙總另依 period 計算（避免跨月訪視完成後本頁空白）
+      const [allRows, transport] = await Promise.all([
         gasClient.attendance.list({
           visitor_id: visitorId,
-          period,
         }),
         gasClient.payments
           .calculate({ visitor_id: visitorId, period: quarter, group: "elder_care" })
           .catch(() => null),
       ]);
 
-      const records = (rows || [])
+      const records = (allRows || [])
         .map((row) => mapGasAttendanceRecord(row))
-        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+        .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        .sort((a, b) => String(b.checkinAt || b.sessionDate).localeCompare(String(a.checkinAt || a.sessionDate)));
 
-      const visitMinutes = records
+      const monthRecords = records.filter((row) => String(row.sessionDate || "").startsWith(period));
+      const visitMinutes = monthRecords
         .filter((row) => row.sessionType === "訪查")
         .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
-      const volunteerMinutes = records
+      const volunteerMinutes = monthRecords
         .filter((row) => row.sessionType !== "訪查")
         .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
 

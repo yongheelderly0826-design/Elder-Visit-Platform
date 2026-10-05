@@ -442,6 +442,20 @@ export const gasClient = {
       gasFetch<Array<Record<string, unknown>>>("attendance.list", {
         params: params as Record<string, string> | undefined,
       }),
+    seedCompletedVisit: (body: {
+      assignment_id: string;
+      visitor_id?: string;
+      session_date?: string;
+      checkin_at: string;
+      checkout_at: string;
+      lat?: string;
+      lng?: string;
+      source?: string;
+    }) =>
+      gasFetch<{ skipped?: boolean; reason?: string; record?: Record<string, unknown> }>(
+        "attendance.seedCompletedVisit",
+        { method: "POST", body },
+      ),
     monthlyExport: (body: { period: string }) =>
       gasFetch<Record<string, unknown>>("attendance.monthlyExport", { method: "POST", body }),
     catalog: () =>

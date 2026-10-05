@@ -466,6 +466,68 @@ var AttendanceModule = (function () {
     };
   }
 
+  /**
+   * 補寫已完成的到宅訪查簽到退（模擬／回填用）。
+   * 不會要求門牌照片；同一派案若已有訪查簽到則略過。
+   */
+  function seedCompletedVisit(data) {
+    ensureSchema_();
+    data = data || {};
+    Validation.requireFields(data, ['assignment_id', 'checkin_at', 'checkout_at']);
+    var assignment = requireVisitAssignment_(data.assignment_id);
+    var visitorId = String(data.visitor_id || assignment.visitor_id || '').trim();
+    if (!visitorId) throwError_('VALIDATION_ERROR', '找不到訪員');
+    var visitor = VisitorModule.get(visitorId);
+    if (!visitor) throwError_('NOT_FOUND', '訪員不存在：' + visitorId);
+
+    var existing = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).filter(function (row) {
+      return (
+        String(row.assignment_id || '') === String(data.assignment_id) &&
+        isVisitRow_(row)
+      );
+    });
+    if (existing.length) {
+      return { skipped: true, reason: 'already_exists', record: existing[0] };
+    }
+
+    var checkinAt = String(data.checkin_at);
+    var checkoutAt = String(data.checkout_at);
+    var sessionDate =
+      asDateText_(data.session_date) ||
+      asDateText_(checkinAt) ||
+      todayTaipei_();
+    var attendanceId = 'ATT-' + Utilities.getUuid().slice(0, 8);
+    var groupId = visitor.volunteer_group || 'elder_care';
+    var group = VolunteerAttendanceCatalog.getGroup(groupId);
+    var record = {
+      attendance_id: attendanceId,
+      visitor_id: visitorId,
+      assignment_id: String(data.assignment_id),
+      session_date: sessionDate,
+      checkin_at: checkinAt,
+      checkout_at: checkoutAt,
+      checkin_lat: data.lat || '25.0078',
+      checkin_lng: data.lng || '121.5145',
+      checkout_lat: data.lat || '25.0078',
+      checkout_lng: data.lng || '121.5145',
+      session_type: SESSION_VISIT,
+      duration_minutes: durationMinutes_(checkinAt, checkoutAt),
+      channel: 'gps',
+      site_id: VISIT_SITE_ID,
+      site_name: '到宅訪查',
+      group_id: groupId,
+      group_name: group ? group.name : '獨居關懷組',
+      worker_name: visitor.name || '',
+      id_number: visitor.id_number || '',
+      source: data.source || 'seed_visit',
+      checkin_photo_url: data.checkin_photo_url || '(模擬門牌簽到)',
+    };
+    var saved = SheetHelper.appendRow(SHEET, record);
+    ReadCache.bump();
+    ReportModule.scheduleDailyVisitSnapshot(sessionDate);
+    return { skipped: false, record: saved };
+  }
+
   function createSite(data) {
     return VolunteerAttendanceCatalog.createSite(data || {});
   }
@@ -480,5 +542,6 @@ var AttendanceModule = (function () {
     monthlyExport: monthlyExport,
     catalog: catalog,
     createSite: createSite,
+    seedCompletedVisit: seedCompletedVisit,
   };
 })();

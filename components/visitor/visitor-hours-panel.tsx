@@ -113,9 +113,11 @@ export function VisitorHoursPanel() {
               </p>
             </article>
             <article className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground">期間</p>
+              <p className="text-xs text-muted-foreground">期間（上方時數）</p>
               <p className="mt-1 text-lg font-semibold">{payload?.period ?? "—"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">季結參考：{payload?.quarter}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                季結參考：{payload?.quarter}；下方明細含其他月份
+              </p>
             </article>
           </section>
 
