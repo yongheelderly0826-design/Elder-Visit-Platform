@@ -7,6 +7,11 @@ import { mockListAttendance } from "@/lib/domain/volunteer-attendance-mock";
 import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { VOLUNTEER_CLOCK_COOKIE } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import {
+  cachedRead,
+  GAS_READ_CACHE_SECONDS_FAST,
+  GAS_READ_TAGS,
+} from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 function periodQuarter(date = new Date()) {
@@ -54,47 +59,56 @@ export async function GET(request: NextRequest) {
 
   try {
     if (getSystemStatus().dataMode === "gas_ready") {
-      // 明細取訪員全部簽到退；本月彙總另依 period 計算（避免跨月訪視完成後本頁空白）
-      const [allRows, transport] = await Promise.all([
-        gasClient.attendance.list({
-          visitor_id: visitorId,
-        }),
-        gasClient.payments
-          .calculate({ visitor_id: visitorId, period: quarter, group: "elder_care" })
-          .catch(() => null),
-      ]);
+      // 3s 快取：切分頁加快；簽到退後會 invalidate visitorHours
+      const payload = await cachedRead(
+        ["visitor-hours", visitorId, period, quarter],
+        [GAS_READ_TAGS.visitorHours],
+        async () => {
+          const [allRows, transport] = await Promise.all([
+            gasClient.attendance.list({
+              visitor_id: visitorId,
+            }),
+            gasClient.payments
+              .calculate({ visitor_id: visitorId, period: quarter, group: "elder_care" })
+              .catch(() => null),
+          ]);
 
-      const records = (allRows || [])
-        .map((row) => mapGasAttendanceRecord(row))
-        .filter((row): row is NonNullable<typeof row> => Boolean(row))
-        .sort((a, b) => String(b.checkinAt || b.sessionDate).localeCompare(String(a.checkinAt || a.sessionDate)));
+          const records = (allRows || [])
+            .map((row) => mapGasAttendanceRecord(row))
+            .filter((row): row is NonNullable<typeof row> => Boolean(row))
+            .sort((a, b) =>
+              String(b.checkinAt || b.sessionDate).localeCompare(String(a.checkinAt || a.sessionDate)),
+            );
 
-      const monthRecords = records.filter((row) => String(row.sessionDate || "").startsWith(period));
-      const visitMinutes = monthRecords
-        .filter((row) => row.sessionType === "訪查")
-        .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
-      const volunteerMinutes = monthRecords
-        .filter((row) => row.sessionType !== "訪查")
-        .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
+          const monthRecords = records.filter((row) => String(row.sessionDate || "").startsWith(period));
+          const visitMinutes = monthRecords
+            .filter((row) => row.sessionType === "訪查")
+            .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
+          const volunteerMinutes = monthRecords
+            .filter((row) => row.sessionType !== "訪查")
+            .reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
 
-      return NextResponse.json({
-        data: {
-          mode: "gas",
-          visitorId,
-          visitorName: name,
-          period,
-          quarter,
-          records,
-          summary: {
-            visitMinutes,
-            volunteerMinutes,
-            totalMinutes: visitMinutes + volunteerMinutes,
-            visitHours: (visitMinutes / 60).toFixed(1),
-            volunteerHours: (volunteerMinutes / 60).toFixed(1),
-          },
-          transportEstimate: transport,
+          return {
+            mode: "gas" as const,
+            visitorId,
+            visitorName: name,
+            period,
+            quarter,
+            records,
+            summary: {
+              visitMinutes,
+              volunteerMinutes,
+              totalMinutes: visitMinutes + volunteerMinutes,
+              visitHours: (visitMinutes / 60).toFixed(1),
+              volunteerHours: (volunteerMinutes / 60).toFixed(1),
+            },
+            transportEstimate: transport,
+          };
         },
-      });
+        GAS_READ_CACHE_SECONDS_FAST,
+      );
+
+      return NextResponse.json({ data: payload });
     }
 
     const records = mockListAttendance(period).filter((row) => row.visitorId === visitorId);

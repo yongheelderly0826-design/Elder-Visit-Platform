@@ -13,6 +13,14 @@
 - **Evidence:** `lib/domain/visits.ts` and `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-05-17
 
+## Lesson: Visitor tab cache vs attendance invalidation
+
+- **Trigger:** Speeding up every visitor tab raised the question whether check-in/out must clear caches.
+- **Cause:** Read caches (3–60s) improve tab switching, but hours/tasks would briefly show pre-clock data if not invalidated.
+- **Rule:** Cache visitor hours (3s), tasks (3s), payments (3s), badge QR (60s). On check-in/out only invalidate `visitorHours` + `visitorTasks` (+ daily visits)—not badge or payments.
+- **Evidence:** `lib/gas-read-cache.ts`, `app/api/visitor/hours/route.ts`, `app/api/attendance/clock/route.ts`, `app/api/visits/clock/route.ts`.
+- **Added on:** 2026-10-05
+
 ## Lesson: Assignment confirm must honor completion status
 
 - **Trigger:** Joe’s payments showed audited/completed visits, but `/visitor/tasks` still listed them as `填報中`.

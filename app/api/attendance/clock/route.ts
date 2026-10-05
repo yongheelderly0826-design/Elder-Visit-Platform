@@ -12,6 +12,7 @@ import {
   isAttendanceSiteId,
 } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import { invalidateVisitorAttendanceCaches } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 function requireKioskAuth(request: NextRequest) {
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
         today: "",
         open: null,
       }).visitor;
+      invalidateVisitorAttendanceCaches();
       return NextResponse.json({
         data: {
           mode: "gas",

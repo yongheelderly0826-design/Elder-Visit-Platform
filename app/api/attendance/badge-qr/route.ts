@@ -11,6 +11,11 @@ import {
 import { mockAttendanceStatus } from "@/lib/domain/volunteer-attendance-mock";
 import { VOLUNTEER_CLOCK_COOKIE } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import {
+  cachedRead,
+  GAS_READ_CACHE_SECONDS_BADGE,
+  GAS_READ_TAGS,
+} from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
 export async function GET(request: NextRequest) {
@@ -34,45 +39,53 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let name = "";
-    let groupName = "";
-    let badgeNo = "";
-
-    if (getSystemStatus().dataMode === "gas_ready") {
-      const status = await gasClient.attendance.status({ visitor_id: visitorId });
-      const mapped = mapGasClockStatus({
-        visitor: (status.visitor as Record<string, unknown>) ?? status,
-        today: String(status.today ?? ""),
-        open: null,
-      });
-      name = mapped.visitor.name;
-      groupName = mapped.visitor.groupName;
-      badgeNo = mapped.visitor.badgeNo;
-      visitorId = mapped.visitor.visitorId || visitorId;
-    } else {
-      const demo = mockAttendanceStatus({ visitorId });
-      name = demo.visitor.name;
-      groupName = demo.visitor.groupName;
-      badgeNo = demo.visitor.badgeNo;
-      visitorId = demo.visitor.visitorId;
-    }
-
     const origin = request.nextUrl.origin;
-    const payload = buildVolunteerBadgePayload(visitorId);
-    const badgeUrl = buildVolunteerBadgeUrl(origin, visitorId);
-    const qrUrl = await QRCode.toDataURL(payload, { width: 480, margin: 1 });
+    const data = await cachedRead(
+      ["visitor-badge-qr", visitorId, origin],
+      [GAS_READ_TAGS.visitorBadge],
+      async () => {
+        let name = "";
+        let groupName = "";
+        let badgeNo = "";
+        let resolvedVisitorId = visitorId;
 
-    return NextResponse.json({
-      data: {
-        visitorId,
-        name,
-        groupName,
-        badgeNo,
-        payload,
-        badgeUrl,
-        qrUrl,
+        if (getSystemStatus().dataMode === "gas_ready") {
+          const status = await gasClient.attendance.status({ visitor_id: visitorId });
+          const mapped = mapGasClockStatus({
+            visitor: (status.visitor as Record<string, unknown>) ?? status,
+            today: String(status.today ?? ""),
+            open: null,
+          });
+          name = mapped.visitor.name;
+          groupName = mapped.visitor.groupName;
+          badgeNo = mapped.visitor.badgeNo;
+          resolvedVisitorId = mapped.visitor.visitorId || visitorId;
+        } else {
+          const demo = mockAttendanceStatus({ visitorId });
+          name = demo.visitor.name;
+          groupName = demo.visitor.groupName;
+          badgeNo = demo.visitor.badgeNo;
+          resolvedVisitorId = demo.visitor.visitorId;
+        }
+
+        const payload = buildVolunteerBadgePayload(resolvedVisitorId);
+        const badgeUrl = buildVolunteerBadgeUrl(origin, resolvedVisitorId);
+        const qrUrl = await QRCode.toDataURL(payload, { width: 480, margin: 1 });
+
+        return {
+          visitorId: resolvedVisitorId,
+          name,
+          groupName,
+          badgeNo,
+          payload,
+          badgeUrl,
+          qrUrl,
+        };
       },
-    });
+      GAS_READ_CACHE_SECONDS_BADGE,
+    );
+
+    return NextResponse.json({ data });
   } catch (error) {
     return gasErrorResponse(error instanceof GasApiError ? error : error, "產生個人 QR 失敗");
   }

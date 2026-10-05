@@ -10,6 +10,9 @@ export const GAS_READ_CACHE_SECONDS = 20;
  */
 export const GAS_READ_CACHE_SECONDS_FAST = 3;
 
+/** Visitor badge / profile-ish reads change rarely during a shift. */
+export const GAS_READ_CACHE_SECONDS_BADGE = 60;
+
 export const GAS_READ_TAGS = {
   dailyVisits: "gas-daily-visits",
   visitorTasks: "gas-visitor-tasks",
@@ -17,6 +20,8 @@ export const GAS_READ_TAGS = {
   auditQueue: "gas-audit-queue",
   assignmentDashboard: "gas-assignment-dashboard",
   highCare: "gas-high-care",
+  visitorHours: "gas-visitor-hours",
+  visitorBadge: "gas-visitor-badge",
 } as const;
 
 export function invalidateGasReadCaches() {
@@ -26,6 +31,15 @@ export function invalidateGasReadCaches() {
   revalidateTag(GAS_READ_TAGS.auditQueue);
   revalidateTag(GAS_READ_TAGS.assignmentDashboard);
   revalidateTag(GAS_READ_TAGS.highCare);
+  revalidateTag(GAS_READ_TAGS.visitorHours);
+  revalidateTag(GAS_READ_TAGS.visitorBadge);
+}
+
+/** After check-in / check-out: refresh hours + tasks; leave badge / payments alone. */
+export function invalidateVisitorAttendanceCaches() {
+  revalidateTag(GAS_READ_TAGS.visitorHours);
+  revalidateTag(GAS_READ_TAGS.visitorTasks);
+  revalidateTag(GAS_READ_TAGS.dailyVisits);
 }
 
 export function cachedRead<T>(

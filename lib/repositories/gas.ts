@@ -1,5 +1,11 @@
 import { gasClient, isUnknownGasAction } from "@/lib/gas-client";
-import { cachedRead, GAS_READ_TAGS, invalidateGasReadCaches } from "@/lib/gas-read-cache";
+import {
+  cachedRead,
+  GAS_READ_CACHE_SECONDS_FAST,
+  GAS_READ_TAGS,
+  invalidateGasReadCaches,
+} from "@/lib/gas-read-cache";
+
 import { blueprints } from "@/lib/domain/mock-data";
 import { createPaymentBatchPreview, paymentFeeRules } from "@/lib/domain/payments";
 import type {
@@ -355,6 +361,7 @@ export const gasRepository: AppRepository = {
         ["visitor-tasks", resolvedVisitorId],
         [GAS_READ_TAGS.visitorTasks],
         () => buildVisitorTasks(resolvedVisitorId),
+        GAS_READ_CACHE_SECONDS_FAST,
       );
     } catch (error) {
       console.error("getVisitorTasks failed", visitorId, error);
