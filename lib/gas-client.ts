@@ -376,7 +376,30 @@ export const gasClient = {
         revalidateSeconds: 20,
         tags: ["gas-manager-exports"],
       }),
-    history: () => gasFetch<unknown[]>("export.history"),
+    history: (params?: { limit?: string }) =>
+      gasFetch<{
+        items: Array<{
+          export_id: string;
+          export_type: string;
+          case_count: number;
+          file_name: string;
+          file_id: string;
+          file_url: string;
+          column_count: number;
+          skipped_count: number;
+          exported_by: string;
+          exported_at: string;
+        }>;
+        summary: {
+          total_exports: number;
+          total_cases: number;
+          mohw_exports: number;
+          mohw_cases: number;
+          last_exported_at: string;
+        };
+      }>("export.history", {
+        params: params as Record<string, string> | undefined,
+      }),
   },
   reports: {
     kpi: (period?: string) =>

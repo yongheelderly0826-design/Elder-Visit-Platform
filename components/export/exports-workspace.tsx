@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ExportTool } from "@/components/export/export-tool";
+import { ExportHistoryPanel } from "@/components/export/export-history-panel";
 import { MohwExportPanel } from "@/components/export/mohw-export-panel";
 import { PaymentBatchPanel } from "@/components/export/payment-batch-panel";
 import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
@@ -57,6 +58,7 @@ export function ExportsWorkspace() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [payment, setPayment] = useState(() => mapPaymentBatch(undefined));
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
   const loadBundle = useCallback(async () => {
     setLoading(true);
@@ -170,7 +172,12 @@ export function ExportsWorkspace() {
         onlyAudited={onlyAudited}
         onOnlyAuditedChange={setOnlyAudited}
         onRefresh={() => void loadBundle()}
+        onExportSuccess={() => {
+          setHistoryRefreshToken((n) => n + 1);
+          void loadBundle();
+        }}
       />
+      <ExportHistoryPanel refreshToken={historyRefreshToken} />
       <PaymentBatchPanel
         initialBatch={payment.batch}
         initialFeeRule={payment.feeRule}

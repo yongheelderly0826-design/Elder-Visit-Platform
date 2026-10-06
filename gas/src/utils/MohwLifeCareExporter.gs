@@ -27,8 +27,12 @@ var MohwLifeCareExporter = (function () {
    * @param {string} exportId
    * @returns {{ fileId: string, fileUrl: string, fileName: string }}
    */
-  function createXlsxFile(rows, exportId) {
-    return createNamedXlsxFile(rows, '生活關懷表_' + exportId + '.xlsx', 'MOHW Export ' + exportId);
+  function createXlsxFile(rows, exportIdOrFileName) {
+    var fileName = String(exportIdOrFileName || '');
+    if (!/\.xlsx$/i.test(fileName)) {
+      fileName = '生活關懷表_' + fileName + '.xlsx';
+    }
+    return createNamedXlsxFile(rows, fileName, 'MOHW Export ' + fileName);
   }
 
   /**

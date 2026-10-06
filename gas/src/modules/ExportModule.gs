@@ -181,17 +181,41 @@ var ExportModule = (function () {
       throw verr;
     }
 
+    var stamp = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd-HHmmss');
+    var exportId = uniqueExportId_(stamp);
+    // 例：生活關懷表_EXP_20261006-222715.xlsx（日期時間当分秒流水號）
+    var fileName = '生活關懷表_' + exportId.replace(/^EXP-/, 'EXP_') + '.xlsx';
+
     var exportRecord = {
-      export_id: 'EXP-' + Utilities.getUuid().slice(0, 8),
+      export_id: exportId,
       export_type: 'mohw_life_care',
       case_count: payloads.length,
+      file_name: fileName,
+      file_id: '',
       file_url: '',
-      exported_by: Session.getActiveUser().getEmail(),
+      column_count: MohwLifeCareMapper.headers.length,
+      skipped_count: skipped.length,
+      exported_by: Session.getActiveUser().getEmail() || 'system',
       exported_at: new Date().toISOString(),
     };
 
-    var fileInfo = MohwLifeCareExporter.createXlsxFile(rows, exportRecord.export_id);
+    SheetHelper.ensureColumns(SHEET, [
+      'export_id',
+      'export_type',
+      'case_count',
+      'file_name',
+      'file_id',
+      'file_url',
+      'column_count',
+      'skipped_count',
+      'exported_by',
+      'exported_at',
+    ]);
+
+    var fileInfo = MohwLifeCareExporter.createXlsxFile(rows, fileName);
     exportRecord.file_url = fileInfo.fileUrl;
+    exportRecord.file_id = fileInfo.fileId;
+    exportRecord.file_name = fileInfo.fileName || fileName;
 
     SheetHelper.appendRow(SHEET, exportRecord);
 
@@ -202,7 +226,7 @@ var ExportModule = (function () {
       status: 'ready',
       column_count: MohwLifeCareMapper.headers.length,
       file_url: fileInfo.fileUrl,
-      file_name: fileInfo.fileName,
+      file_name: exportRecord.file_name,
       file_id: fileInfo.fileId,
       validation: {
         ok: batch.ok,
@@ -211,13 +235,83 @@ var ExportModule = (function () {
         errorLines: batch.errorLines,
       },
       message: batch.ok
-        ? '已產生 103 欄 xlsx 並上傳 Google Drive'
+        ? '已產生 103 欄 xlsx（' + exportRecord.file_name + '）並上傳 Google Drive'
         : '已產生 xlsx，但有 ' + batch.failCount + ' 筆驗證錯誤（非嚴格模式）',
     };
   }
 
+  /** EXP-yyyyMMdd-HHmmss；同秒重複則加 -2、-3… */
+  function uniqueExportId_(stamp) {
+    var base = 'EXP-' + stamp;
+    var existing = {};
+    try {
+      SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).forEach(function (row) {
+        existing[String(row.export_id || '')] = true;
+      });
+    } catch (e) {
+      return base;
+    }
+    if (!existing[base]) return base;
+    var n = 2;
+    while (existing[base + '-' + n]) n++;
+    return base + '-' + n;
+  }
+
   function history(params) {
-    return SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    params = params || {};
+    var limit = Math.min(Number(params.limit) || 50, 200);
+    SheetHelper.ensureColumns(SHEET, [
+      'export_id',
+      'export_type',
+      'case_count',
+      'file_name',
+      'file_id',
+      'file_url',
+      'column_count',
+      'skipped_count',
+      'exported_by',
+      'exported_at',
+    ]);
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).map(function (row) {
+      return {
+        export_id: String(row.export_id || ''),
+        export_type: String(row.export_type || ''),
+        case_count: Number(row.case_count) || 0,
+        file_name: String(row.file_name || ''),
+        file_id: String(row.file_id || ''),
+        file_url: String(row.file_url || ''),
+        column_count: Number(row.column_count) || 0,
+        skipped_count: Number(row.skipped_count) || 0,
+        exported_by: String(row.exported_by || ''),
+        exported_at: String(row.exported_at || ''),
+      };
+    });
+
+    rows.sort(function (a, b) {
+      return String(b.exported_at).localeCompare(String(a.exported_at));
+    });
+
+    var totalCases = 0;
+    var mohwCount = 0;
+    var mohwCases = 0;
+    rows.forEach(function (row) {
+      totalCases += row.case_count;
+      if (row.export_type === 'mohw_life_care' || !row.export_type) {
+        mohwCount += 1;
+        mohwCases += row.case_count;
+      }
+    });
+
+    return {
+      items: rows.slice(0, limit),
+      summary: {
+        total_exports: rows.length,
+        total_cases: totalCases,
+        mohw_exports: mohwCount,
+        mohw_cases: mohwCases,
+        last_exported_at: rows[0] ? rows[0].exported_at : '',
+      },
+    };
   }
 
   return {

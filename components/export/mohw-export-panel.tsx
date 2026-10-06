@@ -60,6 +60,7 @@ export function MohwExportPanel({
   onlyAudited: controlledOnlyAudited,
   onOnlyAuditedChange,
   onRefresh,
+  onExportSuccess,
 }: {
   items?: MohwExportCandidate[];
   mode?: "gas" | "demo";
@@ -68,6 +69,7 @@ export function MohwExportPanel({
   onlyAudited?: boolean;
   onOnlyAuditedChange?: (value: boolean) => void;
   onRefresh?: () => void;
+  onExportSuccess?: () => void;
 } = {}) {
   const canCreateExport = useCan("exports.create");
   const [internalItems, setInternalItems] = useState<MohwExportCandidate[]>([]);
@@ -223,7 +225,9 @@ export function MohwExportPanel({
       if (destination === "local") {
         if (json.data?.downloadUrl) {
           downloadToComputer(json.data.downloadUrl, json.data.filename);
-          setMessage(`已產生 ${selected.size} 筆，正在下載至本機電腦。Drive 仍保留備份。`);
+          setMessage(
+            `已產生 ${selected.size} 筆（${json.data.filename ?? "xlsx"}），正在下載至本機電腦。Drive 仍保留備份。`,
+          );
         } else if (json.data?.content) {
           const blob = new Blob([json.data.content], {
             type: "text/tab-separated-values;charset=utf-8",
@@ -238,6 +242,7 @@ export function MohwExportPanel({
       } else {
         setMessage(json.data?.message ?? `已匯出 ${selected.size} 筆至 Google Drive`);
       }
+      onExportSuccess?.();
     } catch {
       setMessage("匯出失敗，請稍後再試");
     } finally {
