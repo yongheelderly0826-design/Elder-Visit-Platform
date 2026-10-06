@@ -76,6 +76,7 @@ var ApiRouter = (function () {
     'export.listCandidates': function (p) { return ExportModule.listCandidates(p); },
     'export.managerBundle': function (p) { return ExportModule.managerBundle(p); },
     'export.workspaceBundle': function (p) { return ExportModule.workspaceBundle(p); },
+    'export.careFormPdf': function (p, b) { return ExportModule.careFormPdf(b || p); },
     'export.history': function (p) { return ExportModule.history(p); },
 
     'reports.kpi': function (p) { return ReportModule.kpi(p); },

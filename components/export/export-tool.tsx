@@ -127,7 +127,7 @@ export function ExportTool() {
         <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">中央系統 Excel</p>
           <p className="mt-1">
-            請使用上方「衛福部中央系統匯出」面板：勾選個案後由 GAS 產生 xlsx，並顯示 Drive 連結與錯誤座標。
+            請使用上方「衛福部中央系統匯出」：勾選後產生 103 欄 xlsx；每一列「套印」可下載已稽核個案的整版 A3 PDF。
           </p>
         </div>
       </div>

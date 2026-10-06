@@ -346,11 +346,74 @@ var ExportModule = (function () {
     return payload;
   }
 
+  /**
+   * 管理端：已稽核個案整版 A3 套印（從 Sheets 關懷表答案填入母版）。
+   * @param {{ case_id?: string, careform_id?: string, include_base64?: boolean }} data
+   */
+  function careFormPdf(data) {
+    data = data || {};
+    var caseId = String(data.case_id || '').trim();
+    var careformId = String(data.careform_id || '').trim();
+    if (!caseId && !careformId) {
+      var reqErr = new Error('請提供 case_id 或 careform_id');
+      reqErr.code = 'CASE_ID_REQUIRED';
+      throw reqErr;
+    }
+
+    var index = VisitRecordIndex.build();
+    var careform = null;
+    var caseRow = null;
+
+    if (careformId) {
+      careform = index.careformById[careformId] || null;
+      if (careform) {
+        caseRow =
+          VisitRecordIndex.caseForCareform(index, careform) ||
+          (caseId ? index.caseById[caseId] : null);
+      }
+    }
+    if (!careform && caseId) {
+      caseRow = index.caseById[caseId] || CaseModule.get(caseId);
+      careform = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
+    }
+    if (!careform || !caseRow) {
+      var miss = new Error('找不到已提交的關懷表');
+      miss.code = 'CAREFORM_NOT_FOUND';
+      throw miss;
+    }
+
+    var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+    var auditedPass =
+      (audit && String(audit.decision) === '通過') || String(careform.status) === '已稽核';
+    if (!auditedPass) {
+      var deny = new Error('僅已稽核通過的個案可整版套印');
+      deny.code = 'NOT_AUDITED';
+      throw deny;
+    }
+
+    var answers = parseAnswers_(careform);
+    if (!answers || !Object.keys(answers).length) {
+      var empty = new Error('關懷表尚無答案內容');
+      empty.code = 'ANSWERS_EMPTY';
+      throw empty;
+    }
+
+    return NtpcCareFormPdfModule.generate({
+      answers: answers,
+      elder_name: caseRow.name || answers.name || '',
+      case_code: caseRow.external_id || caseRow.encoded_id || caseRow.case_id || '',
+      encoded_id: caseRow.encoded_id || '',
+      district: caseRow.visit_district || answers.household_district || '',
+      include_base64: data.include_base64 !== false,
+    });
+  }
+
   return {
     listCandidates: listCandidates,
     managerBundle: managerBundle,
     workspaceBundle: workspaceBundle,
     exportLifeCareXlsx: exportLifeCareXlsx,
+    careFormPdf: careFormPdf,
     history: history,
   };
 })();

@@ -14,7 +14,10 @@
     "app/api/exports/history/route.ts": {
       "maxDuration": 60
     },
-    "app/api/exports/history/route.ts": {
+    "app/api/exports/care-form-a3/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/exports/care-form/route.ts": {
       "maxDuration": 60
     }
   }

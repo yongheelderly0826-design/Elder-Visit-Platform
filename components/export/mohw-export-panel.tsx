@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Download, ExternalLink, FileText, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCan } from "@/components/auth/permission-provider";
 import { MohwBatchErrorPanel } from "@/components/export/mohw-batch-error-panel";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,7 @@ export function MohwExportPanel({
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [destination, setDestination] = useState<ExportDestination>("drive");
+  const [a3BusyCaseId, setA3BusyCaseId] = useState<string | null>(null);
 
   const loadCandidates = useCallback(async () => {
     if (onRefresh) {
@@ -178,6 +179,54 @@ export function MohwExportPanel({
 
   function clearSelection() {
     setSelected(new Set());
+  }
+
+  function canPrintA3(item: MohwExportCandidate) {
+    return item.auditDecision === "通過" || item.careformStatus === "已稽核";
+  }
+
+  async function printA3(item: MohwExportCandidate) {
+    if (!canPrintA3(item)) {
+      setMessage("僅已稽核通過的個案可整版套印");
+      return;
+    }
+    setA3BusyCaseId(item.caseId);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/exports/care-form-a3", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          caseId: item.caseId,
+          careformId: item.careformId,
+        }),
+      });
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: { message?: string } };
+        setMessage(json.error?.message ?? "A3 套印失敗");
+        return;
+      }
+      const blob = await res.blob();
+      const driveUrl = res.headers.get("X-Care-Form-Drive-Url");
+      const folderUrl = res.headers.get("X-Care-Form-Folder-Url");
+      const encodedName = res.headers.get("X-Care-Form-File-Name");
+      const fileName = encodedName
+        ? decodeURIComponent(encodedName)
+        : `${item.name || "care-form"}_A3.pdf`;
+      const objectUrl = URL.createObjectURL(blob);
+      downloadToComputer(objectUrl, fileName);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+      setMessage(
+        `已下載整版 A3：${fileName}` +
+          (driveUrl ? "；Drive 已留存備份。" : "") +
+          (folderUrl ? `\n資料夾：${folderUrl}` : ""),
+      );
+      if (driveUrl) setFileUrl(driveUrl);
+    } catch {
+      setMessage("A3 套印失敗，請稍後再試");
+    } finally {
+      setA3BusyCaseId(null);
+    }
   }
 
   async function runExport() {
@@ -278,7 +327,7 @@ export function MohwExportPanel({
             <h2 className="text-lg font-semibold">衛福部中央系統匯出（103 欄）</h2>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            勾選已填關懷表個案，系統會驗證後產生 xlsx 並存到 Google Drive，供手動上傳中央系統。
+            勾選已稽核個案可匯出衛福部 103 欄 xlsx；每一列也可下載整版 A3 PDF（題目＋答案套印）。
           </p>
         </div>
         <div className="rounded-md border bg-secondary px-3 py-2 text-sm text-muted-foreground">
@@ -358,13 +407,14 @@ export function MohwExportPanel({
               <th className="px-3 py-2">關懷表</th>
               <th className="px-3 py-2">稽核</th>
               <th className="px-3 py-2">驗證</th>
+              <th className="px-3 py-2">整版 A3</th>
               <th className="px-3 py-2">錯誤明細</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                   {loading ? "載入中…" : "目前沒有可匯出候選。核准後的個案會出現在這裡。"}
                 </td>
               </tr>
@@ -397,6 +447,26 @@ export function MohwExportPanel({
                       >
                         {item.validationOk ? "通過" : `${item.errorCount} 錯`}
                       </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      {canPrintA3(item) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!canCreateExport || a3BusyCaseId === item.caseId}
+                          onClick={() => void printA3(item)}
+                        >
+                          {a3BusyCaseId === item.caseId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
+                          套印
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">需已稽核</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {item.errorLines.length === 0 ? (

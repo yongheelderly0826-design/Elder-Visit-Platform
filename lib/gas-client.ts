@@ -420,6 +420,22 @@ export const gasClient = {
       }>("export.workspaceBundle", {
         params: params as Record<string, string> | undefined,
       }),
+    careFormPdf: (body: {
+      case_id?: string;
+      careform_id?: string;
+      include_base64?: boolean;
+    }) =>
+      gasFetch<{
+        file_id: string;
+        file_url: string;
+        file_name: string;
+        folder_id: string;
+        folder_url: string;
+        page_size: "A3";
+        orientation: "portrait";
+        page_count: 1;
+        pdf_base64: string;
+      }>("export.careFormPdf", { method: "POST", body }),
     history: (params?: { limit?: string }) =>
       gasFetch<{
         items: Array<{
