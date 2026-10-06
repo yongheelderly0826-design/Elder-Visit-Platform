@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExportTool } from "@/components/export/export-tool";
 import {
   ExportHistoryPanel,
+  mergeHistoryItems,
   type ExportHistoryItem,
-  type HistorySummary,
 } from "@/components/export/export-history-panel";
 import { MohwExportPanel } from "@/components/export/mohw-export-panel";
 import { PaymentBatchPanel } from "@/components/export/payment-batch-panel";
@@ -28,7 +28,7 @@ type BundleResponse = {
     counts: { pending_audit: number; approved: number; returned: number };
     history?: {
       items: ExportHistoryItem[];
-      summary: HistorySummary;
+      summary?: unknown;
     };
   };
   error?: { message?: string };
@@ -66,9 +66,8 @@ export function ExportsWorkspace() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [payment, setPayment] = useState(() => mapPaymentBatch(undefined));
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
-  const [historyItems, setHistoryItems] = useState<ExportHistoryItem[] | null>(null);
-  const [historySummary, setHistorySummary] = useState<HistorySummary | null>(null);
+  const [historyItems, setHistoryItems] = useState<ExportHistoryItem[]>([]);
+  const historySeededRef = useRef(false);
 
   const loadBundle = useCallback(async () => {
     setLoading(true);
@@ -144,9 +143,10 @@ export function ExportsWorkspace() {
       setItems(nextItems);
       setMode(json.data?.mode ?? "gas");
       setPayment(mapPaymentBatch(json.data));
-      if (json.data?.history) {
-        setHistoryItems(json.data.history.items ?? []);
-        setHistorySummary(json.data.history.summary ?? null);
+      // 只種子一次；之後新匯出只追加，不整表覆蓋
+      if (!historySeededRef.current && json.data?.history?.items?.length) {
+        setHistoryItems((prev) => mergeHistoryItems(prev, json.data!.history!.items));
+        historySeededRef.current = true;
       }
       setNote(
         nextItems.length === 0
@@ -184,16 +184,16 @@ export function ExportsWorkspace() {
         onlyAudited={onlyAudited}
         onOnlyAuditedChange={setOnlyAudited}
         onRefresh={() => void loadBundle()}
-        onExportSuccess={() => {
-          setHistoryRefreshToken((n) => n + 1);
+        onExportSuccess={(entry) => {
+          if (entry) {
+            setHistoryItems((prev) => mergeHistoryItems(prev, [entry]));
+            historySeededRef.current = true;
+          }
+          // 只刷新候選清單，不重抓全部匯出紀錄
           void loadBundle();
         }}
       />
-      <ExportHistoryPanel
-        refreshToken={historyRefreshToken}
-        initialItems={historyItems}
-        initialSummary={historySummary}
-      />
+      <ExportHistoryPanel items={historyItems} onItemsChange={setHistoryItems} />
       <PaymentBatchPanel
         initialBatch={payment.batch}
         initialFeeRule={payment.feeRule}

@@ -6,6 +6,7 @@ import { useCan } from "@/components/auth/permission-provider";
 import { MohwBatchErrorPanel } from "@/components/export/mohw-batch-error-panel";
 import { Button } from "@/components/ui/button";
 import type { MohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
+import type { ExportHistoryItem } from "@/components/export/export-history-panel";
 
 type CandidatesResponse = {
   data?: {
@@ -26,6 +27,11 @@ type ExportResponse = {
     downloadUrl?: string;
     content?: string;
     message?: string;
+    exportId?: string;
+    caseCount?: number;
+    columnCount?: number;
+    skippedCount?: number;
+    exportedAt?: string;
     validation?: {
       ok?: boolean;
       failCount?: number;
@@ -69,7 +75,8 @@ export function MohwExportPanel({
   onlyAudited?: boolean;
   onOnlyAuditedChange?: (value: boolean) => void;
   onRefresh?: () => void;
-  onExportSuccess?: () => void;
+  /** 匯出成功時回傳這一筆，供紀錄表增量追加 */
+  onExportSuccess?: (entry?: ExportHistoryItem) => void;
 } = {}) {
   const canCreateExport = useCan("exports.create");
   const [internalItems, setInternalItems] = useState<MohwExportCandidate[]>([]);
@@ -242,7 +249,19 @@ export function MohwExportPanel({
       } else {
         setMessage(json.data?.message ?? `已匯出 ${selected.size} 筆至 Google Drive`);
       }
-      onExportSuccess?.();
+      const entry: ExportHistoryItem = {
+        exportId: json.data?.exportId ?? "",
+        exportType: "mohw_life_care",
+        caseCount: json.data?.caseCount ?? selected.size,
+        fileName: json.data?.filename ?? "",
+        fileId: "",
+        fileUrl: json.data?.fileUrl ?? "",
+        columnCount: json.data?.columnCount ?? 103,
+        skippedCount: json.data?.skippedCount ?? json.data?.skipped?.length ?? 0,
+        exportedBy: "",
+        exportedAt: json.data?.exportedAt ?? new Date().toISOString(),
+      };
+      onExportSuccess?.(entry);
     } catch {
       setMessage("匯出失敗，請稍後再試");
     } finally {

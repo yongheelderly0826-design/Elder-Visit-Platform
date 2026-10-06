@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, History, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +24,8 @@ export type HistorySummary = {
   mohwCases: number;
   lastExportedAt: string;
 };
+
+const STORAGE_KEY = "mohw-export-history-v1";
 
 type HistoryResponse = {
   data?: {
@@ -56,65 +58,113 @@ function typeLabel(type: string) {
   return type;
 }
 
+export function buildSummaryFromItems(items: ExportHistoryItem[]): HistorySummary {
+  let totalCases = 0;
+  let mohwExports = 0;
+  let mohwCases = 0;
+  for (const item of items) {
+    totalCases += item.caseCount;
+    if (!item.exportType || item.exportType === "mohw_life_care") {
+      mohwExports += 1;
+      mohwCases += item.caseCount;
+    }
+  }
+  return {
+    totalExports: items.length,
+    totalCases,
+    mohwExports,
+    mohwCases,
+    lastExportedAt: items[0]?.exportedAt ?? "",
+  };
+}
+
+/** 合併：新紀錄在前，同 exportId 不重複 */
+export function mergeHistoryItems(
+  existing: ExportHistoryItem[],
+  incoming: ExportHistoryItem[],
+): ExportHistoryItem[] {
+  const map = new Map<string, ExportHistoryItem>();
+  for (const item of [...incoming, ...existing]) {
+    const key = item.exportId || `${item.fileName}|${item.exportedAt}`;
+    if (!map.has(key)) map.set(key, item);
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    String(b.exportedAt).localeCompare(String(a.exportedAt)),
+  );
+}
+
+function readStoredHistory(): ExportHistoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { items?: ExportHistoryItem[] };
+    return Array.isArray(parsed.items) ? parsed.items : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredHistory(items: ExportHistoryItem[]) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ items: items.slice(0, 100) }));
+  } catch {
+    // ignore quota
+  }
+}
+
 export function ExportHistoryPanel({
-  refreshToken = 0,
-  initialItems,
-  initialSummary,
+  items,
+  onItemsChange,
 }: {
-  refreshToken?: number;
-  initialItems?: ExportHistoryItem[] | null;
-  initialSummary?: HistorySummary | null;
+  /** 由父層持有；已載入的紀錄會留存，新匯出只追加 */
+  items: ExportHistoryItem[];
+  onItemsChange: (items: ExportHistoryItem[]) => void;
 }) {
-  const [items, setItems] = useState<ExportHistoryItem[]>(initialItems ?? []);
-  const [summary, setSummary] = useState<HistorySummary | null>(initialSummary ?? null);
   const [mode, setMode] = useState<"gas" | "demo">("gas");
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  const summary = useMemo(() => buildSummaryFromItems(items), [items]);
+
+  // 初次：從 sessionStorage 還原，避免同頁重新整理又打 GAS
+  useEffect(() => {
+    const stored = readStoredHistory();
+    if (stored.length && items.length === 0) {
+      onItemsChange(stored);
+    }
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在掛載時還原
+  }, []);
 
   useEffect(() => {
-    if (initialItems) {
-      setItems(initialItems);
-      setError(null);
-    }
-    if (initialSummary) setSummary(initialSummary);
-  }, [initialItems, initialSummary]);
+    if (!hydrated) return;
+    if (items.length) writeStoredHistory(items);
+  }, [items, hydrated]);
 
-  const load = useCallback(async () => {
+  const loadFull = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/exports/history?limit=50", { cache: "no-store" });
       const json = (await res.json()) as HistoryResponse;
       if (!res.ok) {
-        // 若頁面已有 bundle 帶入的資料，保留顯示，只提示可稍後重試
-        if (!(initialItems && initialItems.length)) {
-          setItems([]);
-          setSummary(null);
-        }
-        setError(json.error?.message ?? "讀取匯出紀錄失敗（可稍後再按重新整理）");
+        setError(json.error?.message ?? "讀取匯出紀錄失敗（已保留畫面上的既有紀錄）");
         return;
       }
-      setItems(json.data?.items ?? []);
-      setSummary(json.data?.summary ?? null);
+      const remote = json.data?.items ?? [];
+      onItemsChange(mergeHistoryItems(items, remote));
       setMode(json.data?.mode ?? "gas");
       setNote(json.data?.note ?? null);
     } catch {
-      setError("讀取匯出紀錄失敗（可稍後再按重新整理）");
+      setError("讀取匯出紀錄失敗（已保留畫面上的既有紀錄）");
     } finally {
       setLoading(false);
     }
-  }, [initialItems]);
-
-  useEffect(() => {
-    // 已有 bundle 資料時，初次不必再打 history（避免與候選 API 並行打爆 GAS）
-    if (refreshToken === 0 && initialItems && initialItems.length > 0) return;
-    if (refreshToken === 0 && initialSummary && initialSummary.totalExports > 0) return;
-    // 匯出成功後 refreshToken>0，或尚無初始資料時才抓
-    if (refreshToken > 0 || !initialItems) {
-      void load();
-    }
-  }, [load, refreshToken, initialItems, initialSummary]);
+  }, [items, onItemsChange]);
 
   return (
     <section className="rounded-lg border bg-card p-4">
@@ -125,21 +175,21 @@ export function ExportHistoryPanel({
             <h2 className="text-lg font-semibold">匯出紀錄報表</h2>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            每次生活關懷表匯出會留下檔名流水號（日期時間）與內容筆數，方便對帳與追查。
+            已載入的紀錄會留在本頁；新匯出只追加一筆，不必每次重抓全部。需要對帳時再按「同步伺服器」。
           </p>
         </div>
         <div className="flex items-center gap-2">
           <p className="text-sm text-muted-foreground">
             {mode === "gas" ? "GAS 正式紀錄" : "示範資料"}
           </p>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadFull()} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            重新整理
+            同步伺服器
           </Button>
         </div>
       </div>
 
-      {summary ? (
+      {summary.totalExports > 0 ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="匯出次數" value={`${summary.totalExports} 次`} />
           <Stat label="累計個案筆數" value={`${summary.totalCases} 筆`} />

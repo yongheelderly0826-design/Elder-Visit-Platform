@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
           strict: body.strict !== false,
         })) as {
           export_id?: string;
+          case_count?: number;
+          column_count?: number;
           file_url?: string;
           file_id?: string;
           file_name?: string;
@@ -84,6 +86,11 @@ export async function POST(request: NextRequest) {
               : "",
             content: gasResult.file_url ?? "",
             status: "ready",
+            exportId: gasResult.export_id ?? "",
+            caseCount: gasResult.case_count ?? body.caseIds.length,
+            columnCount: gasResult.column_count ?? 103,
+            skippedCount: gasResult.skipped?.length ?? 0,
+            exportedAt: new Date().toISOString(),
             gasExport: gasResult,
             validation: gasResult.validation,
             skipped: gasResult.skipped ?? [],
