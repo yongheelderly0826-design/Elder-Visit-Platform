@@ -1,5 +1,5 @@
 /**
- * 衛福部生活關懷表 102 欄驗證
+ * 衛福部生活關懷表 103 欄驗證
  * 錯誤格式對齊中央系統：如「I3 身分證號碼格式不正確」
  */
 
@@ -39,6 +39,11 @@ var MohwLifeCareValidator = (function () {
     },
     { key: 'living_address_other', equals: { living_address_type: '查無此人' } },
     { key: 'housing_type_other', equals: { housing_type: '其他' }, msg: '住宅類型=其他時必須填寫其他說明' },
+    {
+      key: 'social_worker_role_other',
+      equals: { social_worker_role: '其他' },
+      msg: '社政訪查人身分=其他時必須填寫其他身分別說明'
+    },
     { key: 'cohabitation_status', equals: { living_status: '與他人同住' } },
     { key: 'cohabitant_relation', equals: { cohabitation_status: '同住者有照顧能力' } },
     { key: 'cohabitant_age', equals: { cohabitation_status: '同住者有照顧能力' } },

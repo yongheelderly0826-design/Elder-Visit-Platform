@@ -1,10 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
-import { GasApiError, gasClient, isGasConfigured, isUnknownGasAction } from "@/lib/gas-client";
+import { GasApiError, gasClient, isGasConfigured } from "@/lib/gas-client";
 import { mapMohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
 import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
+
+/** 匯出頁冷啟動可能較慢；候選清單本身通常 <10s。 */
+export const maxDuration = 60;
 
 function paymentsFromCandidates(items: ReturnType<typeof mapMohwExportCandidate>[]) {
   const rows = items
@@ -30,6 +33,10 @@ function paymentsFromCandidates(items: ReturnType<typeof mapMohwExportCandidate>
   };
 }
 
+/**
+ * managerBundle 在 Vercel→GAS 路徑常逾時回 HTML；
+ * 改以較輕的 listCandidates 為主，核銷列由候選推算。
+ */
 export async function GET(request: NextRequest) {
   const forbidden = requireCapability(request, "exports.create");
   if (forbidden) return forbidden;
@@ -51,69 +58,21 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    let candidatesRaw: Array<Record<string, unknown>> = [];
-    let payments = paymentsFromCandidates([]);
-    let counts = { pending_audit: 0, approved: 0, returned: 0 };
+    const result = await cachedRead(
+      ["manager-bundle-lite", onlyAudited ? "1" : "0", district],
+      [GAS_READ_TAGS.managerExports],
+      async () => gasClient.export.listCandidates(params),
+    );
 
-    try {
-      const result = await cachedRead(
-        ["manager-bundle", onlyAudited ? "1" : "0", district],
-        [GAS_READ_TAGS.managerExports],
-        async () => {
-          try {
-            return await gasClient.export.managerBundle(params);
-          } catch (error) {
-            if (!isUnknownGasAction(error)) throw error;
-            const fallback = await gasClient.export.listCandidates(params);
-            return {
-              candidates: {
-                total: fallback.total,
-                ready_count: fallback.ready_count,
-                items: fallback.items,
-              },
-              payments: null,
-              counts: null,
-            };
-          }
-        },
-      );
-      candidatesRaw = result.candidates?.items ?? [];
-      if (result.payments?.items?.length) {
-        payments = {
-          batch_no: result.payments.batch_no,
-          item_count: Number(result.payments.item_count ?? result.payments.items.length),
-          total_amount: Number(result.payments.total_amount ?? 0),
-          items: result.payments.items.map((row) => ({
-            id: String(row.id ?? ""),
-            case_id: String(row.case_id ?? ""),
-            case_code: String(row.case_code ?? ""),
-            elder_name: String(row.elder_name ?? ""),
-            visit_record_id: String(row.visit_record_id ?? ""),
-            locked_at: String(row.locked_at ?? ""),
-            visit_fee: Number(row.visit_fee ?? 180),
-            data_processing_fee: Number(row.data_processing_fee ?? 30),
-            total_fee: Number(row.total_fee ?? 210),
-            status: String(row.status ?? "locked"),
-          })),
-          warnings: result.payments.warnings ?? [],
-        };
-      }
-      if (result.counts) counts = result.counts;
-    } catch (error) {
-      throw error;
-    }
-
-    const items = candidatesRaw.map((item) => mapMohwExportCandidate(item));
-    if (!payments.items?.length) {
-      payments = paymentsFromCandidates(items);
-    }
-    if (!counts.approved) {
-      counts = {
-        pending_audit: items.filter((item) => item.auditDecision === "待稽核").length,
-        approved: items.filter((item) => item.auditDecision === "通過" || item.careformStatus === "已稽核").length,
-        returned: 0,
-      };
-    }
+    const items = (result.items ?? []).map((item) => mapMohwExportCandidate(item));
+    const payments = paymentsFromCandidates(items);
+    const counts = {
+      pending_audit: items.filter((item) => item.auditDecision === "待稽核").length,
+      approved: items.filter(
+        (item) => item.auditDecision === "通過" || item.careformStatus === "已稽核",
+      ).length,
+      returned: 0,
+    };
 
     return NextResponse.json({
       data: {

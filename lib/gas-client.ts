@@ -126,7 +126,24 @@ async function gasFetch<T>(
   }
 
   const res = await fetch(url.toString(), init);
-  const json = (await res.json()) as GasResponse<T>;
+  const raw = await res.text();
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.startsWith("<!") || trimmed.startsWith("<html") || trimmed.startsWith("<HTML")) {
+    throw new GasApiError({
+      code: "GAS_NON_JSON",
+      message: `GAS「${action}」回傳網頁而非 JSON（常為逾時或部署權限）。請稍後重試，或改用較輕量的匯出候選 API。`,
+    });
+  }
+
+  let json: GasResponse<T>;
+  try {
+    json = JSON.parse(raw) as GasResponse<T>;
+  } catch {
+    throw new GasApiError({
+      code: "GAS_NON_JSON",
+      message: `GAS「${action}」回應無法解析為 JSON（HTTP ${res.status}）。`,
+    });
+  }
 
   if (!json.ok || json.error) {
     throw new GasApiError(

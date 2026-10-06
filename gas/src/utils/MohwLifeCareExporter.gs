@@ -1,5 +1,5 @@
 /**
- * 衛福部 102 欄 xlsx 產檔（Google Drive）
+ * 衛福部 103 欄 xlsx 產檔（Google Drive）
  */
 
 var MohwLifeCareExporter = (function () {
@@ -45,7 +45,10 @@ var MohwLifeCareExporter = (function () {
     folderOpts = folderOpts || {};
     var ss = SpreadsheetApp.create(tempTitle || fileName);
     var sheet = ss.getSheets()[0];
-    sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+    var range = sheet.getRange(1, 1, rows.length, rows[0].length);
+    // 強制純文字，避免 Sheets 吃掉電話前導 0、把民國日期改成 0115/…
+    range.setNumberFormat('@');
+    range.setValues(rows);
     SpreadsheetApp.flush();
 
     var spreadsheetId = ss.getId();

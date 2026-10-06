@@ -54,8 +54,8 @@ const UI_SECTIONS: Array<{ title: string; fromCol: number; toCol: number }> = [
   { title: "問卷：生活困難、社交與服務", fromCol: 56, toCol: 81 },
   { title: "二、訪查員觀察題（用看的，不要直接問）", fromCol: 82, toCol: 89 },
   { title: "個資與健康資料同意（不套印 A3）", fromCol: 90, toCol: 92 },
-  { title: "社政訪查人（不套印 A3）", fromCol: 93, toCol: 97 },
-  { title: "民政訪查人（不套印 A3）", fromCol: 98, toCol: 102 },
+  { title: "社政訪查人（不套印 A3）", fromCol: 93, toCol: 98 },
+  { title: "民政訪查人（不套印 A3）", fromCol: 99, toCol: 103 },
 ];
 
 const CONDITIONAL_RULES: Record<string, MohwFieldCondition[]> = {
@@ -80,6 +80,7 @@ const CONDITIONAL_RULES: Record<string, MohwFieldCondition[]> = {
   ],
   living_address_other: [{ key: "living_address_type", equals: "查無此人" }],
   housing_type_other: [{ key: "housing_type", equals: "其他" }],
+  social_worker_role_other: [{ key: "social_worker_role", equals: "其他" }],
   cohabitation_status: [{ key: "living_status", equals: "與他人同住" }],
   cohabitant_relation: [{ key: "cohabitation_status", equals: "同住者有照顧能力" }],
   cohabitant_age: [{ key: "cohabitation_status", equals: "同住者有照顧能力" }],

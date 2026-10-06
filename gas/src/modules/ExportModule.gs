@@ -1,6 +1,6 @@
 /**
  * 衛福部生活關懷表 .xlsx 匯出
- * 對照官方 102 欄範本（lib/domain/mohw-life-care-schema.json）
+ * 對照官方 103 欄範本（lib/domain/mohw-life-care-schema.json）
  */
 
 var ExportModule = (function () {
@@ -211,7 +211,7 @@ var ExportModule = (function () {
         errorLines: batch.errorLines,
       },
       message: batch.ok
-        ? '已產生 102 欄 xlsx 並上傳 Google Drive'
+        ? '已產生 103 欄 xlsx 並上傳 Google Drive'
         : '已產生 xlsx，但有 ' + batch.failCount + ' 筆驗證錯誤（非嚴格模式）',
     };
   }

@@ -41,6 +41,14 @@ const DATE_KEYS = new Set(["visit_date", "birth_date", "social_worker_date", "ci
 
 const TIME_KEYS = new Set(["visit_start_time", "visit_end_time"]);
 
+const PHONE_KEYS = new Set([
+  "phone",
+  "mobile",
+  "emergency_contact_phone",
+  "social_worker_phone",
+  "civil_worker_phone",
+]);
+
 /** Visit result labels in UI → MOHW 訪視狀態 allowed values. */
 const VISIT_STATUS_MAP: Record<string, string> = {
   訪視成功: "已完成",
@@ -132,6 +140,10 @@ export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwL
     return formatTime(text);
   }
 
+  if (PHONE_KEYS.has(column.key)) {
+    return formatMohwPhone(text);
+  }
+
   if (MULTI_VALUE_KEYS.has(column.key) && text.includes(",")) {
     return text
       .split(",")
@@ -143,28 +155,47 @@ export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwL
   return text;
 }
 
-/** ISO / Date / ROC-ish string → `yyy/MM/dd` (民國年，不補零年). */
+/** ISO / Date / ROC-ish string → `yyy/M/d`（民國年，年／月／日不補零）. */
 export function formatRocDate(input: string | Date) {
   if (input instanceof Date) {
     return toRocParts(input.getFullYear(), input.getMonth() + 1, input.getDate());
   }
 
-  const iso = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const iso = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
     return toRocParts(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   }
 
-  const slash = input.match(/^(\d{2,3})\/(\d{1,2})\/(\d{1,2})$/);
+  const slash = input.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
   if (slash) {
-    return `${slash[1]}/${Number(slash[2])}/${Number(slash[3])}`;
+    return toRocParts(Number(slash[1]), Number(slash[2]), Number(slash[3]));
   }
 
   return input;
 }
 
 function toRocParts(year: number, month: number, day: number) {
-  const rocYear = year >= 1911 ? year - 1911 : year;
+  const currentWestern = new Date().getFullYear();
+  let rocYear: number;
+  if (year >= 1911) {
+    // Excel 常把民國 28/5/10 誤讀成 2028 → 西元年 > 今年時還原為 ROC yy
+    rocYear = year > currentWestern ? year % 100 : year - 1911;
+  } else {
+    rocYear = year; // 已是民國（0115 → 115）
+  }
   return `${rocYear}/${month}/${day}`;
+}
+
+/** 還原電話／手機前導 0（Sheets 常吃掉）. */
+export function formatMohwPhone(input: string) {
+  const text = input.trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (!digits) return text;
+  if (/^09\d{8}$/.test(digits) || /^0[2-8]\d{7,9}$/.test(digits)) return digits;
+  if (/^9\d{8}$/.test(digits)) return `0${digits}`;
+  if (/^[2-8]\d{7,9}$/.test(digits)) return `0${digits}`;
+  return text;
 }
 
 /** `HH:mm` 24h; Excel serial fractions also supported. */

@@ -42,6 +42,13 @@ export function middleware(request: NextRequest) {
     .some((cookie) => supabaseCookiePrefixes.some((prefix) => cookie.name.startsWith(prefix)));
 
   if (!hasDemoSession && !hasManagerSession && !hasSupabaseSession) {
+    // API 必須回 JSON，不可 302 到登入頁 HTML（否則前端 res.json 會炸）
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: { code: "UNAUTHORIZED", message: "請重新登入後再試。" } },
+        { status: 401 },
+      );
+    }
     const isVisitorWorkspace = pathname.startsWith("/visitor/");
     const loginUrl = new URL(isVisitorWorkspace ? "/visitor/login" : "/login", request.url);
     if (!isVisitorWorkspace) {

@@ -67,11 +67,67 @@ export function ExportsWorkspace() {
         `/api/exports/manager-bundle?onlyAudited=${onlyAudited ? "true" : "false"}`,
         { cache: "no-store" },
       );
-      const json = (await response.json()) as BundleResponse;
+      const raw = await response.text();
+      let json: BundleResponse;
+      try {
+        json = JSON.parse(raw) as BundleResponse;
+      } catch {
+        // bundle 偶發非 JSON（閘道 HTML）→ 改打較輕的候選 API
+        const fallback = await fetch(
+          `/api/exports/mohw/candidates?onlyAudited=${onlyAudited ? "true" : "false"}`,
+          { cache: "no-store" },
+        );
+        const fallbackJson = (await fallback.json()) as {
+          data?: { mode?: "gas" | "demo"; items?: MohwExportCandidate[]; note?: string };
+          error?: { message?: string };
+        };
+        setElapsedMs(Date.now() - started);
+        if (!fallback.ok) {
+          setItems([]);
+          setLoadError(fallbackJson.error?.message ?? "讀取匯出／核銷資料失敗");
+          return;
+        }
+        const nextItems = fallbackJson.data?.items ?? [];
+        setItems(nextItems);
+        setMode(fallbackJson.data?.mode ?? "gas");
+        setPayment(mapPaymentBatch(undefined));
+        setNote(
+          nextItems.length === 0
+            ? onlyAudited
+              ? "目前沒有稽核通過的關懷表。若剛核准，請再按一次重新整理。"
+              : "目前沒有已提交或已稽核的關懷表。"
+            : "核銷彙整暫時改用簡速載入；匯出功能可照常使用。",
+        );
+        return;
+      }
       setElapsedMs(Date.now() - started);
       if (!response.ok) {
+        // 502／GAS 失敗時同樣降級
+        const fallback = await fetch(
+          `/api/exports/mohw/candidates?onlyAudited=${onlyAudited ? "true" : "false"}`,
+          { cache: "no-store" },
+        );
+        const fallbackJson = (await fallback.json()) as {
+          data?: { mode?: "gas" | "demo"; items?: MohwExportCandidate[] };
+          error?: { message?: string };
+        };
+        if (fallback.ok) {
+          const nextItems = fallbackJson.data?.items ?? [];
+          setItems(nextItems);
+          setMode(fallbackJson.data?.mode ?? "gas");
+          setPayment(mapPaymentBatch(undefined));
+          setLoadError(null);
+          setNote(
+            nextItems.length === 0
+              ? onlyAudited
+                ? "目前沒有稽核通過的關懷表。若剛核准，請再按一次重新整理。"
+                : "目前沒有已提交或已稽核的關懷表。"
+              : "核銷彙整暫時改用簡速載入；匯出功能可照常使用。",
+          );
+          return;
+        }
         setItems([]);
-        setLoadError(json.error?.message ?? "讀取匯出／核銷資料失敗");
+        setLoadError(json.error?.message ?? fallbackJson.error?.message ?? "讀取匯出／核銷資料失敗");
         return;
       }
       const nextItems = json.data?.candidates.items ?? [];

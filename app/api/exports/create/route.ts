@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
           requiredMissing: row.gapCounts.requiredMissing,
         },
         message:
-          "目前非 GAS 模式，已產生 102 欄示範預覽（TSV）。接上 GAS 後會產出 Drive xlsx。",
+          "目前非 GAS 模式，已產生 103 欄示範預覽（TSV）。接上 GAS 後會產出 Drive xlsx。",
         exportLog: { entityType: "export_job", action: "create" },
         planLimit,
       },

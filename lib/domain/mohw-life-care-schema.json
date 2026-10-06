@@ -1,17 +1,17 @@
 {
   "version": "115-116",
   "templateName": "生活關懷表匯入",
-  "columnCount": 102,
+  "columnCount": 103,
   "sourceFiles": [
     "生活關懷表匯入範本(1).xlsx",
-    "生活關懷表檔案說明範本(1).xlsx"
+    "生活關懷表檔案說明範本(2).xlsx"
   ],
   "summary": {
     "has": 32,
     "partial": 26,
     "missing": 44
   },
-  "syncedFromOfficialAt": "2026-09-02",
+  "syncedFromOfficialAt": "2026-10-06",
   "columns": [
     {
       "col": 1,
@@ -236,7 +236,7 @@
     },
     {
       "col": 18,
-      "header": "戶籍-縣市*",
+      "header": "戶籍-縣市 *",
       "key": "household_city",
       "gapStatus": "partial",
       "required": true,
@@ -249,7 +249,7 @@
     },
     {
       "col": 19,
-      "header": "戶籍-鄉鎮區*",
+      "header": "戶籍-鄉鎮區 *",
       "key": "household_district",
       "gapStatus": "partial",
       "required": true,
@@ -262,7 +262,7 @@
     },
     {
       "col": 20,
-      "header": "戶籍-村里*",
+      "header": "戶籍-村里 *",
       "key": "household_village",
       "gapStatus": "partial",
       "required": true,
@@ -1224,6 +1224,19 @@
     },
     {
       "col": 94,
+      "header": "社政訪查人-其他身分別說明",
+      "key": "social_worker_role_other",
+      "gapStatus": "missing",
+      "required": false,
+      "inputType": "文字(10 字以內)",
+      "description": "社政訪查人身分選「其他」時必填，請說明實際身分（10 字以內）；身分非「其他」請留空。",
+      "allowedValues": "",
+      "internalSource": "",
+      "internalKey": "",
+      "gapNote": "需新增；身分=其他時必填"
+    },
+    {
+      "col": 95,
       "header": "社政訪查人-姓名",
       "key": "social_worker_name",
       "gapStatus": "missing",
@@ -1236,7 +1249,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 95,
+      "col": 96,
       "header": "社政訪查人-身分證字號",
       "key": "social_worker_national_id",
       "gapStatus": "missing",
@@ -1249,7 +1262,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 96,
+      "col": 97,
       "header": "社政訪查人-電話",
       "key": "social_worker_phone",
       "gapStatus": "missing",
@@ -1262,7 +1275,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 97,
+      "col": 98,
       "header": "社政訪查人-日期",
       "key": "social_worker_date",
       "gapStatus": "missing",
@@ -1275,7 +1288,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 98,
+      "col": 99,
       "header": "民政訪查人-身分",
       "key": "civil_worker_role",
       "gapStatus": "missing",
@@ -1288,7 +1301,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 99,
+      "col": 100,
       "header": "民政訪查人-姓名",
       "key": "civil_worker_name",
       "gapStatus": "missing",
@@ -1301,7 +1314,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 100,
+      "col": 101,
       "header": "民政訪查人-身分證字號",
       "key": "civil_worker_national_id",
       "gapStatus": "missing",
@@ -1314,7 +1327,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 101,
+      "col": 102,
       "header": "民政訪查人-電話",
       "key": "civil_worker_phone",
       "gapStatus": "missing",
@@ -1327,7 +1340,7 @@
       "gapNote": "需新增"
     },
     {
-      "col": 102,
+      "col": 103,
       "header": "民政訪查人-日期",
       "key": "civil_worker_date",
       "gapStatus": "missing",

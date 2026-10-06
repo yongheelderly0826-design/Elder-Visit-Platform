@@ -123,6 +123,11 @@ const CONDITIONAL_REQUIRED: Array<{ key: string; when: Cond; message?: string }>
     message: "住宅類型=其他時必須填寫其他說明",
   },
   {
+    key: "social_worker_role_other",
+    when: { type: "equals", key: "social_worker_role", value: "其他" },
+    message: "社政訪查人身分=其他時必須填寫其他身分別說明",
+  },
+  {
     key: "cohabitation_status",
     when: { type: "equals", key: "living_status", value: "與他人同住" },
   },

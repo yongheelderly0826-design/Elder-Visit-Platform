@@ -1,6 +1,6 @@
 /**
- * MOHW 生活關懷表 102 欄匯出 mapping（Phase 1）
- * 欄位順序對照 lib/domain/mohw-life-care-schema.json
+ * MOHW 生活關懷表 103 欄匯出 mapping
+ * 欄位順序對照 lib/domain/mohw-life-care-schema.json（對齊檔案說明範本）
  */
 
 var MohwLifeCareMapper = (function () {
@@ -8,8 +8,8 @@ var MohwLifeCareMapper = (function () {
     '訪查日期 *', '訪查開始時間 *', '訪查結束時間', '訪視狀態 *', '備註',
     '姓名 *', '性別*', '出生年月日*', '身分證字號 *', '電話', '手機',
     'Line ID 狀態', 'Line ID', '緊急聯絡人姓名', '緊急聯絡人關係',
-    '緊急聯絡人關係-其他說明', '緊急聯絡人電話', '戶籍-縣市*', '戶籍-鄉鎮區*',
-    '戶籍-村里*', '戶籍-地址 *', '居住地址類型 *', '居住說明', '居住-縣市',
+    '緊急聯絡人關係-其他說明', '緊急聯絡人電話', '戶籍-縣市 *', '戶籍-鄉鎮區 *',
+    '戶籍-村里 *', '戶籍-地址 *', '居住地址類型 *', '居住說明', '居住-縣市',
     '居住-鄉鎮區', '居住-村里', '居住-地址', '居住-其他說明', '住宅類型 *',
     '住宅類型-其他說明', '居住狀況 *', '同住情形', '同住者為', '同住者年齡',
     '同住者無照顧能力說明', '教育程度', '婚姻狀況', '婚姻狀況-其他說明',
@@ -30,8 +30,9 @@ var MohwLifeCareMapper = (function () {
     '個人資料於上開範圍內使用 *',
     '將這份生活關懷表訪查結果，供國家型健康資料庫(如健保資料、長照資料等)分析使用，僅作為115-116年度獨居老人政策服務成效評估用途 *',
     '有立書人本人簽名、蓋章或手印 *',
-    '社政訪查人-身分', '社政訪查人-姓名', '社政訪查人-身分證字號', '社政訪查人-電話',
-    '社政訪查人-日期', '民政訪查人-身分', '民政訪查人-姓名', '民政訪查人-身分證字號',
+    '社政訪查人-身分', '社政訪查人-其他身分別說明', '社政訪查人-姓名',
+    '社政訪查人-身分證字號', '社政訪查人-電話', '社政訪查人-日期',
+    '民政訪查人-身分', '民政訪查人-姓名', '民政訪查人-身分證字號',
     '民政訪查人-電話', '民政訪查人-日期'
   ];
 
@@ -57,10 +58,26 @@ var MohwLifeCareMapper = (function () {
     'service_willingness_referral_other', 'mental_status', 'self_care_flag', 'self_care_observation',
     'self_care_other', 'home_hygiene_issues', 'home_hygiene_other', 'home_safety_issues',
     'home_safety_other', 'consent_personal_data', 'consent_health_db', 'consent_signature',
-    'social_worker_role', 'social_worker_name', 'social_worker_national_id', 'social_worker_phone',
-    'social_worker_date', 'civil_worker_role', 'civil_worker_name', 'civil_worker_national_id',
+    'social_worker_role', 'social_worker_role_other', 'social_worker_name',
+    'social_worker_national_id', 'social_worker_phone', 'social_worker_date',
+    'civil_worker_role', 'civil_worker_name', 'civil_worker_national_id',
     'civil_worker_phone', 'civil_worker_date'
   ];
+
+  var PHONE_KEYS = {
+    phone: true,
+    mobile: true,
+    emergency_contact_phone: true,
+    social_worker_phone: true,
+    civil_worker_phone: true
+  };
+
+  var DATE_KEYS = {
+    visit_date: true,
+    birth_date: true,
+    social_worker_date: true,
+    civil_worker_date: true
+  };
 
   var NEW_TAIPEI_MAP = {
     name: 'name',
@@ -120,7 +137,6 @@ var MohwLifeCareMapper = (function () {
     var caseRow = payload.caseRow || {};
     var visitMeta = payload.visitMeta || {};
 
-    // Phase 2: answers_json 已以 MOHW 102 欄 key 儲存時直接使用
     if (care.visit_date || care.visit_status || care.national_id) {
       Object.keys(care).forEach(function (key) {
         if (answers[key] === undefined || answers[key] === '') {
@@ -180,8 +196,14 @@ var MohwLifeCareMapper = (function () {
     if (Array.isArray(value)) return value.join(';');
     var text = String(value).trim();
     if (!text) return '';
-    if (key === 'birth_date' || key === 'visit_date' || key.indexOf('_date') > -1) {
+    if (DATE_KEYS[key]) {
       return formatRocDate(text);
+    }
+    if (PHONE_KEYS[key]) {
+      return formatPhone(text);
+    }
+    if (key === 'visit_start_time' || key === 'visit_end_time') {
+      return formatTime(text);
     }
     if (text.indexOf(',') > -1 && text.indexOf(';') === -1) {
       return text.split(',').join(';');
@@ -189,13 +211,67 @@ var MohwLifeCareMapper = (function () {
     return text;
   }
 
+  /**
+   * 民國年 yyy/M/d（不補零）。接受西元 ISO、西元斜線、已是民國（含前導 0）。
+   * Excel 常把民國 28/5/10 誤讀成 2028/05/10 → 以「西元年 > 今年」還原為 ROC yy。
+   */
   function formatRocDate(input) {
-    var iso = String(input).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    var text = String(input).trim();
+    if (!text) return '';
+
+    var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (iso) {
-      var y = Number(iso[1]) - 1911;
-      return y + '/' + Number(iso[2]) + '/' + Number(iso[3]);
+      return toRocParts_(Number(iso[1]), Number(iso[2]), Number(iso[3]));
     }
-    return input;
+
+    var slash = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (slash) {
+      return toRocParts_(Number(slash[1]), Number(slash[2]), Number(slash[3]));
+    }
+
+    return text;
+  }
+
+  function toRocParts_(year, month, day) {
+    var currentWestern = new Date().getFullYear();
+    var rocYear;
+    if (year >= 1911) {
+      // 未來西元年多半是 Excel 把民國 yy 當成 20yy
+      if (year > currentWestern) {
+        rocYear = year % 100;
+      } else {
+        rocYear = year - 1911;
+      }
+    } else {
+      rocYear = year; // 已是民國（Number 會去掉 0115 → 115）
+    }
+    return rocYear + '/' + month + '/' + day;
+  }
+
+  /** 還原前導 0：手機 09xxxxxxxx、市話 0xxxxxxxx */
+  function formatPhone(input) {
+    var text = String(input).trim();
+    if (!text) return '';
+    var digits = text.replace(/\D/g, '');
+    if (!digits) return text;
+    if (/^09\d{8}$/.test(digits) || /^0[2-8]\d{7,9}$/.test(digits)) {
+      return digits;
+    }
+    if (/^9\d{8}$/.test(digits)) {
+      return '0' + digits;
+    }
+    if (/^[2-8]\d{7,9}$/.test(digits)) {
+      return '0' + digits;
+    }
+    return text;
+  }
+
+  function formatTime(input) {
+    var match = String(input).trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (match) {
+      return Number(match[1]) + ':' + match[2];
+    }
+    return String(input).trim();
   }
 
   function buildRow(payload) {
@@ -217,6 +293,8 @@ var MohwLifeCareMapper = (function () {
     headers: HEADERS,
     keys: KEYS,
     buildRow: buildRow,
-    buildWorkbookRows: buildWorkbookRows
+    buildWorkbookRows: buildWorkbookRows,
+    formatRocDate: formatRocDate,
+    formatPhone: formatPhone
   };
 })();

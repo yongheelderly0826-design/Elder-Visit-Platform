@@ -251,7 +251,7 @@ export function MohwExportPanel({
         <div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">衛福部中央系統匯出（102 欄）</h2>
+            <h2 className="text-lg font-semibold">衛福部中央系統匯出（103 欄）</h2>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             勾選已填關懷表個案，系統會驗證後產生 xlsx 並存到 Google Drive，供手動上傳中央系統。
@@ -317,7 +317,7 @@ export function MohwExportPanel({
 
       {destination === "local" ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Excel 由系統完成 102 欄驗證後下載至這台電腦；Google Drive 會保留一份產檔備份。
+          Excel 由系統完成 103 欄驗證後下載至這台電腦；Google Drive 會保留一份產檔備份。
         </p>
       ) : null}
 

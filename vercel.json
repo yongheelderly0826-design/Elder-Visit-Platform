@@ -1,4 +1,15 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "functions": {
+    "app/api/exports/manager-bundle/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/exports/create/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/exports/mohw/candidates/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }
