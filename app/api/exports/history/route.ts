@@ -2,9 +2,10 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { GasApiError, gasClient, isGasConfigured } from "@/lib/gas-client";
+import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export type ExportHistoryItem = {
   exportId: string;
@@ -73,7 +74,12 @@ export async function GET(request: NextRequest) {
 
   if (status.dataMode === "gas_ready" && isGasConfigured()) {
     try {
-      const result = await gasClient.export.history({ limit });
+      const result = await cachedRead(
+        ["export-history", limit],
+        [GAS_READ_TAGS.managerExports],
+        async () => gasClient.export.history({ limit }),
+        20,
+      );
       const items = (result.items ?? []).map((row) => mapItem(row as Record<string, unknown>));
       return NextResponse.json({
         data: {

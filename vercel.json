@@ -10,6 +10,12 @@
     },
     "app/api/exports/mohw/candidates/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/exports/history/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/exports/history/route.ts": {
+      "maxDuration": 60
     }
   }
 }

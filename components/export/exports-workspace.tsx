@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ExportTool } from "@/components/export/export-tool";
-import { ExportHistoryPanel } from "@/components/export/export-history-panel";
+import {
+  ExportHistoryPanel,
+  type ExportHistoryItem,
+  type HistorySummary,
+} from "@/components/export/export-history-panel";
 import { MohwExportPanel } from "@/components/export/mohw-export-panel";
 import { PaymentBatchPanel } from "@/components/export/payment-batch-panel";
 import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
@@ -22,6 +26,10 @@ type BundleResponse = {
       warnings?: string[];
     };
     counts: { pending_audit: number; approved: number; returned: number };
+    history?: {
+      items: ExportHistoryItem[];
+      summary: HistorySummary;
+    };
   };
   error?: { message?: string };
 };
@@ -59,6 +67,8 @@ export function ExportsWorkspace() {
   const [payment, setPayment] = useState(() => mapPaymentBatch(undefined));
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [historyItems, setHistoryItems] = useState<ExportHistoryItem[] | null>(null);
+  const [historySummary, setHistorySummary] = useState<HistorySummary | null>(null);
 
   const loadBundle = useCallback(async () => {
     setLoading(true);
@@ -74,7 +84,6 @@ export function ExportsWorkspace() {
       try {
         json = JSON.parse(raw) as BundleResponse;
       } catch {
-        // bundle 偶發非 JSON（閘道 HTML）→ 改打較輕的候選 API
         const fallback = await fetch(
           `/api/exports/mohw/candidates?onlyAudited=${onlyAudited ? "true" : "false"}`,
           { cache: "no-store" },
@@ -104,7 +113,6 @@ export function ExportsWorkspace() {
       }
       setElapsedMs(Date.now() - started);
       if (!response.ok) {
-        // 502／GAS 失敗時同樣降級
         const fallback = await fetch(
           `/api/exports/mohw/candidates?onlyAudited=${onlyAudited ? "true" : "false"}`,
           { cache: "no-store" },
@@ -136,6 +144,10 @@ export function ExportsWorkspace() {
       setItems(nextItems);
       setMode(json.data?.mode ?? "gas");
       setPayment(mapPaymentBatch(json.data));
+      if (json.data?.history) {
+        setHistoryItems(json.data.history.items ?? []);
+        setHistorySummary(json.data.history.summary ?? null);
+      }
       setNote(
         nextItems.length === 0
           ? onlyAudited
@@ -177,7 +189,11 @@ export function ExportsWorkspace() {
           void loadBundle();
         }}
       />
-      <ExportHistoryPanel refreshToken={historyRefreshToken} />
+      <ExportHistoryPanel
+        refreshToken={historyRefreshToken}
+        initialItems={historyItems}
+        initialSummary={historySummary}
+      />
       <PaymentBatchPanel
         initialBatch={payment.batch}
         initialFeeRule={payment.feeRule}

@@ -77,7 +77,8 @@ async function gasFetch<T>(
     body?: unknown;
     revalidateSeconds?: number;
     tags?: string[];
-  } = {}
+  } = {},
+  attempt = 0,
 ): Promise<T> {
   if (!GAS_URL) {
     throw new Error("GAS_WEB_APP_URL is not configured");
@@ -129,9 +130,13 @@ async function gasFetch<T>(
   const raw = await res.text();
   const trimmed = raw.trim();
   if (!trimmed || trimmed.startsWith("<!") || trimmed.startsWith("<html") || trimmed.startsWith("<HTML")) {
+    if (attempt < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return gasFetch<T>(action, options, attempt + 1);
+    }
     throw new GasApiError({
       code: "GAS_NON_JSON",
-      message: `GAS「${action}」回傳網頁而非 JSON（常為逾時或部署權限）。請稍後重試，或改用較輕量的匯出候選 API。`,
+      message: `GAS「${action}」回傳網頁而非 JSON（常為逾時或部署權限）。請稍後重試。`,
     });
   }
 
@@ -139,6 +144,10 @@ async function gasFetch<T>(
   try {
     json = JSON.parse(raw) as GasResponse<T>;
   } catch {
+    if (attempt < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return gasFetch<T>(action, options, attempt + 1);
+    }
     throw new GasApiError({
       code: "GAS_NON_JSON",
       message: `GAS「${action}」回應無法解析為 JSON（HTTP ${res.status}）。`,
@@ -375,6 +384,41 @@ export const gasClient = {
         params: params as Record<string, string> | undefined,
         revalidateSeconds: 20,
         tags: ["gas-manager-exports"],
+      }),
+    workspaceBundle: (params?: {
+      district?: string;
+      only_audited?: string;
+    }) =>
+      gasFetch<{
+        candidates: {
+          total: number;
+          ready_count: number;
+          items: Array<Record<string, unknown>>;
+        };
+        history?: {
+          items: Array<Record<string, unknown>>;
+          summary: {
+            total_exports: number;
+            total_cases: number;
+            mohw_exports: number;
+            mohw_cases: number;
+            last_exported_at: string;
+          };
+        };
+        payments: {
+          batch_no?: string;
+          item_count: number;
+          total_amount: number;
+          items: Array<Record<string, unknown>>;
+          warnings?: string[];
+        } | null;
+        counts: {
+          pending_audit: number;
+          approved: number;
+          returned: number;
+        } | null;
+      }>("export.workspaceBundle", {
+        params: params as Record<string, string> | undefined,
       }),
     history: (params?: { limit?: string }) =>
       gasFetch<{

@@ -17,7 +17,7 @@ export type ExportHistoryItem = {
   exportedAt: string;
 };
 
-type HistorySummary = {
+export type HistorySummary = {
   totalExports: number;
   totalCases: number;
   mohwExports: number;
@@ -56,13 +56,29 @@ function typeLabel(type: string) {
   return type;
 }
 
-export function ExportHistoryPanel({ refreshToken = 0 }: { refreshToken?: number }) {
-  const [items, setItems] = useState<ExportHistoryItem[]>([]);
-  const [summary, setSummary] = useState<HistorySummary | null>(null);
+export function ExportHistoryPanel({
+  refreshToken = 0,
+  initialItems,
+  initialSummary,
+}: {
+  refreshToken?: number;
+  initialItems?: ExportHistoryItem[] | null;
+  initialSummary?: HistorySummary | null;
+}) {
+  const [items, setItems] = useState<ExportHistoryItem[]>(initialItems ?? []);
+  const [summary, setSummary] = useState<HistorySummary | null>(initialSummary ?? null);
   const [mode, setMode] = useState<"gas" | "demo">("gas");
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialItems) {
+      setItems(initialItems);
+      setError(null);
+    }
+    if (initialSummary) setSummary(initialSummary);
+  }, [initialItems, initialSummary]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,9 +87,12 @@ export function ExportHistoryPanel({ refreshToken = 0 }: { refreshToken?: number
       const res = await fetch("/api/exports/history?limit=50", { cache: "no-store" });
       const json = (await res.json()) as HistoryResponse;
       if (!res.ok) {
-        setItems([]);
-        setSummary(null);
-        setError(json.error?.message ?? "讀取匯出紀錄失敗");
+        // 若頁面已有 bundle 帶入的資料，保留顯示，只提示可稍後重試
+        if (!(initialItems && initialItems.length)) {
+          setItems([]);
+          setSummary(null);
+        }
+        setError(json.error?.message ?? "讀取匯出紀錄失敗（可稍後再按重新整理）");
         return;
       }
       setItems(json.data?.items ?? []);
@@ -81,15 +100,21 @@ export function ExportHistoryPanel({ refreshToken = 0 }: { refreshToken?: number
       setMode(json.data?.mode ?? "gas");
       setNote(json.data?.note ?? null);
     } catch {
-      setError("讀取匯出紀錄失敗");
+      setError("讀取匯出紀錄失敗（可稍後再按重新整理）");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialItems]);
 
   useEffect(() => {
-    void load();
-  }, [load, refreshToken]);
+    // 已有 bundle 資料時，初次不必再打 history（避免與候選 API 並行打爆 GAS）
+    if (refreshToken === 0 && initialItems && initialItems.length > 0) return;
+    if (refreshToken === 0 && initialSummary && initialSummary.totalExports > 0) return;
+    // 匯出成功後 refreshToken>0，或尚無初始資料時才抓
+    if (refreshToken > 0 || !initialItems) {
+      void load();
+    }
+  }, [load, refreshToken, initialItems, initialSummary]);
 
   return (
     <section className="rounded-lg border bg-card p-4">
@@ -124,7 +149,7 @@ export function ExportHistoryPanel({ refreshToken = 0 }: { refreshToken?: number
       ) : null}
 
       {note ? <p className="mt-3 text-sm text-amber-800">{note}</p> : null}
-      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-amber-800">{error}</p> : null}
 
       <div className="mt-4 overflow-x-auto rounded-md border">
         <table className="w-full min-w-[52rem] text-left text-sm">

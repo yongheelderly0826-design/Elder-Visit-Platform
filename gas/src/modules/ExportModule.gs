@@ -218,6 +218,9 @@ var ExportModule = (function () {
     exportRecord.file_name = fileInfo.fileName || fileName;
 
     SheetHelper.appendRow(SHEET, exportRecord);
+    try {
+      ReadCache.bump();
+    } catch (e) {}
 
     return {
       export_id: exportRecord.export_id,
@@ -259,33 +262,37 @@ var ExportModule = (function () {
 
   function history(params) {
     params = params || {};
-    var limit = Math.min(Number(params.limit) || 50, 200);
-    SheetHelper.ensureColumns(SHEET, [
-      'export_id',
-      'export_type',
-      'case_count',
-      'file_name',
-      'file_id',
-      'file_url',
-      'column_count',
-      'skipped_count',
-      'exported_by',
-      'exported_at',
-    ]);
-    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).map(function (row) {
-      return {
-        export_id: String(row.export_id || ''),
-        export_type: String(row.export_type || ''),
-        case_count: Number(row.case_count) || 0,
-        file_name: String(row.file_name || ''),
-        file_id: String(row.file_id || ''),
-        file_url: String(row.file_url || ''),
-        column_count: Number(row.column_count) || 0,
-        skipped_count: Number(row.skipped_count) || 0,
-        exported_by: String(row.exported_by || ''),
-        exported_at: String(row.exported_at || ''),
-      };
-    });
+    var limit = Math.min(Number(params.limit) || 50, 100);
+    var cacheKey = ReadCache.key('exportHist:' + limit);
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
+    var payload = historyLite_(limit);
+    ReadCache.putJson(cacheKey, payload);
+    return payload;
+  }
+
+  /** 讀取匯出紀錄（不做 ensureColumns，避免 Vercel 冷路徑逾時） */
+  function historyLite_(limit) {
+    var rows = [];
+    try {
+      rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).map(function (row) {
+        return {
+          export_id: String(row.export_id || ''),
+          export_type: String(row.export_type || ''),
+          case_count: Number(row.case_count) || 0,
+          file_name: String(row.file_name || ''),
+          file_id: String(row.file_id || ''),
+          file_url: String(row.file_url || ''),
+          column_count: Number(row.column_count) || 0,
+          skipped_count: Number(row.skipped_count) || 0,
+          exported_by: String(row.exported_by || ''),
+          exported_at: String(row.exported_at || ''),
+        };
+      });
+    } catch (e) {
+      rows = [];
+    }
 
     rows.sort(function (a, b) {
       return String(b.exported_at).localeCompare(String(a.exported_at));
@@ -314,9 +321,35 @@ var ExportModule = (function () {
     };
   }
 
+  /**
+   * 匯出頁一次取候選＋匯出紀錄，避免 Vercel 並行打兩個 GAS action 易回 HTML。
+   */
+  function workspaceBundle(params) {
+    params = params || {};
+    var onlyAudited = params.only_audited === true || params.only_audited === 'true';
+    var cacheKey = ReadCache.key(
+      'exportWs:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
+    var index = VisitRecordIndex.build();
+    var candidates = listCandidatesFromIndex_(index, params);
+    var hist = historyLite_(50);
+    var payload = {
+      candidates: candidates,
+      history: hist,
+      payments: null,
+      counts: VisitRecordIndex.counts(index),
+    };
+    ReadCache.putJson(cacheKey, payload);
+    return payload;
+  }
+
   return {
     listCandidates: listCandidates,
     managerBundle: managerBundle,
+    workspaceBundle: workspaceBundle,
     exportLifeCareXlsx: exportLifeCareXlsx,
     history: history,
   };

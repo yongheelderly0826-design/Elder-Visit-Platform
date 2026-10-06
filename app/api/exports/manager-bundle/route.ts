@@ -1,12 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
-import { GasApiError, gasClient, isGasConfigured } from "@/lib/gas-client";
+import { GasApiError, gasClient, isGasConfigured, isUnknownGasAction } from "@/lib/gas-client";
 import { mapMohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
 import { cachedRead, GAS_READ_TAGS } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
-/** 匯出頁冷啟動可能較慢；候選清單本身通常 <10s。 */
 export const maxDuration = 60;
 
 function paymentsFromCandidates(items: ReturnType<typeof mapMohwExportCandidate>[]) {
@@ -33,9 +32,40 @@ function paymentsFromCandidates(items: ReturnType<typeof mapMohwExportCandidate>
   };
 }
 
+function mapHistory(raw?: {
+  items?: Array<Record<string, unknown>>;
+  summary?: Record<string, unknown>;
+}) {
+  const items = (raw?.items ?? []).map((row) => ({
+    exportId: String(row.export_id ?? ""),
+    exportType: String(row.export_type ?? ""),
+    caseCount: Number(row.case_count) || 0,
+    fileName: String(row.file_name ?? ""),
+    fileId: String(row.file_id ?? ""),
+    fileUrl: String(row.file_url ?? ""),
+    columnCount: Number(row.column_count) || 0,
+    skippedCount: Number(row.skipped_count) || 0,
+    exportedBy: String(row.exported_by ?? ""),
+    exportedAt: String(row.exported_at ?? ""),
+  }));
+  const summary = raw?.summary;
+  return {
+    items,
+    summary: {
+      totalExports: Number(summary?.total_exports ?? items.length) || 0,
+      totalCases:
+        Number(summary?.total_cases ?? items.reduce((sum, item) => sum + item.caseCount, 0)) || 0,
+      mohwExports: Number(summary?.mohw_exports ?? items.length) || 0,
+      mohwCases:
+        Number(summary?.mohw_cases ?? items.reduce((sum, item) => sum + item.caseCount, 0)) || 0,
+      lastExportedAt: String(summary?.last_exported_at ?? items[0]?.exportedAt ?? ""),
+    },
+  };
+}
+
 /**
- * managerBundle 在 Vercel→GAS 路徑常逾時回 HTML；
- * 改以較輕的 listCandidates 為主，核銷列由候選推算。
+ * 匯出頁一次取候選＋匯出紀錄（workspaceBundle）；
+ * 若新 action 尚未部署則降級 listCandidates。
  */
 export async function GET(request: NextRequest) {
   const forbidden = requireCapability(request, "exports.create");
@@ -59,14 +89,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await cachedRead(
-      ["manager-bundle-lite", onlyAudited ? "1" : "0", district],
+      ["manager-workspace", onlyAudited ? "1" : "0", district],
       [GAS_READ_TAGS.managerExports],
-      async () => gasClient.export.listCandidates(params),
+      async () => {
+        try {
+          return await gasClient.export.workspaceBundle(params);
+        } catch (error) {
+          if (!isUnknownGasAction(error) && !(error instanceof GasApiError && error.code === "GAS_NON_JSON")) {
+            // 仍嘗試 listCandidates
+          }
+          const fallback = await gasClient.export.listCandidates(params);
+          return {
+            candidates: {
+              total: fallback.total,
+              ready_count: fallback.ready_count,
+              items: fallback.items,
+            },
+            history: undefined,
+            payments: null,
+            counts: null,
+          };
+        }
+      },
     );
 
-    const items = (result.items ?? []).map((item) => mapMohwExportCandidate(item));
+    const items = (result.candidates?.items ?? []).map((item) => mapMohwExportCandidate(item));
     const payments = paymentsFromCandidates(items);
-    const counts = {
+    const history = mapHistory(result.history);
+    const counts = result.counts ?? {
       pending_audit: items.filter((item) => item.auditDecision === "待稽核").length,
       approved: items.filter(
         (item) => item.auditDecision === "通過" || item.careformStatus === "已稽核",
@@ -84,6 +134,7 @@ export async function GET(request: NextRequest) {
         },
         payments,
         counts,
+        history,
       },
     });
   } catch (error) {
