@@ -168,7 +168,7 @@ export const navItems: NavItem[] = [
   },
   {
     key: "dailyVisits",
-    label: "每日訪視統計",
+    label: "訪視中分層",
     href: "/manager/daily-visits",
     icon: CalendarCheck2,
     requiredCapabilities: ["visits.read"],

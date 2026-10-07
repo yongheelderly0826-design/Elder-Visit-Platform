@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: 訪視中 drill-down must use in-progress cases
+
+- **Trigger:** Managers expected「訪視中」date totals to equal the workflow count, but daily-visits summed assignments by due date.
+- **Cause:** Different universes—`visit_status === "進行中"` vs assignment-date slices—and unassigned cases were easy to hide.
+- **Rule:** For workflow「訪視中」drill-down, source only in-progress cases; bucket by due/visit date (else 未排程); sort overdue → today → future → unscheduled; unassigned visitor group first; case order by stuckness. Date sums must equal the workflow total.
+- **Evidence:** `lib/domain/in-progress-visit-board.ts`, `app/api/manager/in-progress-visits/route.ts`, `components/daily-visits/daily-visit-report-panel.tsx`.
+- **Added on:** 2026-10-07
+
 ## Lesson: Missed-visit evidence is conditional
 
 - **Trigger:** The visit workflow was interpreted as requiring photo evidence for every visit.

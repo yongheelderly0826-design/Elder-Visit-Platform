@@ -142,7 +142,7 @@ export function ManagementPriorityQueue() {
     },
     {
       title: "掌握訪視中",
-      detail: "已派案尚未送審者，可從每日訪視統計追蹤進度。",
+      detail: "進行中個案依日期→訪員→進度分層追蹤，加總對齊步驟數字。",
       href: "/manager/daily-visits",
     },
     {
