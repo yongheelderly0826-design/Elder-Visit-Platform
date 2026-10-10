@@ -1,17 +1,6 @@
 var AuditModule = (function () {
   var SHEET = Config.SHEET_NAMES.AUDIT;
 
-  function parseAnswers_(careform) {
-    if (!careform || !careform.answers_json) return {};
-    try {
-      return typeof careform.answers_json === 'string'
-        ? JSON.parse(careform.answers_json)
-        : careform.answers_json;
-    } catch (e) {
-      return {};
-    }
-  }
-
   function truthy_(value) {
     return value === true || value === 'true' || value === '是' || value === 'TRUE';
   }
@@ -55,10 +44,12 @@ var AuditModule = (function () {
       if (encodedMatches.length === 1) caseRow = encodedMatches[0];
     }
 
-    var answers = parseAnswers_(careform);
+    var answers = MohwLifeCareMapper.mergeInputs({ careform: careform, caseRow: caseRow });
     var validation = { ok: true, errorLines: [], errors: [] };
     if (typeof MohwLifeCareValidator !== 'undefined') {
-      validation = MohwLifeCareValidator.validateRow(answers, 2);
+      validation = MohwLifeCareValidator.validateRow(answers, 2, {
+        registryNationalId: caseRow.id_number || caseRow.national_id || ''
+      });
     }
 
     var visitorId = String(

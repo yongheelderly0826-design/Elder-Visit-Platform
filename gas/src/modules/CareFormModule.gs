@@ -100,6 +100,16 @@ var CareFormModule = (function () {
     return stored;
   }
 
+  function caseRowForAssignment_(assignmentId) {
+    try {
+      var assignment = AssignmentModule.get(assignmentId);
+      if (!assignment || !assignment.case_id) return null;
+      return CaseModule.get(assignment.case_id);
+    } catch (e) {
+      return null;
+    }
+  }
+
   function submit(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
     var isMissed = data.visit_result === '未遇';
@@ -121,7 +131,15 @@ var CareFormModule = (function () {
     }
 
     if (!isMissed) {
-      var validation = MohwLifeCareValidator.validateRow(answers, data.row || 2);
+      var caseRow = caseRowForAssignment_(data.assignment_id);
+      var registryNationalId = (caseRow && (caseRow.id_number || caseRow.national_id)) || '';
+      var mergedAnswers = MohwLifeCareMapper.mergeInputs({
+        mohwAnswers: answers,
+        caseRow: caseRow || {}
+      });
+      var validation = MohwLifeCareValidator.validateRow(mergedAnswers, data.row || 2, {
+        registryNationalId: registryNationalId
+      });
       if (!validation.ok) {
         var verr = new Error(validation.errorLines.join('；'));
         verr.code = 'MOHW_VALIDATION_ERROR';
@@ -203,7 +221,16 @@ var CareFormModule = (function () {
   }
 
   function validate(data) {
-    return MohwLifeCareValidator.validateRow((data && data.answers) || {}, (data && data.row) || 2);
+    data = data || {};
+    var caseRow = data.assignment_id ? caseRowForAssignment_(data.assignment_id) : null;
+    var merged = MohwLifeCareMapper.mergeInputs({
+      mohwAnswers: data.answers || {},
+      caseRow: caseRow || {}
+    });
+    var options = data.assignment_id
+      ? { registryNationalId: (caseRow && (caseRow.id_number || caseRow.national_id)) || '' }
+      : undefined;
+    return MohwLifeCareValidator.validateRow(merged, data.row || 2, options);
   }
 
   return { get: get, saveDraft: saveDraft, submit: submit, validate: validate };

@@ -50,9 +50,10 @@ var MohwLifeCareExporter = (function () {
     var ss = SpreadsheetApp.create(tempTitle || fileName);
     var sheet = ss.getSheets()[0];
     var range = sheet.getRange(1, 1, rows.length, rows[0].length);
-    // 強制純文字，避免 Sheets 吃掉電話前導 0、把民國日期改成 0115/…
+    // 整表先設文字。日期樣字串仍可能被 Sheets 吃成日期，下面再逐格用 setValue 強制。
     range.setNumberFormat('@');
     range.setValues(rows);
+    writeTextColumns_(sheet, rows);
     SpreadsheetApp.flush();
 
     var spreadsheetId = ss.getId();
@@ -85,6 +86,31 @@ var MohwLifeCareExporter = (function () {
       fileUrl: file.getUrl(),
       fileName: fileName,
     };
+  }
+
+  function writeTextColumns_(sheet, rows) {
+    var textCols = MohwOfficialTemplate.TEXT_COLUMNS || {};
+    // 任何已是官方民國日期的欄也強制文字（防 Sheets 匯出時型別漂移）
+    var rocRe = /^\d{3}\/\d{2}\/\d{2}$/;
+    for (var r = 1; r < rows.length; r++) {
+      var row = rows[r];
+      for (var c = 0; c < row.length; c++) {
+        var text = row[c] == null ? '' : String(row[c]);
+        if (!text) continue;
+        if (text.charAt(0) === "'") text = text.substring(1);
+        var force = !!textCols[c + 1] || rocRe.test(text);
+        if (!force) continue;
+        var cell = sheet.getRange(r + 1, c + 1);
+        cell.setNumberFormat('@');
+        cell.setValue("'" + text);
+      }
+    }
+    // 表頭也維持文字，避免星號／空白被改寫
+    if (rows[0] && rows[0].length) {
+      var headerRange = sheet.getRange(1, 1, 1, rows[0].length);
+      headerRange.setNumberFormat('@');
+      headerRange.setValues([rows[0]]);
+    }
   }
 
   function getOrCreateNamedFolder_(propertyKey, folderName) {

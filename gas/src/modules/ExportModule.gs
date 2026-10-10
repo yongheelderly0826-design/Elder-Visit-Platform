@@ -21,8 +21,10 @@ var ExportModule = (function () {
     var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
     var auditDecision = audit ? String(audit.decision || '') : '';
     var auditedPass = auditDecision === '通過' || String(careform.status) === '已稽核';
-    var answers = parseAnswers_(careform);
-    var validation = MohwLifeCareValidator.validateRow(answers, 2);
+    var answers = MohwLifeCareMapper.mergeInputs({ careform: careform, caseRow: caseRow });
+    var validation = MohwLifeCareValidator.validateRow(answers, 2, {
+      registryNationalId: (caseRow && (caseRow.id_number || caseRow.national_id)) || ''
+    });
     return {
       case_id: caseRow.case_id,
       encoded_id: caseRow.encoded_id,
@@ -166,10 +168,14 @@ var ExportModule = (function () {
     var rows = MohwLifeCareMapper.buildWorkbookRows(payloads);
 
     var answerRows = payloads.map(function (payload) {
-      return parseAnswers_(payload.careform);
+      return MohwLifeCareMapper.mergeInputs(payload);
+    });
+    var registryIds = payloads.map(function (payload) {
+      var caseRow = payload.caseRow || {};
+      return caseRow.id_number || caseRow.national_id || '';
     });
 
-    var batch = MohwLifeCareValidator.validateBatch(answerRows, 2);
+    var batch = MohwLifeCareValidator.validateBatch(answerRows, 2, registryIds);
     var strict = data.strict !== false;
     if (strict && !batch.ok) {
       var verr = new Error(

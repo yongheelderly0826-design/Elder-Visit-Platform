@@ -17,6 +17,8 @@ var MohwLifeCareValidator = (function () {
     civil_worker_date: 1
   };
   var TIME_KEYS = { visit_start_time: 1, visit_end_time: 1 };
+  var DATE_CELL_MESSAGE =
+    '日期格式錯誤:此欄需為文字格式並填民國年(例如 048/6/15、113/06/15)。目前儲存格是日期格式(可能來自複製貼上或格式被修改),請在儲存格上按右鍵→儲存格格式→文字,清空後重填';
 
   var CONDITIONAL = [
     { key: 'line_id', equals: { line_id_status: '有' } },
@@ -159,12 +161,6 @@ var MohwLifeCareValidator = (function () {
     return true;
   }
 
-  function isRocDate(value) {
-    if (/^\d{1,3}\/\d{1,2}\/\d{1,2}$/.test(value)) return true;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return true;
-    return false;
-  }
-
   function isHhMm(value) {
     var m = String(value).match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return false;
@@ -173,12 +169,35 @@ var MohwLifeCareValidator = (function () {
     return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
   }
 
+  function normId(value) {
+    var text = String(value || '');
+    if (text.normalize) text = text.normalize('NFKC');
+    return text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  function villageMissing(city, district, village) {
+    var list = MohwOfficialTemplate.villagesFor(city, district);
+    if (!list) return true;
+    var target = MohwOfficialTemplate.norm(village);
+    for (var i = 0; i < list.length; i++) {
+      if (MohwOfficialTemplate.norm(list[i]) === target) return false;
+    }
+    return true;
+  }
+
+  function isOfficialRoc(value) {
+    var formatted = MohwLifeCareMapper.formatRocDate(value);
+    return /^\d{3}\/\d{2}\/\d{2}$/.test(String(formatted || ''));
+  }
+
   /**
    * @param {Object} answers MOHW keyed answers
    * @param {number=} row Excel row (default 2)
+   * @param {{ registryNationalId?: string }=} options
    */
-  function validateRow(answers, row) {
+  function validateRow(answers, row, options) {
     row = row || 2;
+    options = options || {};
     answers = answers || {};
     var errors = [];
     var visitStatus = asString(answers.visit_status);
@@ -260,8 +279,8 @@ var MohwLifeCareValidator = (function () {
         var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
         pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
       }
-      if (DATE_KEYS[k2] && !isRocDate(text)) {
-        pushErr(errors, k2, row, '日期格式不正確（請用民國年 yyy/MM/dd 或 yyyy-MM-dd）');
+      if (DATE_KEYS[k2] && !isOfficialRoc(answers[k2])) {
+        pushErr(errors, k2, row, DATE_CELL_MESSAGE);
       }
       if (TIME_KEYS[k2] && !isHhMm(text)) {
         pushErr(errors, k2, row, '時間格式不正確（請用 HH:mm）');
@@ -281,6 +300,47 @@ var MohwLifeCareValidator = (function () {
       }
     }
 
+    if (!MohwOfficialTemplate.headersMatch(MohwLifeCareMapper.headers)) {
+      pushErr(errors, 'social_worker_role_other', row, '訪查人欄位順序不符，請重新下載最新版匯入範本');
+    }
+
+    if (hasValue(answers.household_village) && villageMissing(answers.household_city, answers.household_district, answers.household_village)) {
+      pushErr(
+        errors,
+        'household_village',
+        row,
+        '戶籍村里「' + asString(answers.household_village) + '」在「' + asString(answers.household_district) + '」下查無此里'
+      );
+    }
+    if (hasValue(answers.living_village) && villageMissing(answers.living_city, answers.living_district, answers.living_village)) {
+      pushErr(
+        errors,
+        'living_village',
+        row,
+        '居住村里「' + asString(answers.living_village) + '」在「' + asString(answers.living_district) + '」下查無此里'
+      );
+    }
+
+    var helpNone = asList(answers.help_sources_none);
+    var helpNoneHasOther = false;
+    for (var n = 0; n < helpNone.length; n++) {
+      if (helpNone[n] === '其他') helpNoneHasOther = true;
+    }
+    if (hasValue(answers.help_sources_none_other) && !helpNoneHasOther) {
+      pushErr(errors, 'help_sources_none_other', row, '未勾選「其他」時，「求助對象無-其他說明」應留空');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(options, 'registryNationalId')) {
+      var registry = normId(options.registryNationalId);
+      var current = normId(answers.national_id);
+      if (!registry || !current || registry !== current) {
+        errors = errors.filter(function (error) {
+          return !(error.key === 'national_id' && (error.message.indexOf('為必填') !== -1 || error.message.indexOf('格式不正確') !== -1));
+        });
+        pushErr(errors, 'national_id', row, '無個案資料');
+      }
+    }
+
     return {
       ok: errors.length === 0,
       errors: errors,
@@ -288,14 +348,15 @@ var MohwLifeCareValidator = (function () {
     };
   }
 
-  function validateBatch(rows, startRow) {
+  function validateBatch(rows, startRow, registryIds) {
     startRow = startRow || 2;
     var results = [];
     var success = 0;
     var fail = 0;
     var lines = [];
     for (var i = 0; i < rows.length; i++) {
-      var r = validateRow(rows[i], startRow + i);
+      var rowOptions = registryIds ? { registryNationalId: registryIds[i] || '' } : undefined;
+      var r = validateRow(rows[i], startRow + i, rowOptions);
       results.push({ row: startRow + i, ok: r.ok, errors: r.errors, errorLines: r.errorLines });
       if (r.ok) success++;
       else {

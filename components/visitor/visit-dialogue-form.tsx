@@ -160,9 +160,9 @@ export function VisitDialogueForm({
           syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
           submission,
         ),
-        { row: 2 },
+        { row: 2, registryNationalId: elderCase.nationalId ?? "" },
       ),
-    [careFormAnswers, submission],
+    [careFormAnswers, elderCase.nationalId, submission],
   );
   const displayedMohwErrors = useMemo(() => {
     const byId = new Map<string, MohwValidationError>();
@@ -242,7 +242,10 @@ export function VisitDialogueForm({
     );
 
     if (submission.visitResult !== "未遇") {
-      const localCheck = validateMohwLifeCareRow(mohwAnswers, { row: 2 });
+      const localCheck = validateMohwLifeCareRow(mohwAnswers, {
+        row: 2,
+        registryNationalId: elderCase.nationalId ?? "",
+      });
       if (!localCheck.ok) {
         setMohwErrors(localCheck.errors);
         setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
@@ -269,6 +272,7 @@ export function VisitDialogueForm({
         encodedId: elderCase.caseCode,
         caseCode: elderCase.caseCode,
         careFormAnswers: mohwAnswers,
+        registryNationalId: elderCase.nationalId ?? "",
         missedVisitPhotos: missedPhotos.map((item) => ({
           slot: item.slot,
           fileName: item.fileName,

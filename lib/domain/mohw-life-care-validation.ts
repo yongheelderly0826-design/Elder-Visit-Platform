@@ -1,5 +1,7 @@
+import { toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
 import {
   MOHW_LIFE_CARE_COLUMNS,
+  MOHW_LIFE_CARE_HEADERS,
   type MohwLifeCareAnswers,
 } from "@/lib/domain/mohw-life-care-form";
 import {
@@ -7,6 +9,15 @@ import {
   normalizeMohwOptionValue,
   parseOfficialAllowedValues,
 } from "@/lib/domain/mohw-life-care-options";
+import {
+  MOHW_CASE_MISSING_MESSAGE,
+  MOHW_DATE_CELL_MESSAGE,
+  MOHW_HELP_NONE_OTHER_BLANK_MESSAGE,
+  MOHW_VISITOR_ORDER_MESSAGE,
+  mohwHeadersMatchTemplate,
+  mohwVillagesFor,
+  normalizeMohwAdminName,
+} from "@/lib/domain/mohw-life-care-template";
 
 export type MohwValidationError = {
   /** Excel-style cell, e.g. `I3` */
@@ -27,7 +38,11 @@ export type MohwValidationError = {
     | "INVALID_NUMBER"
     | "MAX_LENGTH"
     | "PHONE_OR_MOBILE"
-    | "VISITOR_REQUIRED";
+    | "VISITOR_REQUIRED"
+    | "CASE_NOT_FOUND"
+    | "VILLAGE_NOT_FOUND"
+    | "MUST_BE_BLANK"
+    | "TEMPLATE_MISMATCH";
   message: string;
   /** Manager / export message with Excel cell: `I3 身分證號碼格式不正確` */
   display: string;
@@ -331,6 +346,29 @@ function columnByKey(key: string) {
   return MOHW_LIFE_CARE_COLUMNS.find((column) => column.key === key);
 }
 
+function checkVillage(
+  answers: MohwLifeCareAnswers,
+  errors: MohwValidationError[],
+  row: number,
+  cityKey: string,
+  districtKey: string,
+  villageKey: string,
+  label: string,
+) {
+  const village = asString(answers[villageKey]);
+  if (!village) return;
+  const district = asString(answers[districtKey]);
+  const list = mohwVillagesFor(asString(answers[cityKey]), district);
+  const found = list?.some((item) => normalizeMohwAdminName(item) === normalizeMohwAdminName(village));
+  if (found) return;
+  pushError(errors, {
+    key: villageKey,
+    row,
+    code: "VILLAGE_NOT_FOUND",
+    message: `${label}「${village}」在「${district}」下查無此里`,
+  });
+}
+
 function pushError(
   errors: MohwValidationError[],
   opts: {
@@ -363,7 +401,7 @@ function pushError(
  */
 export function validateMohwLifeCareRow(
   answers: MohwLifeCareAnswers,
-  options: { row?: number } = {},
+  options: { row?: number; registryNationalId?: string | null } = {},
 ): MohwValidationResult {
   const row = options.row ?? 2;
   const errors: MohwValidationError[] = [];
@@ -497,12 +535,12 @@ export function validateMohwLifeCareRow(
       });
     }
 
-    if (DATE_KEYS.has(column.key) && !isRocDate(text)) {
+    if (DATE_KEYS.has(column.key) && !toOfficialRocDateText(raw)) {
       pushError(errors, {
         key: column.key,
         row,
         code: "INVALID_DATE",
-        message: "日期格式不正確（請用民國年 yyy/MM/dd 或 yyyy-MM-dd）",
+        message: MOHW_DATE_CELL_MESSAGE,
       });
     }
 
@@ -572,6 +610,47 @@ export function validateMohwLifeCareRow(
         row,
         code: "MAX_LENGTH",
         message: `字數不可超過 ${NOTE_MAX} 字`,
+      });
+    }
+  }
+
+  checkVillage(answers, errors, row, "household_city", "household_district", "household_village", "戶籍村里");
+  checkVillage(answers, errors, row, "living_city", "living_district", "living_village", "居住村里");
+
+  const helpNone = asList(answers.help_sources_none);
+  if (asString(answers.help_sources_none_other) && !helpNone.includes("其他")) {
+    pushError(errors, {
+      key: "help_sources_none_other",
+      row,
+      code: "MUST_BE_BLANK",
+      message: MOHW_HELP_NONE_OTHER_BLANK_MESSAGE,
+    });
+  }
+
+  if (!mohwHeadersMatchTemplate(MOHW_LIFE_CARE_HEADERS)) {
+    pushError(errors, {
+      key: "social_worker_role_other",
+      row,
+      code: "TEMPLATE_MISMATCH",
+      message: MOHW_VISITOR_ORDER_MESSAGE,
+    });
+  }
+
+  if ("registryNationalId" in options) {
+    const registry = normalizeTaiwanId(options.registryNationalId ?? "");
+    const current = normalizeTaiwanId(asString(answers.national_id));
+    if (!registry || !current || registry !== current) {
+      for (let index = errors.length - 1; index >= 0; index -= 1) {
+        const error = errors[index];
+        if (error.key === "national_id" && (error.code === "REQUIRED" || error.code === "INVALID_NATIONAL_ID")) {
+          errors.splice(index, 1);
+        }
+      }
+      pushError(errors, {
+        key: "national_id",
+        row,
+        code: "CASE_NOT_FOUND",
+        message: MOHW_CASE_MISSING_MESSAGE,
       });
     }
   }
@@ -656,7 +735,15 @@ export function visitorFacingMohwError(error: MohwValidationError): string {
     case "INVALID_NATIONAL_ID":
       return `「${error.label}」請填 10 碼身分證（1 個英文字加 9 個數字），不要填案號或姓名`;
     case "INVALID_DATE":
-      return "日期請用民國年，例如 115/09/21";
+      return "日期要存成文字，並用民國年，例如 048/6/15 或 113/06/15";
+    case "CASE_NOT_FOUND":
+      return "身分證對不到這筆個案，請核對個案名冊的身分證字號";
+    case "VILLAGE_NOT_FOUND":
+      return error.message;
+    case "MUST_BE_BLANK":
+      return "沒有勾「其他」時，「求助對象無-其他說明」請留空";
+    case "TEMPLATE_MISMATCH":
+      return "訪查人欄位順序和最新匯入範本不一致";
     case "INVALID_TIME":
       return "時間請用 24 小時制，例如 09:30";
     case "INVALID_NUMBER":

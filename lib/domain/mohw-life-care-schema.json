@@ -11,7 +11,7 @@
     "partial": 26,
     "missing": 44
   },
-  "syncedFromOfficialAt": "2026-10-06",
+  "syncedFromOfficialAt": "2026-10-08",
   "columns": [
     {
       "col": 1,
@@ -236,7 +236,7 @@
     },
     {
       "col": 18,
-      "header": "戶籍-縣市 *",
+      "header": "戶籍-縣市*",
       "key": "household_city",
       "gapStatus": "partial",
       "required": true,
@@ -249,7 +249,7 @@
     },
     {
       "col": 19,
-      "header": "戶籍-鄉鎮區 *",
+      "header": "戶籍-鄉鎮區*",
       "key": "household_district",
       "gapStatus": "partial",
       "required": true,
@@ -262,7 +262,7 @@
     },
     {
       "col": 20,
-      "header": "戶籍-村里 *",
+      "header": "戶籍-村里*",
       "key": "household_village",
       "gapStatus": "partial",
       "required": true,

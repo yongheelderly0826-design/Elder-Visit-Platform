@@ -31,6 +31,7 @@ type VisitSubmitPayload = VisitSubmission & {
   caseCode?: string;
   careFormAnswers?: MohwLifeCareAnswers;
   missedVisitPhotos?: MissedVisitPhotoPayload[];
+  registryNationalId?: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -75,7 +76,10 @@ export async function POST(request: NextRequest) {
   const isMissedVisit = submission.visitResult === "未遇";
   const mohwValidation =
     careFormAnswers && !isMissedVisit
-      ? validateMohwLifeCareRow(careFormAnswers, { row: 2 })
+      ? validateMohwLifeCareRow(careFormAnswers, {
+          row: 2,
+          registryNationalId: body.registryNationalId ?? "",
+        })
       : null;
   const highCare = careFormAnswers && !isMissedVisit ? evaluateHighCare(careFormAnswers) : null;
 

@@ -8,8 +8,8 @@ var MohwLifeCareMapper = (function () {
     '訪查日期 *', '訪查開始時間 *', '訪查結束時間', '訪視狀態 *', '備註',
     '姓名 *', '性別*', '出生年月日*', '身分證字號 *', '電話', '手機',
     'Line ID 狀態', 'Line ID', '緊急聯絡人姓名', '緊急聯絡人關係',
-    '緊急聯絡人關係-其他說明', '緊急聯絡人電話', '戶籍-縣市 *', '戶籍-鄉鎮區 *',
-    '戶籍-村里 *', '戶籍-地址 *', '居住地址類型 *', '居住說明', '居住-縣市',
+    '緊急聯絡人關係-其他說明', '緊急聯絡人電話', '戶籍-縣市*', '戶籍-鄉鎮區*',
+    '戶籍-村里*', '戶籍-地址 *', '居住地址類型 *', '居住說明', '居住-縣市',
     '居住-鄉鎮區', '居住-村里', '居住-地址', '居住-其他說明', '住宅類型 *',
     '住宅類型-其他說明', '居住狀況 *', '同住情形', '同住者為', '同住者年齡',
     '同住者無照顧能力說明', '教育程度', '婚姻狀況', '婚姻狀況-其他說明',
@@ -194,6 +194,9 @@ var MohwLifeCareMapper = (function () {
   function formatCell(value, key) {
     if (value === null || value === undefined) return '';
     if (Array.isArray(value)) return value.join(';');
+    if (DATE_KEYS[key] && Object.prototype.toString.call(value) === '[object Date]') {
+      return formatRocDate(value);
+    }
     var text = String(value).trim();
     if (!text) return '';
     if (DATE_KEYS[key]) {
@@ -212,12 +215,25 @@ var MohwLifeCareMapper = (function () {
   }
 
   /**
-   * 民國年 yyy/M/d（不補零）。接受西元 ISO、西元斜線、已是民國（含前導 0）。
+   * 民國年 yyy/MM/dd。年 3 碼、月日 2 碼。
+   * 接受西元 ISO、Excel 序列、已是民國（含前導 0）。
    * Excel 常把民國 28/5/10 誤讀成 2028/05/10 → 以「西元年 > 今年」還原為 ROC yy。
    */
   function formatRocDate(input) {
-    var text = String(input).trim();
+    if (input === null || input === undefined || input === '') return '';
+    if (Object.prototype.toString.call(input) === '[object Date]') {
+      if (isNaN(input.getTime())) return '';
+      return toRocParts_(input.getFullYear(), input.getMonth() + 1, input.getDate());
+    }
+    if (typeof input === 'number' && isFinite(input)) {
+      return serialToRoc_(input) || String(input);
+    }
+    var text = String(input).replace(/^\s+|\s+$/g, '');
     if (!text) return '';
+    if (/^\d{4,6}(\.\d+)?$/.test(text)) {
+      var fromSerial = serialToRoc_(Number(text));
+      if (fromSerial) return fromSerial;
+    }
 
     var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (iso) {
@@ -229,6 +245,20 @@ var MohwLifeCareMapper = (function () {
       return toRocParts_(Number(slash[1]), Number(slash[2]), Number(slash[3]));
     }
 
+    return text;
+  }
+
+  function serialToRoc_(serial) {
+    if (!(serial >= 10000 && serial <= 80000)) return '';
+    var utc = Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000;
+    var date = new Date(utc);
+    if (isNaN(date.getTime())) return '';
+    return toRocParts_(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+  }
+
+  function pad_(value, width) {
+    var text = String(value);
+    while (text.length < width) text = '0' + text;
     return text;
   }
 
@@ -245,7 +275,7 @@ var MohwLifeCareMapper = (function () {
     } else {
       rocYear = year; // 已是民國（Number 會去掉 0115 → 115）
     }
-    return rocYear + '/' + month + '/' + day;
+    return pad_(rocYear, 3) + '/' + pad_(month, 2) + '/' + pad_(day, 2);
   }
 
   /** 還原前導 0：手機 09xxxxxxxx、市話 0xxxxxxxx */
@@ -282,7 +312,19 @@ var MohwLifeCareMapper = (function () {
   }
 
   function buildWorkbookRows(rowsPayload) {
-    var rows = [HEADERS];
+    // 表頭一律以官方匯入範本為準，避免與驗證系統欄名一字之差。
+    var headerRow =
+      typeof MohwOfficialTemplate !== 'undefined' && MohwOfficialTemplate.HEADERS
+        ? MohwOfficialTemplate.HEADERS.slice()
+        : HEADERS.slice();
+    if (
+      typeof MohwOfficialTemplate !== 'undefined' &&
+      MohwOfficialTemplate.headersMatch &&
+      !MohwOfficialTemplate.headersMatch(HEADERS)
+    ) {
+      // 仍繼續匯出，但以官方表頭寫檔；本地 HEADERS 應儘快對齊。
+    }
+    var rows = [headerRow];
     rowsPayload.forEach(function (payload) {
       rows.push(buildRow(payload));
     });
@@ -294,6 +336,7 @@ var MohwLifeCareMapper = (function () {
     keys: KEYS,
     buildRow: buildRow,
     buildWorkbookRows: buildWorkbookRows,
+    mergeInputs: mergeInputs,
     formatRocDate: formatRocDate,
     formatPhone: formatPhone
   };

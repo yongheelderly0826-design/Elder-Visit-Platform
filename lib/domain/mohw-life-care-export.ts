@@ -155,23 +155,61 @@ export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwL
   return text;
 }
 
-/** ISO / Date / ROC-ish string → `yyy/M/d`（民國年，年／月／日不補零）. */
-export function formatRocDate(input: string | Date) {
+const OFFICIAL_ROC_DATE = /^\d{3}\/\d{2}\/\d{2}$/;
+
+/**
+ * ISO、Date、Excel 序列或民國斜線 → `yyy/MM/dd` 文字。
+ * 年固定 3 碼（048、113），月日 2 碼，對齊範本例子 113/06/15。
+ */
+export function formatRocDate(input: string | Date | number) {
   if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) return "";
     return toRocParts(input.getFullYear(), input.getMonth() + 1, input.getDate());
   }
 
-  const iso = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (typeof input === "number") {
+    return excelSerialToRoc(input) ?? String(input);
+  }
+
+  const text = String(input).trim();
+  if (!text) return "";
+
+  if (/^\d{4,6}(\.\d+)?$/.test(text)) {
+    const fromSerial = excelSerialToRoc(Number(text));
+    if (fromSerial) return fromSerial;
+  }
+
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
     return toRocParts(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   }
 
-  const slash = input.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
+  const slash = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
   if (slash) {
     return toRocParts(Number(slash[1]), Number(slash[2]), Number(slash[3]));
   }
 
-  return input;
+  return text;
+}
+
+/** 能寫進匯出檔的官方民國日期文字；無法轉換則 null。 */
+export function toOfficialRocDateText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && !Number.isFinite(value)) return null;
+  if (value instanceof Date || typeof value === "number" || typeof value === "string") {
+    const formatted = formatRocDate(value);
+    return OFFICIAL_ROC_DATE.test(formatted) ? formatted : null;
+  }
+  const formatted = formatRocDate(String(value));
+  return OFFICIAL_ROC_DATE.test(formatted) ? formatted : null;
+}
+
+function excelSerialToRoc(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial < 10000 || serial > 80000) return null;
+  const utc = Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000;
+  const date = new Date(utc);
+  if (Number.isNaN(date.getTime())) return null;
+  return toRocParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 function toRocParts(year: number, month: number, day: number) {
@@ -183,7 +221,7 @@ function toRocParts(year: number, month: number, day: number) {
   } else {
     rocYear = year; // 已是民國（0115 → 115）
   }
-  return `${rocYear}/${month}/${day}`;
+  return `${String(rocYear).padStart(3, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
 }
 
 /** 還原電話／手機前導 0（Sheets 常吃掉）. */
