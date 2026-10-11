@@ -167,8 +167,10 @@ var ExportModule = (function () {
 
     var rows = MohwLifeCareMapper.buildWorkbookRows(payloads);
 
-    var answerRows = payloads.map(function (payload) {
-      return MohwLifeCareMapper.mergeInputs(payload);
+    var answerRows = rows.slice(1).map(function (row) {
+      var answers = {};
+      MohwLifeCareMapper.keys.forEach(function (key, index) { answers[key] = row[index]; });
+      return answers;
     });
     var registryIds = payloads.map(function (payload) {
       var caseRow = payload.caseRow || {};
@@ -176,7 +178,7 @@ var ExportModule = (function () {
     });
 
     var batch = MohwLifeCareValidator.validateBatch(answerRows, 2, registryIds);
-    var strict = data.strict !== false;
+    var strict = true; // 正式生活關懷表禁止略過驗證產檔。
     if (strict && !batch.ok) {
       var verr = new Error(
         '匯出驗證失敗 ' + batch.failCount + ' 筆：' + batch.errorLines.slice(0, 10).join('；')

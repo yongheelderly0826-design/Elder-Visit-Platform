@@ -4,6 +4,7 @@
  */
 
 var MohwLifeCareValidator = (function () {
+  var FIELD_RULES = [{"type": "日期(民國年 yyy/MM/dd)", "allowed": []}, {"type": "時間(HH:mm)", "allowed": []}, {"type": "時間(HH:mm)", "allowed": []}, {"type": "單選", "allowed": ["已完成", "拒絕訪視", "查無此人", "無法溝通", "住址不詳"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["男", "女", "其他"]}, {"type": "日期(民國年 yyy/MM/dd)", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["有", "無", "有，不願提供"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["配偶", "子女", "孫子女", "兄弟姊妹", "親戚_其他親屬", "鄰居", "朋友", "法定代理人", "里長", "照顧服務員", "護理人員", "其他"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["與戶籍地址相同", "未住戶籍地址", "查無此人"]}, {"type": "單選", "allowed": ["居住地址不詳", "居住地址為"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["電梯大樓", "有電梯公寓", "有電梯透天樓房", "無電梯公寓", "無電梯透天樓房", "平房", "其他"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["與他人同住", "1人獨自居住"]}, {"type": "單選", "allowed": ["同住者有照顧能力", "外籍移工(看護)同住", "同住配偶年滿65歲", "同住者無照顧能力"]}, {"type": "文字", "allowed": []}, {"type": "數字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["不識字", "識字", "小學", "初(國)中", "高中(職)", "專科", "大學", "研究所"]}, {"type": "單選", "allowed": ["有配偶或同居", "喪偶", "離婚或分居", "未婚", "其他"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["存", "無"]}, {"type": "數字", "allowed": []}, {"type": "數字", "allowed": []}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "單選", "allowed": ["很好", "還算好", "普通", "不太好", "很不好"]}, {"type": "數字", "allowed": []}, {"type": "數字", "allowed": []}, {"type": "單選", "allowed": ["無改變", "減輕1-3公斤", "減輕3公斤以上", "增加", "不知道"]}, {"type": "單選", "allowed": ["嚴重食慾不佳", "中度食慾不佳", "無變化"]}, {"type": "多選(以 ; 分隔)", "allowed": ["心臟病", "中風", "高血壓", "糖尿病", "骨與關節疾病", "癌症", "失智症", "以上均無", "其他"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "單選", "allowed": ["從未", "每月少於1次", "每個月1次", "每個月2-3次", "每周1次", "每周2-6次", "每天"]}, {"type": "單選", "allowed": ["從未", "每月少於1次", "每個月1次", "每個月2-3次", "每周1次", "每周2-6次", "每天"]}, {"type": "單選(下拉)", "allowed": ["無", "有"]}, {"type": "多選(以 ; 分隔)", "allowed": ["三餐無法溫飽", "無人可協助就醫", "租屋困難", "最近記憶力不好", "外出交通不方便（例如缺乏公車或客運）", "其他"]}, {"type": "文字", "allowed": []}, {"type": "單選(下拉)", "allowed": ["無", "有"]}, {"type": "多選(以 ; 分隔)", "allowed": ["自己受傷或疾病", "親人受傷或疾病", "親人離世", "被詐騙", "自己經濟問題(如債務)", "子女、孫子女問題（如打擾生活、財務處理等）", "其他"]}, {"type": "文字", "allowed": []}, {"type": "單選(下拉)", "allowed": ["有", "無"]}, {"type": "多選(以 ; 分隔)", "allowed": ["沒發生過", "不想麻煩別人，都是自己想辦法", "找不到人可以協助", "其他"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["家人", "朋友", "鄰居", "社工", "村里長", "社區志工", "大廈管理員", "其他"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["電視", "報紙", "廣播", "網路", "村里長", "親友或鄰里", "社群媒體(如：Line、FB、IG)", "其他", "以上均無"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["工作", "擔任志工", "學習新事物", "四處旅遊", "健身運動", "參與宗教活動", "其他", "以上均無"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["工作", "擔任志工", "學習新事物", "四處旅遊", "健身運動", "參與宗教活動", "其他", "以上均無"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["很安全", "大致安全", "有些不安全", "很不安全"]}, {"type": "單選", "allowed": ["完全沒有", "只有幾天：1至6天", "一半以上天數：7至11天", "幾乎每天：12至14天"]}, {"type": "單選", "allowed": ["完全沒有", "只有幾天：1至6天", "一半以上天數：7至11天", "幾乎每天：12至14天"]}, {"type": "單選", "allowed": ["完全沒有", "只有幾天：1至6天", "一半以上天數：7至11天", "幾乎每天：12至14天"]}, {"type": "單選(下拉)", "allowed": ["無", "有"]}, {"type": "多選(以 ; 分隔)", "allowed": ["參加社區據點", "關懷服務", "送餐服務", "安裝緊急救援裝置", "轉介：長照", "轉介：身障", "轉介：其他服務，長者期待"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["在訪談過程中，長者有提到自殺意念", "無特殊情形"]}, {"type": "單選(下拉)", "allowed": ["可以", "可以，但行動緩慢", "不可以"]}, {"type": "多選(以 ; 分隔)", "allowed": ["需要別人幫助才能移動", "衣物不乾淨", "身上有異味(例如尿騷味)", "使用器具(例如輪椅、拐杖)就可以自行移動", "其他"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["環境物品十分髒亂", "衣著不符季節", "食品雜置、蚊蠅蟑螂紛飛", "通風不良", "其他", "以上均無", "無法觀察"]}, {"type": "文字", "allowed": []}, {"type": "多選(以 ; 分隔)", "allowed": ["電線裸露", "照明設備不足(如夜起時)", "未裝設住宅用火災警報器", "多個電器同時使用一個插座", "熱水器安裝於室內，且不通風", "爐火(例如瓦斯爐、電熱器)周圍堆放可燃物", "出入動線囤積雜物", "其他", "以上均無", "無法觀察"]}, {"type": "文字", "allowed": []}, {"type": "單選", "allowed": ["同意", "不同意"]}, {"type": "單選", "allowed": ["同意", "不同意"]}, {"type": "單選", "allowed": ["是", "否"]}, {"type": "單選", "allowed": ["社會局/處", "社工", "志工", "其他"]}, {"type": "文字(10 字以內)", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "日期(民國年 yyy/MM/dd)", "allowed": []}, {"type": "單選", "allowed": ["公所人員", "村里長", "村里幹事"]}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "文字", "allowed": []}, {"type": "日期(民國年 yyy/MM/dd)", "allowed": []}];
   var SKIP = { '拒絕訪視': 1, '查無此人': 1, '無法溝通': 1, '住址不詳': 1 };
   var ID_KEYS = {
     national_id: 1,
@@ -162,7 +163,7 @@ var MohwLifeCareValidator = (function () {
   }
 
   function isHhMm(value) {
-    var m = String(value).match(/^(\d{1,2}):(\d{2})$/);
+    var m = String(value).match(/^(\d{2}):(\d{2})$/);
     if (!m) return false;
     var h = Number(m[1]);
     var mm = Number(m[2]);
@@ -186,8 +187,12 @@ var MohwLifeCareValidator = (function () {
   }
 
   function isOfficialRoc(value) {
-    var formatted = MohwLifeCareMapper.formatRocDate(value);
-    return /^\d{3}\/\d{2}\/\d{2}$/.test(String(formatted || ''));
+    var text = asString(value);
+    var m = text.match(/^(\d{3})\/(\d{2})\/(\d{2})$/);
+    if (!m || Number(m[1]) < 1) return false;
+    var y = Number(m[1]) + 1911, mo = Number(m[2]), d = Number(m[3]);
+    var date = new Date(Date.UTC(y, mo - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() + 1 === mo && date.getUTCDate() === d;
   }
 
   /**
@@ -274,6 +279,26 @@ var MohwLifeCareValidator = (function () {
       if (!hasValue(answers[k2])) continue;
       if (skipQ && col2 >= 29 && col2 <= 89) continue;
       var text = asString(answers[k2]);
+      var field = FIELD_RULES[j];
+      if (field.allowed.length) {
+        var selected = field.type.indexOf('多選') !== -1 ? text.split(';') : [text];
+        if (selected.some(function (v) { return field.allowed.indexOf(v) === -1; })) {
+          pushErr(errors, k2, row, '選項不符合範本允許值（多選請用半形分號 ;）');
+        }
+      }
+      if (field.type === '數字' && !/^\d+(\.\d+)?$/.test(text)) {
+        pushErr(errors, k2, row, '須填寫數字');
+      }
+      if (['cohabitant_age', 'sons_count', 'daughters_count'].indexOf(k2) !== -1 && !/^\d+$/.test(text)) {
+        pushErr(errors, k2, row, '須填寫非負整數');
+      }
+      if (k2 === 'social_worker_role_other' && text.length > 10) {
+        pushErr(errors, k2, row, '其他身分別說明不可超過 10 字');
+      }
+      if (k2 === 'social_worker_role_other' && asString(answers.social_worker_role) !== '其他') {
+        pushErr(errors, k2, row, '身分非其他時，其他身分別說明應留空');
+      }
+
 
       if (ID_KEYS[k2] && !Validation.validateTaiwanId(text)) {
         var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
@@ -288,16 +313,7 @@ var MohwLifeCareValidator = (function () {
       if ((k2.indexOf('other') !== -1 || k2 === 'visit_notes') && text.length > 200) {
         pushErr(errors, k2, row, '字數不可超過 200 字');
       }
-      if (typeof answers[k2] === 'string' && answers[k2].indexOf(',') !== -1 && answers[k2].indexOf(';') === -1) {
-        // multi-looking fields only
-        if (k2 === 'diseases' || k2.indexOf('difficulties') !== -1 || k2.indexOf('worries') !== -1 ||
-            k2.indexOf('help_sources') !== -1 || k2.indexOf('channels') !== -1 ||
-            k2.indexOf('activities') !== -1 || k2.indexOf('willingness') !== -1 ||
-            k2.indexOf('hygiene') !== -1 || k2.indexOf('safety_issues') !== -1 ||
-            k2.indexOf('self_care_observation') !== -1) {
-          pushErr(errors, k2, row, '多選請用半形分號 ; 分隔，不可使用 ,');
-        }
-      }
+
     }
 
     if (!MohwOfficialTemplate.headersMatch(MohwLifeCareMapper.headers)) {

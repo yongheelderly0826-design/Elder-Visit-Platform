@@ -312,7 +312,7 @@ export function isRocDate(value: string): boolean {
 }
 
 export function isHhMm(value: string): boolean {
-  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  const match = value.match(/^(\d{2}):(\d{2})$/);
   if (!match) return false;
   const h = Number(match[1]);
   const m = Number(match[2]);

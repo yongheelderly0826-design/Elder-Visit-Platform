@@ -22,7 +22,9 @@ expect(
 const mapper = readFileSync("gas/src/utils/MohwLifeCareMapper.gs", "utf8");
 const headerBlock = mapper.match(/var HEADERS = \[([\s\S]*?)\];/);
 const gasHeaders = headerBlock
-  ? [...headerBlock[1].matchAll(/'((?:\\'|[^'])*)'/g)].map((match) => match[1].replace(/\\'/g, "'"))
+  ? [
+      ...headerBlock[1].matchAll(/'((?:\\'|[^'])*)'|\"((?:\\\"|[^\"])*)\"/g),
+    ].map((match) => (match[1] ?? match[2] ?? "").replace(/\\'/g, "'").replace(/\\"/g, '"'))
   : [];
 expect(gasHeaders.length === 103, `GAS headers count ${gasHeaders.length}`);
 expect(
@@ -33,6 +35,7 @@ expect(
 expect(formatRocDate("1948-06-15") === "037/06/15", `iso ${formatRocDate("1948-06-15")}`);
 expect(formatRocDate("48/6/15") === "048/06/15", `roc ${formatRocDate("48/6/15")}`);
 expect(formatRocDate("113/06/15") === "113/06/15", `padded ${formatRocDate("113/06/15")}`);
+expect(formatRocDate("2028-05-10") === "117/05/10", `western future ${formatRocDate("2028-05-10")}`);
 
 const sample = validateMohwLifeCareRow(mohwLifeCareSampleAnswers, {
   row: 2,

@@ -31,12 +31,6 @@ export type MohwLifeCareExportRow = {
   };
 };
 
-const MULTI_VALUE_KEYS = new Set(
-  MOHW_LIFE_CARE_COLUMNS.filter((column) => column.inputType.includes("多選")).map(
-    (column) => column.key,
-  ),
-);
-
 const DATE_KEYS = new Set(["visit_date", "birth_date", "social_worker_date", "civil_worker_date"]);
 
 const TIME_KEYS = new Set(["visit_start_time", "visit_end_time"]);
@@ -144,13 +138,7 @@ export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwL
     return formatMohwPhone(text);
   }
 
-  if (MULTI_VALUE_KEYS.has(column.key) && text.includes(",")) {
-    return text
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join(";");
-  }
+  // 不替換自由文字或選項中的逗號；多選應以陣列或以半形分號寫入。
 
   return text;
 }
@@ -159,12 +147,22 @@ const OFFICIAL_ROC_DATE = /^\d{3}\/\d{2}\/\d{2}$/;
 
 /**
  * ISO、Date、Excel 序列或民國斜線 → `yyy/MM/dd` 文字。
- * 年固定 3 碼（048、113），月日 2 碼，對齊範本例子 113/06/15。
+ * 年固定 3 碼、月日 2 碼；四碼年明確視為西元，不依「今年」猜測改寫。
  */
 export function formatRocDate(input: string | Date | number) {
   if (input instanceof Date) {
-    if (Number.isNaN(input.getTime())) return "";
-    return toRocParts(input.getFullYear(), input.getMonth() + 1, input.getDate());
+    if (Number.isNaN(input.getTime())) return "INVALID_DATE";
+    // 對齊 GAS：以台北時區拆出年月日
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(input);
+    const year = Number(parts.find((p) => p.type === "year")?.value);
+    const month = Number(parts.find((p) => p.type === "month")?.value);
+    const day = Number(parts.find((p) => p.type === "day")?.value);
+    return toRocParts(year, month, day) || "INVALID_DATE";
   }
 
   if (typeof input === "number") {
@@ -181,12 +179,13 @@ export function formatRocDate(input: string | Date | number) {
 
   const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
-    return toRocParts(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    return toRocParts(Number(iso[1]), Number(iso[2]), Number(iso[3])) || text;
   }
 
   const slash = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
   if (slash) {
-    return toRocParts(Number(slash[1]), Number(slash[2]), Number(slash[3]));
+    if (slash[1].length === 4 && Number(slash[1]) < 1912) return text;
+    return toRocParts(Number(slash[1]), Number(slash[2]), Number(slash[3])) || text;
   }
 
   return text;
@@ -206,20 +205,24 @@ export function toOfficialRocDateText(value: unknown): string | null {
 
 function excelSerialToRoc(serial: number): string | null {
   if (!Number.isFinite(serial) || serial < 10000 || serial > 80000) return null;
-  const utc = Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000;
+  const utc = Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000;
   const date = new Date(utc);
   if (Number.isNaN(date.getTime())) return null;
   return toRocParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 function toRocParts(year: number, month: number, day: number) {
-  const currentWestern = new Date().getFullYear();
-  let rocYear: number;
-  if (year >= 1911) {
-    // Excel 常把民國 28/5/10 誤讀成 2028 → 西元年 > 今年時還原為 ROC yy
-    rocYear = year > currentWestern ? year % 100 : year - 1911;
-  } else {
-    rocYear = year; // 已是民國（0115 → 115）
+  const rocYear = year >= 1911 ? year - 1911 : year;
+  const westernYear = rocYear + 1911;
+  const date = new Date(Date.UTC(westernYear, month - 1, day));
+  if (
+    rocYear < 1 ||
+    rocYear > 999 ||
+    date.getUTCFullYear() !== westernYear ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return "";
   }
   return `${String(rocYear).padStart(3, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
 }
