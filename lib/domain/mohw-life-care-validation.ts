@@ -18,7 +18,10 @@ import {
   mohwVillagesFor,
   normalizeMohwAdminName,
 } from "@/lib/domain/mohw-life-care-template";
-import { applyMohwVillageAutoFix } from "@/lib/domain/mohw-village-resolve";
+import {
+  applyMohwVillageAutoFix,
+  isMohwAutofixDistrict,
+} from "@/lib/domain/mohw-village-resolve";
 
 export type MohwValidationError = {
   /** Excel-style cell, e.g. `I3` */
@@ -615,8 +618,23 @@ export function validateMohwLifeCareRow(
     }
   }
 
-  checkVillage(answers, errors, row, "household_city", "household_district", "household_village", "戶籍村里");
-  checkVillage(answers, errors, row, "living_city", "living_district", "living_village", "居住村里");
+  // 永和落地：只檢核永和區村里；其餘戶籍／居住行政區先不擋「查無此里」
+  const householdDistrict = asString(answers.household_district);
+  const livingDistrict = asString(answers.living_district) || householdDistrict;
+  if (isMohwAutofixDistrict(householdDistrict)) {
+    checkVillage(
+      answers,
+      errors,
+      row,
+      "household_city",
+      "household_district",
+      "household_village",
+      "戶籍村里",
+    );
+  }
+  if (isMohwAutofixDistrict(livingDistrict)) {
+    checkVillage(answers, errors, row, "living_city", "living_district", "living_village", "居住村里");
+  }
 
   const helpNone = asList(answers.help_sources_none);
   if (asString(answers.help_sources_none_other) && !helpNone.includes("其他")) {

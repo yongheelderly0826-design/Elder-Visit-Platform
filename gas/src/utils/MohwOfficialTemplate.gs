@@ -606,23 +606,112 @@ var MohwOfficialTemplate = (function () {
     return { village: village || '', corrected: false, source: 'unchanged' };
   }
 
-  function applyVillageAutoFix(answers) {
-    answers = answers || {};
-    var household = resolveVillage(
-      answers.household_city,
-      answers.household_district,
-      answers.household_village,
-      answers.household_address
-    );
-    if (household.corrected) answers.household_village = household.village;
+  function isOfficialVillage_(city, district, village) {
+    var list = villagesFor(city, district);
+    if (!list || !list.length || !village) return false;
+    return !!officialMatch_(list, village);
+  }
 
-    var living = resolveVillage(
-      answers.living_city || answers.household_city,
-      answers.living_district || answers.household_district,
-      answers.living_village,
-      answers.living_address || answers.household_address
-    );
-    if (living.corrected) answers.living_village = living.village;
+  var AUTOFIX_DISTRICT = '永和區';
+
+  function isAutofixDistrict_(district) {
+    return norm(district) === norm(AUTOFIX_DISTRICT);
+  }
+
+  /**
+   * 只自動修正永和區村里；以居住地址為主。
+   * 其他戶籍區先不動。extras.visitAddress = 個案名冊 address。
+   */
+  function applyVillageAutoFix(answers, extras) {
+    answers = answers || {};
+    extras = extras || {};
+    var livingType = String(answers.living_address_type || '').replace(/^\s+|\s+$/g, '');
+    var sameAsHousehold = !livingType || livingType === '與戶籍地址相同';
+    var separateLiving = livingType === '未住戶籍地址';
+
+    var householdCity = answers.household_city || '';
+    var householdDistrict = answers.household_district || '';
+    var livingCity = answers.living_city || answers.household_city || '';
+    var livingDistrict = answers.living_district || answers.household_district || '';
+    var visitAddress = extras.visitAddress || '';
+    var preferAddress = answers.living_address || visitAddress || answers.household_address || '';
+
+    var livingInYonghe = isAutofixDistrict_(livingDistrict);
+    var householdInYonghe = isAutofixDistrict_(householdDistrict);
+    if (!livingInYonghe && !householdInYonghe) return answers;
+
+    if (livingInYonghe) {
+      var livingSeed =
+        answers.living_village || (sameAsHousehold ? answers.household_village : '') || '';
+      var livingResolved = resolveVillage(livingCity, livingDistrict, livingSeed, preferAddress);
+
+      if (separateLiving && livingResolved.corrected) {
+        answers.living_village = livingResolved.village;
+      }
+
+      if (sameAsHousehold && livingResolved.village) {
+        if (
+          householdInYonghe &&
+          (livingResolved.corrected ||
+            !isOfficialVillage_(householdCity, householdDistrict, answers.household_village))
+        ) {
+          answers.household_village = livingResolved.village;
+        }
+        if (
+          answers.living_village &&
+          (livingResolved.corrected ||
+            !isOfficialVillage_(livingCity, livingDistrict, answers.living_village))
+        ) {
+          answers.living_village = livingResolved.village;
+        }
+      }
+
+      if (separateLiving) {
+        var livingAgain = resolveVillage(
+          livingCity,
+          livingDistrict,
+          answers.living_village,
+          preferAddress
+        );
+        if (livingAgain.corrected) answers.living_village = livingAgain.village;
+      }
+
+      if (householdInYonghe) {
+        var livingVillageFinal =
+          (separateLiving ? answers.living_village : livingResolved.village) ||
+          answers.living_village ||
+          livingResolved.village ||
+          '';
+        var livingOk = isOfficialVillage_(livingCity, livingDistrict, livingVillageFinal);
+        var householdOk = isOfficialVillage_(
+          householdCity,
+          householdDistrict,
+          answers.household_village
+        );
+        if (!householdOk && livingOk && livingVillageFinal) {
+          answers.household_village = livingVillageFinal;
+        } else if (!householdOk) {
+          var householdResolved = resolveVillage(
+            householdCity,
+            householdDistrict,
+            answers.household_village,
+            preferAddress
+          );
+          if (householdResolved.corrected) {
+            answers.household_village = householdResolved.village;
+          }
+        }
+      }
+    } else if (householdInYonghe && sameAsHousehold) {
+      var onlyHousehold = resolveVillage(
+        householdCity,
+        householdDistrict,
+        answers.household_village,
+        preferAddress
+      );
+      if (onlyHousehold.corrected) answers.household_village = onlyHousehold.village;
+    }
+
     return answers;
   }
 

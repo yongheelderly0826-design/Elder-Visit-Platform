@@ -304,7 +304,15 @@ var MohwLifeCareValidator = (function () {
       pushErr(errors, 'social_worker_role_other', row, '訪查人欄位順序不符，請重新下載最新版匯入範本');
     }
 
-    if (hasValue(answers.household_village) && villageMissing(answers.household_city, answers.household_district, answers.household_village)) {
+    // 永和落地：只檢核永和區村里；其餘戶籍／居住行政區先不擋
+    var householdDistrict = asString(answers.household_district);
+    var livingDistrict = asString(answers.living_district) || householdDistrict;
+    var yonghe = '永和區';
+    if (
+      MohwOfficialTemplate.norm(householdDistrict) === MohwOfficialTemplate.norm(yonghe) &&
+      hasValue(answers.household_village) &&
+      villageMissing(answers.household_city, answers.household_district, answers.household_village)
+    ) {
       pushErr(
         errors,
         'household_village',
@@ -312,7 +320,11 @@ var MohwLifeCareValidator = (function () {
         '戶籍村里「' + asString(answers.household_village) + '」在「' + asString(answers.household_district) + '」下查無此里'
       );
     }
-    if (hasValue(answers.living_village) && villageMissing(answers.living_city, answers.living_district, answers.living_village)) {
+    if (
+      MohwOfficialTemplate.norm(livingDistrict) === MohwOfficialTemplate.norm(yonghe) &&
+      hasValue(answers.living_village) &&
+      villageMissing(answers.living_city, answers.living_district, answers.living_village)
+    ) {
       pushErr(
         errors,
         'living_village',

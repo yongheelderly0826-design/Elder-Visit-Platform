@@ -49,6 +49,8 @@ export type MohwCaseRegistry = {
   birthDate?: string | Date;
   phone?: string;
   mobile?: string;
+  /** 個案名冊主要／訪視地址（永和實務優先於戶籍地址） */
+  address?: string;
   householdCity?: string;
   householdDistrict?: string;
   householdVillage?: string;
@@ -202,8 +204,9 @@ export function mergeCaseRegistryIntoMohwAnswers(
   if (caseRow.livingDistrict) merged.living_district = caseRow.livingDistrict;
   if (caseRow.livingVillage) merged.living_village = caseRow.livingVillage;
   if (caseRow.livingAddress) merged.living_address = caseRow.livingAddress;
+  if (!merged.household_address && caseRow.address) merged.household_address = caseRow.address;
 
-  return applyMohwVillageAutoFix(merged);
+  return applyMohwVillageAutoFix(merged, { visitAddress: caseRow.address });
 }
 
 function formatConsent(value: boolean | string) {

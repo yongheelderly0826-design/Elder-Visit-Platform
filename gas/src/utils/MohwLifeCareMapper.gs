@@ -178,7 +178,9 @@ var MohwLifeCareMapper = (function () {
     }
 
     if (typeof MohwOfficialTemplate !== 'undefined' && MohwOfficialTemplate.applyVillageAutoFix) {
-      answers = MohwOfficialTemplate.applyVillageAutoFix(answers);
+      answers = MohwOfficialTemplate.applyVillageAutoFix(answers, {
+        visitAddress: caseRow.address || caseRow.visit_address || ''
+      });
     }
 
     return answers;
