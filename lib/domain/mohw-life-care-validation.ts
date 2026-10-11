@@ -18,6 +18,7 @@ import {
   mohwVillagesFor,
   normalizeMohwAdminName,
 } from "@/lib/domain/mohw-life-care-template";
+import { applyMohwVillageAutoFix } from "@/lib/domain/mohw-village-resolve";
 
 export type MohwValidationError = {
   /** Excel-style cell, e.g. `I3` */
@@ -405,7 +406,7 @@ export function validateMohwLifeCareRow(
 ): MohwValidationResult {
   const row = options.row ?? 2;
   const errors: MohwValidationError[] = [];
-  answers = normalizeMohwAnswersOptions(answers);
+  answers = applyMohwVillageAutoFix(normalizeMohwAnswersOptions(answers));
   const visitStatus = asString(answers.visit_status);
   const skipQuestionnaire = SKIP_QUESTIONNAIRE.has(visitStatus);
 

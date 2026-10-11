@@ -43,24 +43,64 @@ const newRuleHits = sample.errorLines.filter((line) =>
 );
 expect(newRuleHits.length === 0, `sample tripped new rules: ${newRuleHits.join(" | ")}`);
 
-const badVillage = validateMohwLifeCareRow(
+const typoVillage = validateMohwLifeCareRow(
   {
     ...mohwLifeCareSampleAnswers,
     household_city: "新北市",
     household_district: "永和區",
     household_village: "新星里",
+    household_address: "永和路一段100號",
     living_city: "新北市",
     living_district: "永和區",
     living_village: "新星里",
+    living_address: "永和路一段100號",
   },
   { row: 2, registryNationalId: "A123456789" },
 );
 expect(
-  badVillage.errorLines.some((line) => line === "T2 戶籍村里「新星里」在「永和區」下查無此里"),
+  !typoVillage.errorLines.some((line) => line.includes("查無此里")),
+  `新星里 should auto-fix to 新生里: ${typoVillage.errorLines.join(" | ")}`,
+);
+
+const fromAddress = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    household_city: "新北市",
+    household_district: "永和區",
+    household_village: "成村里",
+    household_address: "新北市永和區竹林里中正路100號",
+    living_city: "新北市",
+    living_district: "永和區",
+    living_village: "成村里",
+    living_address: "新北市永和區竹林里中正路100號",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !fromAddress.errorLines.some((line) => line.includes("查無此里")),
+  `成村里 should fix from address 竹林里: ${fromAddress.errorLines.join(" | ")}`,
+);
+
+const badVillage = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    household_city: "新北市",
+    household_district: "永和區",
+    household_village: "成村里",
+    household_address: "永和路一段100號",
+    living_city: "新北市",
+    living_district: "永和區",
+    living_village: "成村里",
+    living_address: "永和路一段100號",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  badVillage.errorLines.some((line) => line === "T2 戶籍村里「成村里」在「永和區」下查無此里"),
   `missing T village line: ${badVillage.errorLines.join(" | ")}`,
 );
 expect(
-  badVillage.errorLines.some((line) => line === "Z2 居住村里「新星里」在「永和區」下查無此里"),
+  badVillage.errorLines.some((line) => line === "Z2 居住村里「成村里」在「永和區」下查無此里"),
   `missing Z village line: ${badVillage.errorLines.join(" | ")}`,
 );
 

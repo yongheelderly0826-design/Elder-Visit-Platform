@@ -1,5 +1,6 @@
 import schema from "@/lib/domain/mohw-life-care-schema.json";
 import type { CareFormAnswers } from "@/lib/domain/new-taipei-care-form";
+import { applyMohwVillageAutoFix } from "@/lib/domain/mohw-village-resolve";
 
 export type MohwGapStatus = "has" | "partial" | "missing";
 
@@ -202,7 +203,7 @@ export function mergeCaseRegistryIntoMohwAnswers(
   if (caseRow.livingVillage) merged.living_village = caseRow.livingVillage;
   if (caseRow.livingAddress) merged.living_address = caseRow.livingAddress;
 
-  return merged;
+  return applyMohwVillageAutoFix(merged);
 }
 
 function formatConsent(value: boolean | string) {

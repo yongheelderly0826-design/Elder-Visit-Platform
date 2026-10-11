@@ -513,11 +513,126 @@ var MohwOfficialTemplate = (function () {
     }
     return true;
   }
+
+  // 常見錯字 → 正確里名（僅在該區官方名冊存在時採用）
+  var VILLAGE_ALIASES = {
+    新星: '新生',
+    新星里: '新生里',
+    新庿: '新廍',
+    新庿里: '新廍里',
+    新廟: '新廍',
+    新廟里: '新廍里'
+  };
+
+  function stripLi_(name) {
+    var text = norm(name);
+    return /里$/.test(text) ? text.slice(0, -1) : text;
+  }
+
+  function withLi_(name) {
+    var text = norm(name);
+    if (!text) return '';
+    return /里$/.test(text) ? text : text + '里';
+  }
+
+  function officialMatch_(list, candidate) {
+    var target = withLi_(candidate);
+    if (!target) return '';
+    for (var i = 0; i < list.length; i++) {
+      if (norm(list[i]) === target) return list[i];
+    }
+    return '';
+  }
+
+  function villagesFromAddress_(address) {
+    var text = norm(address);
+    if (!text) return [];
+    var matches = text.match(/[\u4e00-\u9fff]{1,6}里/g) || [];
+    var out = [];
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i] !== '村里' && matches[i].length >= 2) out.push(matches[i]);
+    }
+    return out;
+  }
+
+  /**
+   * 依官方名冊 + 地址內「里」+ 常見別名修正村里。
+   * 無法確信時回傳原 village。
+   */
+  function resolveVillage(city, district, village, address) {
+    var list = villagesFor(city, district);
+    if (!list || !list.length) {
+      return { village: village || '', corrected: false, source: 'unchanged' };
+    }
+    var current = norm(village);
+    var already = officialMatch_(list, current);
+    if (already) {
+      return {
+        village: already,
+        corrected: already !== String(village || ''),
+        source: already !== String(village || '') ? 'official' : 'unchanged'
+      };
+    }
+    var aliasTarget = VILLAGE_ALIASES[current] || VILLAGE_ALIASES[stripLi_(current)];
+    if (aliasTarget) {
+      var fromAlias = officialMatch_(list, aliasTarget);
+      if (fromAlias) {
+        return { village: fromAlias, corrected: true, source: 'alias' };
+      }
+    }
+    var addressText = norm(address);
+    if (addressText) {
+      // 優先：地址是否直接含官方里名（長名優先，避免誤抓）
+      var best = '';
+      for (var j = 0; j < list.length; j++) {
+        var official = norm(list[j]);
+        if (addressText.indexOf(official) !== -1) {
+          if (!best || official.length > best.length) best = list[j];
+        }
+      }
+      if (best) return { village: best, corrected: true, source: 'address' };
+
+      var fromAddr = villagesFromAddress_(addressText);
+      for (var i = 0; i < fromAddr.length; i++) {
+        var hit = officialMatch_(list, fromAddr[i]);
+        if (hit) return { village: hit, corrected: true, source: 'address' };
+        var alias = VILLAGE_ALIASES[fromAddr[i]] || VILLAGE_ALIASES[stripLi_(fromAddr[i])];
+        if (alias) {
+          var mapped = officialMatch_(list, alias);
+          if (mapped) return { village: mapped, corrected: true, source: 'address' };
+        }
+      }
+    }
+    return { village: village || '', corrected: false, source: 'unchanged' };
+  }
+
+  function applyVillageAutoFix(answers) {
+    answers = answers || {};
+    var household = resolveVillage(
+      answers.household_city,
+      answers.household_district,
+      answers.household_village,
+      answers.household_address
+    );
+    if (household.corrected) answers.household_village = household.village;
+
+    var living = resolveVillage(
+      answers.living_city || answers.household_city,
+      answers.living_district || answers.household_district,
+      answers.living_village,
+      answers.living_address || answers.household_address
+    );
+    if (living.corrected) answers.living_village = living.village;
+    return answers;
+  }
+
   return {
     HEADERS: HEADERS,
     TEXT_COLUMNS: TEXT_COLUMNS,
     villagesFor: villagesFor,
     headersMatch: headersMatch,
-    norm: norm
+    norm: norm,
+    resolveVillage: resolveVillage,
+    applyVillageAutoFix: applyVillageAutoFix
   };
 })();

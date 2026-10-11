@@ -163,6 +163,9 @@ var MohwLifeCareMapper = (function () {
     if (caseRow.household_district && !answers.household_district) answers.household_district = caseRow.household_district;
     if (caseRow.household_village && !answers.household_village) answers.household_village = caseRow.household_village;
     if (caseRow.household_address && !answers.household_address) answers.household_address = caseRow.household_address;
+    // 個案名冊常用 address，補到戶籍地址以便依地址修正村里
+    if (!answers.household_address && caseRow.address) answers.household_address = caseRow.address;
+    if (!answers.household_village && caseRow.visit_village) answers.household_village = caseRow.visit_village;
 
     if (visitMeta.visit_date && !answers.visit_date) answers.visit_date = visitMeta.visit_date;
     if (visitMeta.visit_start_time && !answers.visit_start_time) answers.visit_start_time = visitMeta.visit_start_time;
@@ -172,6 +175,10 @@ var MohwLifeCareMapper = (function () {
 
     if (payload.careform && payload.careform.visit_result && !answers.visit_status) {
       answers.visit_status = mapVisitStatus(payload.careform.visit_result);
+    }
+
+    if (typeof MohwOfficialTemplate !== 'undefined' && MohwOfficialTemplate.applyVillageAutoFix) {
+      answers = MohwOfficialTemplate.applyVillageAutoFix(answers);
     }
 
     return answers;
