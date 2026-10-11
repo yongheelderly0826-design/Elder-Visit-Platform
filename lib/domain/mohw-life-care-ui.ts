@@ -257,7 +257,7 @@ export const mohwLifeCareSampleAnswers: MohwLifeCareAnswers = {
   line_id: newTaipeiCareFormSampleAnswers.line_id,
   emergency_contact_name: "陳美玲",
   emergency_contact_relation: "子女",
-  emergency_contact_phone: "0912-222-333",
+  emergency_contact_phone: "0912222333",
   household_city: "新北市",
   household_district: "板橋區",
   household_village: "文化里",

@@ -217,7 +217,7 @@ var MohwLifeCareValidator = (function () {
       var col = i + 1;
       if (header.indexOf('*') === -1) continue;
       if (col >= 93) continue;
-      if (skipQ && col >= 29 && col <= 89) continue;
+      if (skipQ && col >= 29 && col <= 92) continue;
       if (!hasValue(answers[key])) {
         pushErr(errors, key, row, header.replace(/\s*\*+$/, '').replace(/\*$/, '') + '為必填');
       }
@@ -230,7 +230,7 @@ var MohwLifeCareValidator = (function () {
     for (var c = 0; c < CONDITIONAL.length; c++) {
       var rule = CONDITIONAL[c];
       var colIdx = keyIndex(rule.key);
-      if (skipQ && colIdx >= 29 && colIdx <= 89) continue;
+      if (skipQ && colIdx >= 29 && colIdx <= 92) continue;
       var ok = true;
       if (rule.equals) ok = matchEquals(answers, rule.equals);
       if (rule.includes) ok = ok && matchIncludes(answers, rule.includes);
@@ -277,7 +277,7 @@ var MohwLifeCareValidator = (function () {
       var k2 = keys[j];
       var col2 = j + 1;
       if (!hasValue(answers[k2])) continue;
-      if (skipQ && col2 >= 29 && col2 <= 89) continue;
+      if (skipQ && col2 >= 29 && col2 <= 92) continue;
       var text = asString(answers[k2]);
       var field = FIELD_RULES[j];
       if (field.allowed.length) {
@@ -300,9 +300,17 @@ var MohwLifeCareValidator = (function () {
       }
 
 
-      if (ID_KEYS[k2] && !Validation.validateTaiwanId(text)) {
+      if (ID_KEYS[k2] && (!/^[A-Za-z]\d{9}$/.test(text) || !Validation.validateTaiwanId(text))) {
         var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
         pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
+      }
+      // 本平台電話採國內格式；文字或缺少前導 0 不得假裝成有效電話。
+      if (k2 === 'mobile' && !/^09\d{8}$/.test(text)) {
+        pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼數字）');
+      }
+      if (['phone', 'emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
+          !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)) {
+        pushErr(errors, k2, row, '電話格式不正確（請填含前導 0 的國內市話或手機，不含分機）');
       }
       if (DATE_KEYS[k2] && !isOfficialRoc(answers[k2])) {
         pushErr(errors, k2, row, DATE_CELL_MESSAGE);
@@ -354,7 +362,7 @@ var MohwLifeCareValidator = (function () {
     for (var n = 0; n < helpNone.length; n++) {
       if (helpNone[n] === '其他') helpNoneHasOther = true;
     }
-    if (hasValue(answers.help_sources_none_other) && !helpNoneHasOther) {
+    if (!skipQ && hasValue(answers.help_sources_none_other) && !helpNoneHasOther) {
       pushErr(errors, 'help_sources_none_other', row, '未勾選「其他」時，「求助對象無-其他說明」應留空');
     }
 

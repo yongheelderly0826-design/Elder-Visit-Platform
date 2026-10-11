@@ -1,6 +1,5 @@
 import schema from "@/lib/domain/mohw-life-care-schema.json";
 import type { CareFormAnswers } from "@/lib/domain/new-taipei-care-form";
-import { applyMohwVillageAutoFix } from "@/lib/domain/mohw-village-resolve";
 
 export type MohwGapStatus = "has" | "partial" | "missing";
 
@@ -206,7 +205,8 @@ export function mergeCaseRegistryIntoMohwAnswers(
   if (caseRow.livingAddress) merged.living_address = caseRow.livingAddress;
   if (!merged.household_address && caseRow.address) merged.household_address = caseRow.address;
 
-  return applyMohwVillageAutoFix(merged, { visitAddress: caseRow.address });
+  // 匯出不依地址自動改寫村里；錯誤由驗證器指出，再回原始資料確認。
+  return merged;
 }
 
 function formatConsent(value: boolean | string) {

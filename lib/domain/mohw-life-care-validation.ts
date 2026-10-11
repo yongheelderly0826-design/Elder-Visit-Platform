@@ -1,4 +1,4 @@
-import { toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
+import { formatMohwPhone, toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
 import {
   MOHW_LIFE_CARE_COLUMNS,
   MOHW_LIFE_CARE_HEADERS,
@@ -18,10 +18,7 @@ import {
   mohwVillagesFor,
   normalizeMohwAdminName,
 } from "@/lib/domain/mohw-life-care-template";
-import {
-  applyMohwVillageAutoFix,
-  isMohwAutofixDistrict,
-} from "@/lib/domain/mohw-village-resolve";
+import { isMohwAutofixDistrict } from "@/lib/domain/mohw-village-resolve";
 
 export type MohwValidationError = {
   /** Excel-style cell, e.g. `I3` */
@@ -42,6 +39,7 @@ export type MohwValidationError = {
     | "INVALID_NUMBER"
     | "MAX_LENGTH"
     | "PHONE_OR_MOBILE"
+    | "INVALID_PHONE"
     | "VISITOR_REQUIRED"
     | "CASE_NOT_FOUND"
     | "VILLAGE_NOT_FOUND"
@@ -409,15 +407,22 @@ export function validateMohwLifeCareRow(
 ): MohwValidationResult {
   const row = options.row ?? 2;
   const errors: MohwValidationError[] = [];
-  answers = applyMohwVillageAutoFix(normalizeMohwAnswersOptions(answers));
+  // 匯出不自動改寫村里；資料錯誤應回原始來源確認。
+  answers = normalizeMohwAnswersOptions(answers);
+  // 電話格式檢查對齊匯出後字串（只清空白／括號／連字號）。
+  for (const key of ["phone", "mobile", "emergency_contact_phone", "social_worker_phone", "civil_worker_phone"] as const) {
+    if (hasValue(answers[key])) {
+      answers[key] = formatMohwPhone(asString(answers[key]));
+    }
+  }
   const visitStatus = asString(answers.visit_status);
   const skipQuestionnaire = SKIP_QUESTIONNAIRE.has(visitStatus);
 
   // Always-required (non-questionnaire) fields
   const alwaysRequired = MOHW_LIFE_CARE_COLUMNS.filter((column) => {
     if (!column.required) return false;
-    // Questionnaire required fields start from housing_type (col 29)
-    if (skipQuestionnaire && column.col >= 29 && column.col <= 89) return false;
+    // 未完成訪視：住宅類型起至同意／簽名（AC:CN，col 29–92）略過
+    if (skipQuestionnaire && column.col >= 29 && column.col <= 92) return false;
     // Visitor fields handled as either-or below
     if (column.col >= 93) return false;
     return true;
@@ -448,7 +453,7 @@ export function validateMohwLifeCareRow(
   for (const rule of CONDITIONAL_REQUIRED) {
     const column = columnByKey(rule.key);
     if (!column) continue;
-    if (skipQuestionnaire && column.col >= 29 && column.col <= 89) continue;
+    if (skipQuestionnaire && column.col >= 29 && column.col <= 92) continue;
     if (!evalCond(answers, rule.when)) continue;
     if (!hasValue(answers[rule.key])) {
       pushError(errors, {
@@ -525,17 +530,42 @@ export function validateMohwLifeCareRow(
   for (const column of MOHW_LIFE_CARE_COLUMNS) {
     const raw = answers[column.key];
     if (!hasValue(raw)) continue;
-    if (skipQuestionnaire && column.col >= 29 && column.col <= 89) continue;
+    if (skipQuestionnaire && column.col >= 29 && column.col <= 92) continue;
 
     const text = asString(raw);
 
-    if (NATIONAL_ID_KEYS.has(column.key) && !validateTaiwanId(text)) {
+    // 對實際輸出檢查：先要求 1 英文＋9 數字，再做檢查碼（不先剝連字號）。
+    if (NATIONAL_ID_KEYS.has(column.key) && (!/^[A-Za-z]\d{9}$/.test(text) || !validateTaiwanId(text))) {
       const label = column.header.replace(/\s*\*+$/, "").replace(/\*$/, "");
       pushError(errors, {
         key: column.key,
         row,
         code: "INVALID_NATIONAL_ID",
-        message: `${label}格式不正確（須 1 碼英文 + 9 碼數字，檢查碼須正確；勿填案號或姓名）`,
+        message: `${label}格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）`,
+      });
+    }
+
+    if (column.key === "mobile" && !/^09\d{8}$/.test(text)) {
+      pushError(errors, {
+        key: column.key,
+        row,
+        code: "INVALID_PHONE",
+        message: "手機格式不正確（請填 09 開頭的 10 碼數字）",
+      });
+    }
+
+    if (
+      (column.key === "phone" ||
+        column.key === "emergency_contact_phone" ||
+        column.key === "social_worker_phone" ||
+        column.key === "civil_worker_phone") &&
+      !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)
+    ) {
+      pushError(errors, {
+        key: column.key,
+        row,
+        code: "INVALID_PHONE",
+        message: "電話格式不正確（請填含前導 0 的國內市話或手機，不含分機）",
       });
     }
 
@@ -775,6 +805,8 @@ export function visitorFacingMohwError(error: MohwValidationError): string {
       return error.message.startsWith("字數") ? error.message : "字數太多，請縮短";
     case "PHONE_OR_MOBILE":
       return "電話或手機請至少填一項";
+    case "INVALID_PHONE":
+      return error.message;
     case "VISITOR_REQUIRED":
       return "社政訪查人或民政訪查人請擇一填寫";
     default:

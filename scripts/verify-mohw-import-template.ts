@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { formatRocDate } from "../lib/domain/mohw-life-care-export";
+import { formatMohwPhone, formatRocDate } from "../lib/domain/mohw-life-care-export";
 import { MOHW_LIFE_CARE_HEADERS } from "../lib/domain/mohw-life-care-form";
 import { mohwLifeCareSampleAnswers } from "../lib/domain/mohw-life-care-ui";
 import {
@@ -36,13 +36,23 @@ expect(formatRocDate("1948-06-15") === "037/06/15", `iso ${formatRocDate("1948-0
 expect(formatRocDate("48/6/15") === "048/06/15", `roc ${formatRocDate("48/6/15")}`);
 expect(formatRocDate("113/06/15") === "113/06/15", `padded ${formatRocDate("113/06/15")}`);
 expect(formatRocDate("2028-05-10") === "117/05/10", `western future ${formatRocDate("2028-05-10")}`);
+expect(
+  formatRocDate("1959-06-15ERROR") === "1959-06-15ERROR",
+  `iso suffix must not convert: ${formatRocDate("1959-06-15ERROR")}`,
+);
+expect(
+  formatRocDate("1959-06-14T16:00:00Z") === "048/06/15",
+  `iso stamp TZ: ${formatRocDate("1959-06-14T16:00:00Z")}`,
+);
+expect(formatMohwPhone("02-2921-1234") === "0229211234", `phone clean ${formatMohwPhone("02-2921-1234")}`);
+expect(formatMohwPhone("0912abc3456") === "0912abc3456", `phone keep letters ${formatMohwPhone("0912abc3456")}`);
 
 const sample = validateMohwLifeCareRow(mohwLifeCareSampleAnswers, {
   row: 2,
   registryNationalId: "A123456789",
 });
 const newRuleHits = sample.errorLines.filter((line) =>
-  /查無此里|應留空|無個案資料|日期格式錯誤|訪查人欄位順序不符/.test(line),
+  /查無此里|應留空|無個案資料|日期格式錯誤|訪查人欄位順序不符|電話格式|手機格式/.test(line),
 );
 expect(newRuleHits.length === 0, `sample tripped new rules: ${newRuleHits.join(" | ")}`);
 
@@ -61,28 +71,48 @@ const typoVillage = validateMohwLifeCareRow(
   { row: 2, registryNationalId: "A123456789" },
 );
 expect(
-  !typoVillage.errorLines.some((line) => line.includes("查無此里")),
-  `新星里 should auto-fix to 新生里: ${typoVillage.errorLines.join(" | ")}`,
+  typoVillage.errorLines.some((line) => line.includes("查無此里")),
+  `新星里 must not auto-fix; expect village error: ${typoVillage.errorLines.join(" | ")}`,
 );
 
-const fromAddress = validateMohwLifeCareRow(
+const hyphenId = validateMohwLifeCareRow(
   {
     ...mohwLifeCareSampleAnswers,
-    household_city: "新北市",
-    household_district: "永和區",
-    household_village: "成村里",
-    household_address: "戶籍路1號",
-    living_address_type: "未住戶籍地址",
-    living_city: "新北市",
-    living_district: "永和區",
-    living_village: "成村里",
-    living_address: "新北市永和區竹林里中正路100號",
+    national_id: "A-123456789",
   },
   { row: 2, registryNationalId: "A123456789" },
 );
 expect(
-  !fromAddress.errorLines.some((line) => line.includes("查無此里")),
-  `應以居住地址竹林里修正，不應卡戶籍: ${fromAddress.errorLines.join(" | ")}`,
+  hyphenId.errorLines.some((line) => line.includes("身分證") && line.includes("格式不正確")),
+  `hyphen ID must fail: ${hyphenId.errorLines.join(" | ")}`,
+);
+
+const badPhone = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    phone: "",
+    mobile: "0911",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  badPhone.errorLines.some((line) => line.includes("手機格式不正確")),
+  `short mobile must fail: ${badPhone.errorLines.join(" | ")}`,
+);
+
+const refused = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    visit_status: "拒絕訪視",
+    consent_agreement: "",
+    consent_signature: "",
+    housing_type: "",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !refused.errorLines.some((line) => /同意|簽名|住宅類型/.test(line) && line.includes("必填")),
+  `拒訪 should skip AC:CN required: ${refused.errorLines.join(" | ")}`,
 );
 
 const badVillage = validateMohwLifeCareRow(

@@ -77,10 +77,18 @@ export function buildMohwLifeCareAnswers(input: MohwLifeCareExportInput): MohwLi
   return answers;
 }
 
+const SKIP_QUESTIONNAIRE = new Set(["拒絕訪視", "查無此人", "無法溝通", "住址不詳"]);
+
 export function buildMohwLifeCareExportRow(input: MohwLifeCareExportInput): MohwLifeCareExportRow {
   const answers = buildMohwLifeCareAnswers(input);
   const headers = MOHW_LIFE_CARE_HEADERS;
-  const values = MOHW_LIFE_CARE_COLUMNS.map((column) => formatMohwCell(answers[column.key], column));
+  const visitStatus = String(answers.visit_status ?? "").trim();
+  const skipQuestionnaire = SKIP_QUESTIONNAIRE.has(visitStatus);
+  // AC:CN（col 29–92）問卷與同意欄不帶入；CO:CY 訪查人仍保留。
+  const values = MOHW_LIFE_CARE_COLUMNS.map((column) => {
+    if (skipQuestionnaire && column.col >= 29 && column.col <= 92) return "";
+    return formatMohwCell(answers[column.key], column);
+  });
   const keyed = Object.fromEntries(
     MOHW_LIFE_CARE_COLUMNS.map((column, index) => [column.key, values[index]]),
   );
@@ -177,9 +185,20 @@ export function formatRocDate(input: string | Date | number) {
     if (fromSerial) return fromSerial;
   }
 
-  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (iso) {
     return toRocParts(Number(iso[1]), Number(iso[2]), Number(iso[3])) || text;
+  }
+
+  // 明確附時區的 ISO timestamp 依臺灣時間取日期；不接受含糊尾綴。
+  const stamp = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,3})?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/,
+  );
+  if (stamp) {
+    const validDate = toRocParts(Number(stamp[1]), Number(stamp[2]), Number(stamp[3]));
+    const dateTime = new Date(text);
+    if (!validDate || Number.isNaN(dateTime.getTime())) return text;
+    return formatRocDate(dateTime);
   }
 
   const slash = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
@@ -227,16 +246,11 @@ function toRocParts(year: number, month: number, day: number) {
   return `${String(rocYear).padStart(3, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
 }
 
-/** 還原電話／手機前導 0（Sheets 常吃掉）. */
+/** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
 export function formatMohwPhone(input: string) {
-  const text = input.trim();
-  if (!text) return "";
-  const digits = text.replace(/\D/g, "");
-  if (!digits) return text;
-  if (/^09\d{8}$/.test(digits) || /^0[2-8]\d{7,9}$/.test(digits)) return digits;
-  if (/^9\d{8}$/.test(digits)) return `0${digits}`;
-  if (/^[2-8]\d{7,9}$/.test(digits)) return `0${digits}`;
-  return text;
+  const text = String(input ?? "").trim();
+  if (!text || !/^[0-9 ()-]+$/.test(text)) return text;
+  return text.replace(/[ ()-]/g, "");
 }
 
 /** `HH:mm` 24h; Excel serial fractions also supported. */

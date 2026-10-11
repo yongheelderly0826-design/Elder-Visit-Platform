@@ -206,7 +206,7 @@ var MohwLifeCareMapper = (function () {
   }
 
   function mergeInputs(payload) {
-    var answers = payload.mohwAnswers || {};
+    var answers = Object.assign({}, payload.mohwAnswers || {});
     var care = parseAnswersJson(payload.careform && payload.careform.answers_json);
     var caseRow = payload.caseRow || {};
     var visitMeta = payload.visitMeta || {};
@@ -251,11 +251,7 @@ var MohwLifeCareMapper = (function () {
       answers.visit_status = mapVisitStatus(payload.careform.visit_result);
     }
 
-    if (typeof MohwOfficialTemplate !== 'undefined' && MohwOfficialTemplate.applyVillageAutoFix) {
-      answers = MohwOfficialTemplate.applyVillageAutoFix(answers, {
-        visitAddress: caseRow.address || caseRow.visit_address || ''
-      });
-    }
+    // 匯出不依居住地址改寫戶籍村里。資料錯誤由驗證器指出，再回原始資料確認。
 
     return answers;
   }
@@ -308,9 +304,18 @@ var MohwLifeCareMapper = (function () {
       if (fromSerial) return fromSerial;
     }
 
-    var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    var iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (iso) {
       return toRocParts_(Number(iso[1]), Number(iso[2]), Number(iso[3])) || text;
+    }
+
+    // 明確附時區的 ISO timestamp 依臺灣時間取日期；不接受含糊尾綴。
+    var stamp = text.match(/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,3})?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/);
+    if (stamp) {
+      var validDate = toRocParts_(Number(stamp[1]), Number(stamp[2]), Number(stamp[3]));
+      var dateTime = new Date(text);
+      if (!validDate || isNaN(dateTime.getTime())) return text;
+      return formatRocDate(dateTime);
     }
 
     var slash = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
@@ -345,22 +350,11 @@ var MohwLifeCareMapper = (function () {
     return pad_(rocYear, 3) + '/' + pad_(month, 2) + '/' + pad_(day, 2);
   }
 
-  /** 還原前導 0：手機 09xxxxxxxx、市話 0xxxxxxxx */
+  /** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
   function formatPhone(input) {
-    var text = String(input).trim();
-    if (!text) return '';
-    var digits = text.replace(/\D/g, '');
-    if (!digits) return text;
-    if (/^09\d{8}$/.test(digits) || /^0[2-8]\d{7,9}$/.test(digits)) {
-      return digits;
-    }
-    if (/^9\d{8}$/.test(digits)) {
-      return '0' + digits;
-    }
-    if (/^[2-8]\d{7,9}$/.test(digits)) {
-      return '0' + digits;
-    }
-    return text;
+    var text = String(input == null ? '' : input).trim();
+    if (!text || !/^[0-9 ()-]+$/.test(text)) return text;
+    return text.replace(/[ ()-]/g, '');
   }
 
   function formatTime(input) {
@@ -378,7 +372,10 @@ var MohwLifeCareMapper = (function () {
 
   function buildRow(payload) {
     var answers = mergeInputs(payload);
-    return KEYS.map(function (key) {
+    var skipQuestionnaire = ['拒絕訪視', '查無此人', '無法溝通', '住址不詳'].indexOf(String(answers.visit_status || '').trim()) !== -1;
+    return KEYS.map(function (key, index) {
+      // AC:CN 問卷與同意欄不帶入歷史答案；CO:CY 訪查人仍保留。
+      if (skipQuestionnaire && index >= 28 && index <= 91) return '';
       return formatCell(answers[key], key);
     });
   }
@@ -395,6 +392,10 @@ var MohwLifeCareMapper = (function () {
       !MohwOfficialTemplate.headersMatch(HEADERS)
     ) {
       // 仍繼續匯出，但以官方表頭寫檔；本地 HEADERS 應儘快對齊。
+    }
+    if (headerRow.length !== 103 || KEYS.length !== 103 || HEADERS.length !== 103 ||
+        headerRow.some(function (header, index) { return header !== HEADERS[index]; })) {
+      throw new Error('生活關懷表欄位或表頭不一致，請同步更新範本與 Mapper');
     }
     var rows = [headerRow];
     rowsPayload.forEach(function (payload) {
