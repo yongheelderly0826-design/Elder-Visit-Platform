@@ -94,7 +94,9 @@ export function buildMohwLifeCareExportRow(input: MohwLifeCareExportInput): Mohw
   );
 
   const requiredMissing = MOHW_LIFE_CARE_COLUMNS.filter(
-    (column) => column.required && !values[column.col - 1]?.trim(),
+    (column) => column.required &&
+      !(skipQuestionnaire && column.col >= 29 && column.col <= 92) &&
+      !values[column.col - 1]?.trim(),
   ).length;
   const filled = values.filter((value) => value.trim().length > 0).length;
 
@@ -118,36 +120,28 @@ export function buildMohwLifeCareWorkbookRows(inputs: MohwLifeCareExportInput[])
 
 export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwLifeCareColumn) {
   if (value === null || value === undefined) return "";
-
-  if (Array.isArray(value)) {
-    return value.map(String).filter(Boolean).join(";");
+  // 必須先看欄位語意，再處理數字，否則 Excel 日期序列會原樣流出。
+  const raw: unknown = value;
+  if (DATE_KEYS.has(column.key) && (typeof raw === "string" || typeof raw === "number" || raw instanceof Date)) {
+    return formatRocDate(raw);
   }
-
-  if (typeof value === "boolean") {
-    return value ? "是" : "否";
-  }
-
-  if (typeof value === "number") {
-    return String(value);
-  }
-
-  const text = String(value).trim();
-  if (!text) return "";
-
-  if (DATE_KEYS.has(column.key)) {
-    return formatRocDate(text);
-  }
-
   if (TIME_KEYS.has(column.key)) {
-    return formatTime(text);
+    if (raw instanceof Date) {
+      if (Number.isNaN(raw.getTime())) return "INVALID_TIME";
+      const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(raw);
+      return `${parts.find(p => p.type === "hour")?.value}:${parts.find(p => p.type === "minute")?.value}`;
+    }
+    return formatTime(String(value).trim());
   }
-
-  if (PHONE_KEYS.has(column.key)) {
-    return formatMohwPhone(text);
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).join(";");
+  if (typeof value === "boolean") {
+    const allowed = (column.allowedValues ?? "").split(";");
+    if (allowed.includes("同意") && allowed.includes("不同意")) return value ? "同意" : "不同意";
+    if (allowed.includes("是") && allowed.includes("否")) return value ? "是" : "否";
+    return String(value); // 不猜測非布林選項的意義。
   }
-
-  // 不替換自由文字或選項中的逗號；多選應以陣列或以半形分號寫入。
-
+  const text = String(value).trim();
+  if (PHONE_KEYS.has(column.key)) return formatMohwPhone(text);
   return text;
 }
 
@@ -213,13 +207,14 @@ export function formatRocDate(input: string | Date | number) {
 /** 能寫進匯出檔的官方民國日期文字；無法轉換則 null。 */
 export function toOfficialRocDateText(value: unknown): string | null {
   if (value === null || value === undefined) return null;
+  if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) return null;
   if (typeof value === "number" && !Number.isFinite(value)) return null;
-  if (value instanceof Date || typeof value === "number" || typeof value === "string") {
-    const formatted = formatRocDate(value);
-    return OFFICIAL_ROC_DATE.test(formatted) ? formatted : null;
-  }
-  const formatted = formatRocDate(String(value));
-  return OFFICIAL_ROC_DATE.test(formatted) ? formatted : null;
+  const formatted = formatRocDate(value);
+  if (!OFFICIAL_ROC_DATE.test(formatted)) return null;
+  const [rocYear, month, day] = formatted.split("/").map(Number);
+  if (rocYear < 1 || rocYear > 999) return null;
+  const date = new Date(Date.UTC(rocYear + 1911, month - 1, day));
+  return date.getUTCFullYear() === rocYear + 1911 && date.getUTCMonth() + 1 === month && date.getUTCDate() === day ? formatted : null;
 }
 
 function excelSerialToRoc(serial: number): string | null {
@@ -255,18 +250,16 @@ export function formatMohwPhone(input: string) {
 
 /** `HH:mm` 24h; Excel serial fractions also supported. */
 export function formatTime(input: string) {
-  const numeric = Number(input);
-  if (!Number.isNaN(numeric) && numeric > 0 && numeric < 1) {
-    const totalMinutes = Math.round(numeric * 24 * 60);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  const text = String(input).trim();
+  const numeric = Number(text);
+  if (/^0(?:\.\d+)?$/.test(text) && numeric >= 0 && numeric < 1) {
+    // 依分鐘截取，避免 23:59:59 四捨五入成不合法的 24:00。
+    const totalMinutes = Math.min(1439, Math.floor(numeric * 1440 + 1e-8));
+    return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
   }
-
-  const match = input.match(/^(\d{1,2}):(\d{2})$/);
-  if (match) {
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (match && Number(match[1]) <= 23 && Number(match[2]) <= 59) {
     return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
   }
-
-  return input;
+  return text;
 }

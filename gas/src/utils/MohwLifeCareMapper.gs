@@ -251,6 +251,7 @@ var MohwLifeCareMapper = (function () {
       answers.visit_status = mapVisitStatus(payload.careform.visit_result);
     }
 
+    if (answers.visit_status) answers.visit_status = mapVisitStatus(String(answers.visit_status).trim());
     // 匯出不依居住地址改寫戶籍村里。資料錯誤由驗證器指出，再回原始資料確認。
 
     return answers;
@@ -272,6 +273,10 @@ var MohwLifeCareMapper = (function () {
 
   function formatCell(value, key) {
     if (value === null || value === undefined) return '';
+    if (typeof value === 'boolean') {
+      if (key === 'consent_personal_data' || key === 'consent_health_db') return value ? '同意' : '不同意';
+      if (['children_same_city', 'recent_medical_event', 'hearing_issue', 'hearing_aid', 'vision_issue', 'consent_signature'].indexOf(key) !== -1) return value ? '是' : '否';
+    }
     if (DATE_KEYS[key]) return formatRocDate(value);
     if (key === 'visit_start_time' || key === 'visit_end_time') return formatTime(value);
     if (Array.isArray(value)) {
@@ -363,6 +368,11 @@ var MohwLifeCareMapper = (function () {
         Utilities.formatDate(input, 'Asia/Taipei', 'HH:mm');
     }
     var text = String(input == null ? '' : input).trim();
+    var numeric = Number(text);
+    if (/^0(?:\.\d+)?$/.test(text) && numeric >= 0 && numeric < 1) {
+      var minutes = Math.min(1439, Math.floor(numeric * 1440 + 1e-8));
+      return pad_(Math.floor(minutes / 60), 2) + ':' + pad_(minutes % 60, 2);
+    }
     var match = text.match(/^(\d{1,2}):(\d{2})$/);
     if (match && Number(match[1]) <= 23 && Number(match[2]) <= 59) {
       return pad_(Number(match[1]), 2) + ':' + match[2];

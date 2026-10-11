@@ -1,12 +1,10 @@
-import { formatMohwPhone, toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
+import { buildMohwLifeCareExportRow, formatMohwPhone, toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
 import {
   MOHW_LIFE_CARE_COLUMNS,
   MOHW_LIFE_CARE_HEADERS,
   type MohwLifeCareAnswers,
 } from "@/lib/domain/mohw-life-care-form";
 import {
-  normalizeMohwAnswersOptions,
-  normalizeMohwOptionValue,
   parseOfficialAllowedValues,
 } from "@/lib/domain/mohw-life-care-options";
 import {
@@ -300,13 +298,7 @@ export function validateTaiwanId(id: string): boolean {
 }
 
 export function isRocDate(value: string): boolean {
-  // Accept ROC yyy/M/d or padded; also ISO yyyy-MM-dd (will be converted on export)
-  if (/^\d{1,3}\/\d{1,2}\/\d{1,2}$/.test(value)) {
-    const [y, m, d] = value.split("/").map(Number);
-    return y >= 1 && y <= 200 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return true;
-  return false;
+  return toOfficialRocDateText(value) !== null;
 }
 
 export function isHhMm(value: string): boolean {
@@ -408,7 +400,7 @@ export function validateMohwLifeCareRow(
   const row = options.row ?? 2;
   const errors: MohwValidationError[] = [];
   // 匯出不自動改寫村里；資料錯誤應回原始來源確認。
-  answers = normalizeMohwAnswersOptions(answers);
+  answers = buildMohwLifeCareExportRow({ mohwAnswers: answers }).keyed;
   // 電話格式檢查對齊匯出後字串（只清空白／括號／連字號）。
   for (const key of ["phone", "mobile", "emergency_contact_phone", "social_worker_phone", "civil_worker_phone"] as const) {
     if (hasValue(answers[key])) {
@@ -554,9 +546,17 @@ export function validateMohwLifeCareRow(
       });
     }
 
+    if (column.key === "phone" && !/^0[2-8]\d{7,8}$/.test(text)) {
+      pushError(errors, {
+        key: column.key,
+        row,
+        code: "INVALID_PHONE",
+        message: "市話須為 02～08 開頭，共 9～10 碼；09 開頭請填手機欄",
+      });
+    }
+
     if (
-      (column.key === "phone" ||
-        column.key === "emergency_contact_phone" ||
+      (column.key === "emergency_contact_phone" ||
         column.key === "social_worker_phone" ||
         column.key === "civil_worker_phone") &&
       !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)
@@ -587,7 +587,7 @@ export function validateMohwLifeCareRow(
       });
     }
 
-    if (column.inputType === "數字" && Number.isNaN(Number(text))) {
+    if (column.inputType === "數字" && !/^\d+(\.\d+)?$/.test(text)) {
       pushError(errors, {
         key: column.key,
         row,
@@ -596,42 +596,21 @@ export function validateMohwLifeCareRow(
       });
     }
 
+    if (["cohabitant_age", "sons_count", "daughters_count"].includes(column.key) && !/^\d+$/.test(text)) {
+      pushError(errors, { key: column.key, row, code: "INVALID_NUMBER", message: "須填寫非負整數" });
+    }
+    if (column.key === "social_worker_role_other" && text.length > 10) {
+      pushError(errors, { key: column.key, row, code: "MAX_LENGTH", message: "其他身分別說明不可超過 10 字" });
+    }
+    if (column.key === "social_worker_role_other" && asString(answers.social_worker_role) !== "其他") {
+      pushError(errors, { key: column.key, row, code: "MUST_BE_BLANK", message: "身分非其他時，其他身分別說明應留空" });
+    }
     if (column.allowedValues) {
       const allowed = parseOfficialAllowedValues(column.allowedValues);
-
-      if (allowed.length > 0) {
-        if (column.inputType.includes("多選")) {
-          const values = asList(raw).map((value) =>
-            normalizeMohwOptionValue(column.key, value),
-          );
-          const invalid = values.filter((value) => !allowed.includes(value));
-          // Also reject comma separators (MOHW requires ;)
-          if (typeof raw === "string" && raw.includes(",") && !raw.includes(";")) {
-            pushError(errors, {
-              key: column.key,
-              row,
-              code: "INVALID_MULTI",
-              message: "多選請用半形分號 ; 分隔，不可使用 ,",
-            });
-          } else if (invalid.length > 0) {
-            pushError(errors, {
-              key: column.key,
-              row,
-              code: "INVALID_OPTION",
-              message: `含有不允許的選項：${invalid.join("、")}`,
-            });
-          }
-        } else if (column.inputType.includes("單選")) {
-          const normalized = normalizeMohwOptionValue(column.key, text);
-          if (!allowed.includes(normalized)) {
-            pushError(errors, {
-              key: column.key,
-              row,
-              code: "INVALID_OPTION",
-              message: `選項不在允許值內（官方：${allowed.join("、")}）`,
-            });
-          }
-        }
+      const selected = column.inputType.includes("多選") ? text.split(";") : [text];
+      const invalid = selected.filter(value => !allowed.includes(value));
+      if (allowed.length && invalid.length) {
+        pushError(errors, { key: column.key, row, code: "INVALID_OPTION", message: `選項不符合範本允許值（多選請用半形分號 ;）：${invalid.join("、")}` });
       }
     }
 
@@ -667,7 +646,7 @@ export function validateMohwLifeCareRow(
   }
 
   const helpNone = asList(answers.help_sources_none);
-  if (asString(answers.help_sources_none_other) && !helpNone.includes("其他")) {
+  if (!skipQuestionnaire && asString(answers.help_sources_none_other) && !helpNone.includes("其他")) {
     pushError(errors, {
       key: "help_sources_none_other",
       row,

@@ -308,7 +308,10 @@ var MohwLifeCareValidator = (function () {
       if (k2 === 'mobile' && !/^09\d{8}$/.test(text)) {
         pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼數字）');
       }
-      if (['phone', 'emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
+      if (k2 === 'phone' && !/^0[2-8]\d{7,8}$/.test(text)) {
+        pushErr(errors, k2, row, '市話須為 02～08 開頭，共 9～10 碼；09 開頭請填手機欄');
+      }
+      if (['emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
           !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)) {
         pushErr(errors, k2, row, '電話格式不正確（請填含前導 0 的國內市話或手機，不含分機）');
       }

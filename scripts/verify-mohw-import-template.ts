@@ -52,9 +52,22 @@ const sample = validateMohwLifeCareRow(mohwLifeCareSampleAnswers, {
   registryNationalId: "A123456789",
 });
 const newRuleHits = sample.errorLines.filter((line) =>
-  /查無此里|應留空|無個案資料|日期格式錯誤|訪查人欄位順序不符|電話格式|手機格式/.test(line),
+  /查無此里|應留空|無個案資料|日期格式錯誤|訪查人欄位順序不符|電話格式|手機格式|市話須為/.test(line),
 );
 expect(newRuleHits.length === 0, `sample tripped new rules: ${newRuleHits.join(" | ")}`);
+
+const mobileInLandline = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    phone: "0983524441",
+    mobile: "",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  mobileInLandline.errorLines.some((line) => line.includes("市話須為") && line.includes("09 開頭請填手機欄")),
+  `09 in J must fail: ${mobileInLandline.errorLines.join(" | ")}`,
+);
 
 const typoVillage = validateMohwLifeCareRow(
   {
