@@ -210,7 +210,7 @@ export function GasBadgePrintSheet({
           沒有可列印的已核准訪員。請確認 GAS 名冊後再試。
         </div>
       ) : (
-        <div className="mx-auto flex max-w-5xl flex-col gap-6 print:max-w-none print:gap-0">
+        <div className="a4-sheet-stack mx-auto flex max-w-5xl flex-col gap-6 print:max-w-none print:gap-0">
           {portraitsLoading && (
             <div className="print:hidden flex items-center justify-center gap-2 rounded-lg border bg-white p-3 text-sm text-slate-600">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -277,18 +277,27 @@ function buildPages(visitors: GasBadgePrintVisitor[], mode: GasBadgePrintMode): 
 }
 
 const printStyles = `
+  /* 紙張邊界只設一次；內容寬度不可再寫死 210mm，否則會右溢出 */
   @page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 10mm;
   }
 
+  .a4-sheet-stack {
+    width: 100%;
+  }
+
+  /* 螢幕預覽：模擬 A4 可印區域（210-20=190mm × 297-20=277mm） */
   .a4-page {
-    width: 210mm;
-    min-height: 297mm;
     box-sizing: border-box;
-    padding: 8mm;
+    width: min(100%, 190mm);
+    min-height: 277mm;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0;
     page-break-after: always;
     break-after: page;
+    overflow: hidden;
   }
 
   .a4-page:last-child {
@@ -300,10 +309,12 @@ const printStyles = `
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    gap: 5mm;
-    height: calc(297mm - 16mm);
-    width: 100%;
+    gap: 4mm;
     box-sizing: border-box;
+    width: 100%;
+    height: 277mm;
+    margin: 0;
+    padding: 0;
   }
 
   .a4-cell {
@@ -311,9 +322,11 @@ const printStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 0;
     min-height: 0;
+    overflow: hidden;
     border: 0.3pt dashed #cbd5e1;
-    padding: 1.5mm;
+    padding: 1mm;
     box-sizing: border-box;
   }
 
@@ -323,15 +336,19 @@ const printStyles = `
   }
 
   .a4-cell .gas-sleeve-badge {
-    width: 100%;
+    box-sizing: border-box;
+    width: auto;
+    height: auto;
+    max-width: 100%;
     max-height: 100%;
+    margin: 0 auto;
   }
 
   .cut-caption {
     position: absolute;
-    left: 2mm;
-    bottom: 1mm;
-    font-size: 8px;
+    left: 1.5mm;
+    bottom: 0.8mm;
+    font-size: 7px;
     color: #94a3b8;
     max-width: 90%;
     overflow: hidden;
@@ -340,25 +357,59 @@ const printStyles = `
   }
 
   .page-footer {
-    margin-top: 4mm;
+    margin-top: 3mm;
     text-align: center;
     font-size: 12px;
     color: #64748b;
   }
 
   @media print {
-    .print-toolbar { display: none !important; }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background: #fff !important;
+    }
+
+    .gas-print-root {
+      margin: 0 !important;
+      padding: 0 !important;
+      max-width: none !important;
+      width: 100% !important;
+      background: #fff !important;
+    }
+
+    .print-toolbar,
+    .page-footer,
+    .cut-caption {
+      display: none !important;
+    }
+
+    .a4-sheet-stack {
+      max-width: none !important;
+      width: 100% !important;
+      margin: 0 !important;
+      gap: 0 !important;
+    }
+
     .a4-page {
-      width: auto;
-      min-height: auto;
-      padding: 0;
-      margin: 0;
-      box-shadow: none;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 0 !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      overflow: hidden !important;
     }
+
     .a4-grid {
-      height: auto;
-      min-height: 270mm;
+      width: 100% !important;
+      height: 277mm !important;
+      max-width: 100% !important;
+      gap: 4mm !important;
     }
+
     .a4-cell {
       border-color: #94a3b8;
     }
