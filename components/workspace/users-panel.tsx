@@ -56,6 +56,8 @@ type UserManagementTab = "overview" | "pending" | "approved" | "supplement" | "r
 export function UsersPanel() {
   const canReviewUsers = useCan("users.review");
   const [payload, setPayload] = useState<UsersPayload | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [result, setResult] = useState<UserRegistrationDecisionResult | null>(null);
   const [visitorProfiles, setVisitorProfiles] = useState<VisitorProfile[]>(defaultVisitors);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -102,9 +104,27 @@ export function UsersPanel() {
   ).length;
 
   async function loadUsers() {
-    const response = await fetch(`/api/users?ts=${Date.now()}`, { cache: "no-store" });
-    const json = (await response.json()) as { data?: UsersPayload };
-    setPayload(json.data ?? null);
+    setLoadState("loading");
+    setLoadError(null);
+    try {
+      const response = await fetch(`/api/users?ts=${Date.now()}`, { cache: "no-store" });
+      const json = (await response.json()) as {
+        data?: UsersPayload;
+        error?: { message?: string };
+      };
+      if (!response.ok || !json.data) {
+        setPayload(null);
+        setLoadState("error");
+        setLoadError(json.error?.message ?? `無法載入使用者名冊（HTTP ${response.status}）。`);
+        return;
+      }
+      setPayload(json.data);
+      setLoadState("ready");
+    } catch {
+      setPayload(null);
+      setLoadState("error");
+      setLoadError("網路異常，無法載入使用者名冊。請重新整理後再試。");
+    }
   }
 
   useEffect(() => {
@@ -329,6 +349,24 @@ export function UsersPanel() {
           )}
         </div>
       </section>
+
+      {loadState === "loading" && (
+        <section className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+          正在載入訪員名冊，請稍候…
+        </section>
+      )}
+
+      {loadState === "error" && (
+        <section className="rounded-lg border border-destructive/30 bg-card p-6">
+          <p className="text-sm font-medium text-destructive">{loadError ?? "名冊載入失敗"}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            名冊沒載入成功時，下方分頁與「列印證件套」按鈕都不會出現。
+          </p>
+          <Button type="button" className="mt-4" variant="outline" onClick={() => void loadUsers()}>
+            重新載入
+          </Button>
+        </section>
+      )}
 
       {payload && (
         <>
@@ -934,7 +972,6 @@ function ApprovedVisitorRegistry({
   const [generatedPasswordUrl, setGeneratedPasswordUrl] = useState<string | null>(null);
   const [exportingPhotos, setExportingPhotos] = useState(false);
   const [exportingPassbooks, setExportingPassbooks] = useState(false);
-  const [issuingBadges, setIssuingBadges] = useState(false);
   const baseFilteredRequests = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -1351,50 +1388,26 @@ function ApprovedVisitorRegistry({
     }
   }
 
-  async function issueAndPrintBadges() {
-    const targets = exportRequests.filter((request) => {
-      const profile = request.visitorRegistrationProfile;
-      return request.status === "approved" && Boolean(profile?.visitorCode);
-    });
-
-    if (targets.length === 0) {
-      setInviteMessage("目前範圍內沒有可發證的正式訪員。");
-      return;
-    }
+  function openGasPhysicalBadgePrint() {
+    const codes = exportRequests
+      .map((request) => request.visitorRegistrationProfile?.visitorCode?.trim())
+      .filter((code): code is string => Boolean(code));
+    const uniqueCodes = Array.from(new Set(codes));
+    const scopeLabel =
+      uniqueCodes.length > 0
+        ? `目前清單／勾選共 ${uniqueCodes.length} 位`
+        : "GAS 全部已核准訪員";
 
     const confirmed = window.confirm(
-      `確認為 ${targets.length} 位訪員產生訪員證？\n\n已發過有效訪員證者會沿用原證，不會重複發證。`,
+      `將開啟紙本證件套列印頁（A4、2×2 裁切），範圍：${scopeLabel}。\n\n可於列印頁選擇「只印正面／只印背面／正反交錯（雙面）」。`,
     );
     if (!confirmed) return;
 
-    setIssuingBadges(true);
-    setInviteMessage(null);
-
-    try {
-      const response = await fetch("/api/users/visitor-badges", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ requestIds: targets.map((request) => request.id) }),
-      });
-      const json = (await response.json()) as {
-        data?: { message: string; issued: number; skipped: string[]; badgeIds: string[] };
-        error?: { message?: string };
-      };
-
-      if (!response.ok || !json.data) {
-        setInviteMessage(json.error?.message ?? "訪員證產生失敗，請稍後再試。");
-        return;
-      }
-
-      setInviteMessage(
-        `${json.data.message}${json.data.skipped.length ? ` 略過：${json.data.skipped.join("、")}` : ""}`,
-      );
-      if (json.data.badgeIds.length > 0) {
-        window.open(`/workspace/users/badges/print?badgeIds=${json.data.badgeIds.join(",")}`, "_blank");
-      }
-    } finally {
-      setIssuingBadges(false);
+    const params = new URLSearchParams({ mode: "duplex" });
+    if (uniqueCodes.length > 0) {
+      params.set("visitorIds", uniqueCodes.join(","));
     }
+    window.open(`/workspace/users/badges/gas-print?${params.toString()}`, "_blank");
   }
 
   return (
@@ -1464,11 +1477,11 @@ function ApprovedVisitorRegistry({
           <Button
             type="button"
             className="w-full sm:col-span-2"
-            onClick={issueAndPrintBadges}
-            disabled={exportRequests.length === 0 || issuingBadges}
+            onClick={openGasPhysicalBadgePrint}
+            disabled={exportRequests.length === 0}
           >
             <IdCard className="h-4 w-4" />
-            {issuingBadges ? "訪員證產生中" : "產生 / 列印訪員證"}
+            列印證件套（A4 裁切）
           </Button>
         </div>
         )}
@@ -1537,9 +1550,9 @@ function ApprovedVisitorRegistry({
             </Button>
             )}
             {mode === "approved" && (
-            <Button type="button" variant="outline" onClick={issueAndPrintBadges} disabled={issuingBadges}>
+            <Button type="button" variant="outline" onClick={openGasPhysicalBadgePrint}>
               <IdCard className="h-4 w-4" />
-              {issuingBadges ? "發證中" : "批次發證列印"}
+              列印證件套
             </Button>
             )}
             <Button type="button" onClick={batchVerifyVisitors} disabled={batchAction !== null}>

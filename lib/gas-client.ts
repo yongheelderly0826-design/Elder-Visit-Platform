@@ -245,6 +245,35 @@ export const gasClient = {
       password_salt: string;
       password_params: string;
     }) => gasFetch<GasAuthAccount>("accounts.upsertAuth", { method: "POST", body }),
+    getHeadshot: (visitorId: string) =>
+      gasFetch<{ found: boolean; mime: string; base64: string }>("accounts.getHeadshot", {
+        params: { visitor_id: visitorId },
+      }),
+    setHeadshot: (body: {
+      visitor_id: string;
+      data_url?: string;
+      base64?: string;
+      mime?: string;
+    }) =>
+      gasFetch<{
+        visitor_id: string;
+        name: string;
+        email: string;
+        photo_url: string;
+        registrations_updated: number;
+      }>("accounts.setHeadshot", { method: "POST", body }),
+    sendLoginCredentials: (body: {
+      email: string;
+      full_name?: string;
+      login_url: string;
+      password: string;
+    }) =>
+      gasFetch<{
+        email: string;
+        full_name: string;
+        visitor_id: string;
+        sent_at: string;
+      }>("accounts.sendLoginCredentials", { method: "POST", body }),
   },
   cases: {
     list: (params?: { district?: string; case_type?: string; visit_status?: string }) =>

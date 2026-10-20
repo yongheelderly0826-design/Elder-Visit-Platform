@@ -32,14 +32,17 @@ export function PhysicalVisitorBadge({
   visitorId,
   email,
   name,
+  portraitSrc,
   className,
 }: {
   visitorId?: string | null;
   email?: string | null;
   name?: string | null;
+  portraitSrc?: string | null;
   className?: string;
 }) {
   const profile = resolvePhysicalBadgeProfile({ visitorId, email, name });
+  const photoSrc = portraitSrc || profile.portraitSrc;
   const [showBack, setShowBack] = useState(false);
 
   return (
@@ -85,11 +88,11 @@ export function PhysicalVisitorBadge({
             ) : (
               <>
                 <div className="absolute overflow-hidden bg-white" style={PHOTO_SLOT}>
-                  {profile.portraitSrc ? (
+                  {photoSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={profile.portraitSrc}
-                      alt={`${profile.displayName} 證件照（模擬）`}
+                      src={photoSrc}
+                      alt={`${profile.displayName} 證件照`}
                       className="h-full w-full object-cover object-top"
                       draggable={false}
                     />

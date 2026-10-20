@@ -22,6 +22,11 @@ var ApiRouter = (function () {
     'accounts.setPassword': function (p, b) { return UserAccountModule.accounts.setPassword(b); },
     'accounts.markLogin': function (p, b) { return UserAccountModule.accounts.markLogin(b); },
     'accounts.upsertAuth': function (p, b) { return UserAccountModule.accounts.upsertAuth(b); },
+    'accounts.getHeadshot': function (p) { return UserAccountModule.accounts.getHeadshot(p); },
+    'accounts.setHeadshot': function (p, b) { return UserAccountModule.accounts.setHeadshot(b || p); },
+    'accounts.sendLoginCredentials': function (p, b) {
+      return UserAccountModule.accounts.sendLoginCredentials(b || p);
+    },
 
     'cases.list': function (p) { return CaseModule.list(p); },
     'cases.get': function (p) { return CaseModule.get(p.id); },

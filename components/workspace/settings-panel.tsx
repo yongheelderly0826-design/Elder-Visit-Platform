@@ -29,6 +29,7 @@ import {
   toggleModule,
 } from "@/lib/domain/workspace-settings";
 import type { BlueprintMigrationPreview, WorkspaceSettings } from "@/lib/domain/types";
+import { VisitorLoginCredentialsPanel } from "@/components/workspace/visitor-login-credentials-panel";
 
 const storageKey = "elder-visit-platform:workspace-settings";
 const sponsorStorageKey = "elder-visit-platform:sponsor-partners";
@@ -46,13 +47,14 @@ const placementSettingMap = {
   visitor_complete: "visitorComplete",
 } as const;
 
-type SpaceRuleTab = "blueprint" | "sponsors" | "responsibility" | "recovery";
+type SpaceRuleTab = "blueprint" | "sponsors" | "responsibility" | "recovery" | "credentials";
 
 const spaceRuleTabs: Array<{ key: SpaceRuleTab; label: string }> = [
   { key: "blueprint", label: "藍圖與模組" },
   { key: "sponsors", label: "贊助聯名" },
   { key: "responsibility", label: "責任歸屬" },
   { key: "recovery", label: "停用復原" },
+  { key: "credentials", label: "訪員帳密寄送" },
 ];
 
 export function SettingsPanel() {
@@ -281,6 +283,8 @@ export function SettingsPanel() {
           ))}
         </div>
       </section>
+
+      {activeTab === "credentials" && <VisitorLoginCredentialsPanel />}
 
       {activeTab === "blueprint" && <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="rounded-lg border bg-card p-4">

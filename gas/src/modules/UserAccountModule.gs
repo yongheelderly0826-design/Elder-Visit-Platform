@@ -222,7 +222,7 @@ var UserAccountModule = (function () {
     var visitorId = String(current.visitor_id || '');
     var accountId = String(current.account_id || '');
     if (approved) {
-      visitorId = visitorId || visitorIdFor_(current);
+      visitorId = visitorId || String(profile.visitorCode || '') || visitorIdFor_(current);
       accountId = accountId || 'acct_' + Utilities.getUuid();
       profile.visitorCode = visitorId;
       profile.qrCodePayload = profile.qrCodePayload || '';
@@ -462,6 +462,141 @@ var UserAccountModule = (function () {
     });
   }
 
+  function driveFileId_(url) {
+    var value = String(url || '');
+    var match = value.match(/\/d\/([A-Za-z0-9_-]+)/) || value.match(/[?&]id=([A-Za-z0-9_-]+)/);
+    return match ? match[1] : '';
+  }
+
+  function getHeadshot(data) {
+    ensureSchema_();
+    data = data || {};
+    var visitorId = String(data.visitor_id || '');
+    var visitor = visitorId ? findOne_(VISITORS, 'visitor_id', visitorId) : null;
+    var photoUrl = visitor ? String(visitor.photo_url || '') : '';
+    if (!photoUrl && visitorId) {
+      var registrations = SheetHelper.rowsToObjects(SheetHelper.getSheet(REGISTRATIONS));
+      for (var i = 0; i < registrations.length; i++) {
+        if (String(registrations[i].visitor_id || '') !== visitorId) continue;
+        photoUrl = String(parseProfile_(registrations[i]).headshotProcessedUrl || '');
+        if (photoUrl) break;
+      }
+    }
+    var fileId = driveFileId_(photoUrl);
+    if (!fileId) return { found: false, mime: '', base64: '' };
+    var blob = DriveApp.getFileById(fileId).getBlob();
+    return {
+      found: true,
+      mime: String(blob.getContentType() || 'image/jpeg'),
+      base64: Utilities.base64Encode(blob.getBytes()),
+    };
+  }
+
+  /**
+   * 寄送訪員登入帳密信（明文密碼由 Next 產生並已寫入雜湊後傳入）。
+   * 不在 Sheet 保存明文密碼。
+   */
+  function sendLoginCredentials(data) {
+    data = data || {};
+    var email = normalizeEmail_(data.email);
+    var fullName = String(data.full_name || '');
+    var loginUrl = String(data.login_url || '');
+    var password = String(data.password || '');
+    if (!email || !loginUrl || !password) {
+      throw error_('VALIDATION_ERROR', '缺少收件 Email、登入網址或密碼。');
+    }
+    var account = findAccountByEmail_(email);
+    if (!account) throw error_('ACCOUNT_NOT_FOUND', '找不到訪員帳號：' + email);
+    if (!String(account.password_hash || '')) {
+      throw error_('PASSWORD_NOT_SET', '此帳號尚未設定密碼雜湊，請先寫入密碼再寄信。');
+    }
+
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject: '永和區訪查平台－您的登入帳號與密碼',
+        body: [
+          (fullName || '訪查員') + ' 您好：',
+          '',
+          '以下是您登入永和區訪查平台的資料，請妥善保管，勿轉寄給他人。',
+          '',
+          '登入網址：',
+          loginUrl,
+          '',
+          '帳號（Email）：' + email,
+          '密碼：' + password,
+          '',
+          '建議首次登入後，如系統提供變更密碼功能請儘速更換。',
+          '若您未申請此帳號，請立即通知承辦人員。',
+          '',
+          '永和區訪查平台',
+        ].join('\n'),
+      });
+    } catch (mailError) {
+      throw error_('EMAIL_SEND_FAILED', '登入帳密信件寄送失敗：' + String(mailError));
+    }
+
+    return {
+      email: email,
+      full_name: fullName || String(account.full_name || ''),
+      visitor_id: String(account.visitor_id || ''),
+      sent_at: now_(),
+    };
+  }
+
+  /** 替換訪員證件照：寫入 Drive，更新主檔 photo_url 與註冊 profile。 */
+  function setHeadshot(data) {
+    return withLock_(function () {
+      ensureSchema_();
+      data = data || {};
+      var visitorId = String(data.visitor_id || '');
+      if (!visitorId) throw error_('VALIDATION_ERROR', '缺少 visitor_id。');
+      var visitor = findOne_(VISITORS, 'visitor_id', visitorId);
+      if (!visitor) throw error_('NOT_FOUND', '找不到訪查員：' + visitorId);
+
+      var dataUrl = String(data.data_url || '');
+      if (!dataUrl && data.base64) {
+        dataUrl =
+          'data:' +
+          String(data.mime || 'image/jpeg') +
+          ';base64,' +
+          String(data.base64);
+      }
+      if (!/^data:image\/[A-Za-z0-9.+-]+;base64,/.test(dataUrl)) {
+        throw error_('VALIDATION_ERROR', '照片格式須為 image data URL 或 base64。');
+      }
+
+      var photoUrl = persistDataImage_(dataUrl, visitorId + '-headshot-' + Date.now());
+      var now = now_();
+      SheetHelper.updateByKey(VISITORS, 'visitor_id', visitorId, {
+        photo_url: photoUrl,
+        updated_at: now,
+      });
+
+      var registrations = SheetHelper.rowsToObjects(SheetHelper.getSheet(REGISTRATIONS));
+      var updatedRegs = 0;
+      for (var i = 0; i < registrations.length; i++) {
+        if (String(registrations[i].visitor_id || '') !== visitorId) continue;
+        var profile = parseProfile_(registrations[i]);
+        profile.headshotProcessedUrl = photoUrl;
+        profile.headshotOriginalUrl = photoUrl;
+        SheetHelper.updateByKey(REGISTRATIONS, 'request_id', registrations[i].request_id, {
+          profile_json: JSON.stringify(profile),
+          updated_at: now,
+        });
+        updatedRegs += 1;
+      }
+
+      return {
+        visitor_id: visitorId,
+        name: String(visitor.name || ''),
+        email: String(visitor.email || ''),
+        photo_url: photoUrl,
+        registrations_updated: updatedRegs,
+      };
+    });
+  }
+
   function upsertAuth(data) {
     return withLock_(function () {
       ensureSchema_();
@@ -526,6 +661,9 @@ var UserAccountModule = (function () {
       setPassword: setPassword,
       markLogin: markLogin,
       upsertAuth: upsertAuth,
+      getHeadshot: getHeadshot,
+      setHeadshot: setHeadshot,
+      sendLoginCredentials: sendLoginCredentials,
     },
   };
 })();

@@ -39,10 +39,12 @@ export function VisitorHomePanel({
   cacheIdentity,
   initialBadge = null,
   visitorEmail = "",
+  portraitSrc = "",
 }: {
   cacheIdentity: string;
   initialBadge?: BadgeData | null;
   visitorEmail?: string;
+  portraitSrc?: string;
 }) {
   const [badge, setBadge] = useState<BadgeData | null>(initialBadge);
   const [message, setMessage] = useState<string | null>(null);
@@ -253,6 +255,7 @@ export function VisitorHomePanel({
             visitorId={badge.visitorId}
             email={badge.email || visitorEmail}
             name={badge.name}
+            portraitSrc={portraitSrc}
           />
 
           <section className="grid gap-4 rounded-lg border bg-card p-5 text-center">

@@ -205,6 +205,14 @@
 - **Evidence:** `supabase/migrations/0034_visitor_badges.sql`, `lib/domain/visitor-badges.ts`, and `components/badges/visitor-badge-card.tsx`.
 - **Added on:** 2026-06-22
 
+## Lesson: 永和紙本證件套列印走 GAS，不走舊版 Supabase 發證
+
+- **Trigger:** 承辦要依目前 GAS 名冊批次印永和證件套並裁切，舊「產生／列印訪員證」讀的是 Supabase。
+- **Cause:** 營運資料在 Sheets／GAS；Supabase `visitor_badges` 發證與證件套版型是兩套流程。
+- **Rule:** 紙本證件套只用 `/workspace/users/badges/gas-print`（A4 2×2、正／背面／雙面交錯）；使用者管理畫面不要再放 Supabase「發證列印」入口，避免與 GAS 營運混淆。
+- **Evidence:** `lib/domain/gas-physical-badge-print.ts`, `components/badges/gas-badge-print-sheet.tsx`, `app/workspace/users/badges/gas-print/page.tsx`, `components/workspace/users-panel.tsx`.
+- **Added on:** 2026-10-20
+
 ## Lesson: GAS list pages should not N+1 round-trip
 
 - **Trigger:** Manager daily visit stats and visitor tasks felt delayed even when the spreadsheet only had a few rows.
