@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   GAS_BADGE_ASPECT,
   GAS_BADGE_PHOTO_SLOT,
@@ -21,6 +21,10 @@ export function GasSleeveBadgeTile({
   const displayName = (name || "訪員").trim() || "訪員";
   const [photoFailed, setPhotoFailed] = useState(false);
   const showPhoto = Boolean(portraitSrc) && !photoFailed;
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [portraitSrc]);
 
   return (
     <article

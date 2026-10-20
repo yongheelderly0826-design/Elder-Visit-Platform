@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { GasSleeveBadgeTile } from "@/components/badges/gas-sleeve-badge-tile";
 import { PrintButton } from "@/components/badges/print-button";
@@ -14,6 +14,8 @@ type SheetPage =
   | { kind: "front"; visitors: GasBadgePrintVisitor[] }
   | { kind: "back"; count: number };
 
+const HEADSHOT_CONCURRENCY = 3;
+
 export function GasBadgePrintSheet({
   initialVisitorIds,
   initialMode = "duplex",
@@ -25,7 +27,10 @@ export function GasBadgePrintSheet({
   const [visitors, setVisitors] = useState<GasBadgePrintVisitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [imagesReady, setImagesReady] = useState(false);
+  const [portraitMap, setPortraitMap] = useState<Record<string, string>>({});
+  const [portraitsLoading, setPortraitsLoading] = useState(false);
+  const [portraitProgress, setPortraitProgress] = useState({ done: 0, total: 0, ok: 0 });
+  const objectUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,38 +68,81 @@ export function GasBadgePrintSheet({
     };
   }, [initialVisitorIds]);
 
-  const pages = useMemo(() => buildPages(visitors, mode), [visitors, mode]);
-
+  // 限流載入證件照，避免一次打爆 GAS
   useEffect(() => {
-    if (loading || visitors.length === 0) {
-      setImagesReady(false);
-      return;
-    }
     let cancelled = false;
-    async function waitForImages() {
-      // 給瀏覽器一點時間掛上 img，再等 decode
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const images = Array.from(document.querySelectorAll<HTMLImageElement>(".gas-print-root img"));
+
+    async function loadPortraits() {
+      for (const url of objectUrlsRef.current) URL.revokeObjectURL(url);
+      objectUrlsRef.current = [];
+      setPortraitMap({});
+
+      if (visitors.length === 0) {
+        setPortraitsLoading(false);
+        setPortraitProgress({ done: 0, total: 0, ok: 0 });
+        return;
+      }
+
+      setPortraitsLoading(true);
+      setPortraitProgress({ done: 0, total: visitors.length, ok: 0 });
+
+      const nextMap: Record<string, string> = {};
+      let done = 0;
+      let ok = 0;
+      let index = 0;
+
+      async function worker() {
+        while (index < visitors.length) {
+          if (cancelled) return;
+          const current = visitors[index];
+          index += 1;
+          try {
+            const response = await fetch(
+              `/api/users/gas-headshot/${encodeURIComponent(current.visitorId)}`,
+              { cache: "no-store" },
+            );
+            if (response.ok) {
+              const blob = await response.blob();
+              if (blob.type.startsWith("image/") && blob.size > 0) {
+                const objectUrl = URL.createObjectURL(blob);
+                objectUrlsRef.current.push(objectUrl);
+                nextMap[current.visitorId] = objectUrl;
+                ok += 1;
+              }
+            }
+          } catch {
+            // keep empty; tile shows 無證件照
+          } finally {
+            done += 1;
+            if (!cancelled) {
+              setPortraitProgress({ done, total: visitors.length, ok });
+              setPortraitMap({ ...nextMap });
+            }
+          }
+        }
+      }
+
       await Promise.all(
-        images.map(
-          (img) =>
-            img.complete
-              ? Promise.resolve()
-              : new Promise<void>((resolve) => {
-                  img.addEventListener("load", () => resolve(), { once: true });
-                  img.addEventListener("error", () => resolve(), { once: true });
-                }),
-        ),
+        Array.from({ length: Math.min(HEADSHOT_CONCURRENCY, visitors.length) }, () => worker()),
       );
-      if (!cancelled) setImagesReady(true);
+
+      if (!cancelled) {
+        setPortraitMap({ ...nextMap });
+        setPortraitsLoading(false);
+      }
     }
-    void waitForImages();
+
+    void loadPortraits();
     return () => {
       cancelled = true;
+      for (const url of objectUrlsRef.current) URL.revokeObjectURL(url);
+      objectUrlsRef.current = [];
     };
-  }, [loading, visitors, mode, pages.length]);
+  }, [visitors]);
 
+  const pages = useMemo(() => buildPages(visitors, mode), [visitors, mode]);
   const withPhoto = visitors.filter((row) => row.hasPhoto).length;
+  const imagesReady = !loading && !portraitsLoading && visitors.length > 0;
 
   return (
     <div className="gas-print-root min-h-screen bg-slate-100 text-slate-950 print:bg-white">
@@ -104,15 +152,20 @@ export function GasBadgePrintSheet({
         <div>
           <h1 className="text-lg font-semibold">GAS 紙本訪員證（證件套）列印</h1>
           <p className="mt-1 text-sm text-slate-600">
-            A4 每頁 2×2 張，可裁切。正面含證件照與姓名；背面為統一守則版。建議用瀏覽器「另存
-            PDF」或雙面列印。
+            A4 每頁 2×2 張，可裁切。正面含證件照與姓名；背面為統一守則版。證件照會限速載入，請等完成後再列印。
           </p>
           <p className="mt-2 text-sm text-slate-500">
             {loading
               ? "載入名冊中…"
-              : `共 ${visitors.length} 人（有證件照 ${withPhoto}）· 列印頁 ${pages.length} 面`}
-            {!loading && !imagesReady ? " · 影像載入中…" : ""}
+              : `共 ${visitors.length} 人（名冊標示有照 ${withPhoto}）· 列印頁 ${pages.length} 面`}
           </p>
+          {!loading && visitors.length > 0 && (
+            <p className="mt-1 text-sm text-slate-500">
+              {portraitsLoading
+                ? `證件照載入中 ${portraitProgress.done}/${portraitProgress.total}（成功 ${portraitProgress.ok}）…`
+                : `證件照已載入：成功 ${portraitProgress.ok}／共 ${portraitProgress.total}`}
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex flex-wrap gap-2">
@@ -137,7 +190,7 @@ export function GasBadgePrintSheet({
               </button>
             ))}
           </div>
-          <PrintButton disabled={loading || visitors.length === 0 || !imagesReady} />
+          <PrintButton disabled={!imagesReady} />
         </div>
       </div>
 
@@ -158,6 +211,12 @@ export function GasBadgePrintSheet({
         </div>
       ) : (
         <div className="mx-auto flex max-w-5xl flex-col gap-6 print:max-w-none print:gap-0">
+          {portraitsLoading && (
+            <div className="print:hidden flex items-center justify-center gap-2 rounded-lg border bg-white p-3 text-sm text-slate-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              正在限速載入證件照（每次 {HEADSHOT_CONCURRENCY} 張），請勿關閉此頁…
+            </div>
+          )}
           {pages.map((page, pageIndex) => (
             <section
               key={`${page.kind}-${pageIndex}`}
@@ -172,7 +231,7 @@ export function GasBadgePrintSheet({
                           side="front"
                           name={visitor.name}
                           visitorId={visitor.visitorId}
-                          portraitSrc={`/api/users/gas-headshot/${encodeURIComponent(visitor.visitorId)}`}
+                          portraitSrc={portraitMap[visitor.visitorId] || null}
                         />
                         <p className="cut-caption print:hidden">{visitor.visitorId}</p>
                       </div>
@@ -182,7 +241,6 @@ export function GasBadgePrintSheet({
                         <GasSleeveBadgeTile side="back" />
                       </div>
                     ))}
-                {/* 補齊空格，維持裁切格線一致 */}
                 {page.kind === "front" &&
                   Array.from({ length: Math.max(0, 4 - page.visitors.length) }).map((_, index) => (
                     <div key={`empty-${pageIndex}-${index}`} className="a4-cell a4-cell-empty" />
