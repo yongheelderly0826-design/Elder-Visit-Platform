@@ -50,15 +50,73 @@ export function VisitorHomePanel({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [resolvedPortraitSrc, setResolvedPortraitSrc] = useState(portraitSrc);
+  const [portraitNote, setPortraitNote] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scanRef = useRef<QrScanHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const portraitObjectUrlRef = useRef<string | null>(null);
 
   const stopScan = useCallback(() => {
     scanRef.current?.stop();
     scanRef.current = null;
     setScanning(false);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPortrait() {
+      if (!portraitSrc) {
+        setResolvedPortraitSrc("");
+        setPortraitNote("尚未設定證件照來源。");
+        return;
+      }
+      setPortraitNote(null);
+      try {
+        const response = await fetch(portraitSrc, { cache: "no-store" });
+        if (!response.ok) {
+          const json = (await response.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
+          if (!cancelled) {
+            setResolvedPortraitSrc("");
+            setPortraitNote(json?.error?.message ?? "證件照讀取失敗，請重新登入後再試。");
+          }
+          return;
+        }
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) {
+          if (!cancelled) {
+            setResolvedPortraitSrc("");
+            setPortraitNote("證件照格式異常，請聯絡承辦重新上傳。");
+          }
+          return;
+        }
+        if (portraitObjectUrlRef.current) {
+          URL.revokeObjectURL(portraitObjectUrlRef.current);
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        portraitObjectUrlRef.current = objectUrl;
+        if (!cancelled) {
+          setResolvedPortraitSrc(objectUrl);
+          setPortraitNote(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedPortraitSrc("");
+          setPortraitNote("證件照暫時無法載入，請檢查網路後重新整理。");
+        }
+      }
+    }
+    void loadPortrait();
+    return () => {
+      cancelled = true;
+      if (portraitObjectUrlRef.current) {
+        URL.revokeObjectURL(portraitObjectUrlRef.current);
+        portraitObjectUrlRef.current = null;
+      }
+    };
+  }, [portraitSrc]);
 
   const badgeCacheKey = cacheIdentity
     ? `elder-visitor-badge-v1:${cacheIdentity.toLowerCase()}`
@@ -255,8 +313,13 @@ export function VisitorHomePanel({
             visitorId={badge.visitorId}
             email={badge.email || visitorEmail}
             name={badge.name}
-            portraitSrc={portraitSrc}
+            portraitSrc={resolvedPortraitSrc}
           />
+          {portraitNote && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {portraitNote}
+            </p>
+          )}
 
           <section className="grid gap-4 rounded-lg border bg-card p-5 text-center">
             <div>

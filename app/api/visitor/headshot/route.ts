@@ -5,9 +5,10 @@ import { VOLUNTEER_CLOCK_COOKIE } from "@/lib/domain/volunteer-attendance";
 
 export async function GET(request: NextRequest) {
   const roleKey = request.cookies.get("demo_role")?.value;
-  const visitorId = request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value ?? "";
+  let visitorId = request.cookies.get(VOLUNTEER_CLOCK_COOKIE)?.value ?? "";
+  const email = request.cookies.get("demo_email")?.value?.trim().toLowerCase() ?? "";
 
-  if (roleKey !== "visitor" || !visitorId) {
+  if (roleKey !== "visitor") {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "請先以訪員帳號登入。" } },
       { status: 401 },
@@ -22,6 +23,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 舊 session 可能只有 Email、沒有 volunteer_clock；用 Email 回補 visitor_id
+    if (!visitorId && email) {
+      const account = await gasClient.accounts.getAuthByEmail(email);
+      visitorId = String(account?.visitor_id || "").trim();
+    }
+
+    if (!visitorId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VISITOR_ID_MISSING",
+            message: "找不到訪員編碼，請重新登入後再試。",
+          },
+        },
+        { status: 404 },
+      );
+    }
+
     const photo = await gasClient.accounts.getHeadshot(visitorId);
     if (!photo?.found || !photo.base64) {
       return NextResponse.json(
@@ -34,7 +53,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(bytes, {
       headers: {
         "content-type": photo.mime || "image/jpeg",
-        "cache-control": "private, max-age=300",
+        "cache-control": "private, max-age=60",
       },
     });
   } catch {

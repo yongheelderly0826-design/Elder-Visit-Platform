@@ -36,7 +36,7 @@ export default async function VisitorHomePage() {
         cacheIdentity={session.visitorId}
         initialBadge={initialBadge}
         visitorEmail={session.email}
-        portraitSrc={session.visitorId ? "/api/visitor/headshot" : ""}
+        portraitSrc="/api/visitor/headshot"
       />
     </AppShell>
   );

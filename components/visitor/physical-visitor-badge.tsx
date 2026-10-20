@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { resolvePhysicalBadgeProfile } from "@/lib/domain/physical-visitor-badge";
 
 const BADGE_RULES = [
@@ -42,8 +42,14 @@ export function PhysicalVisitorBadge({
   className?: string;
 }) {
   const profile = resolvePhysicalBadgeProfile({ visitorId, email, name });
-  const photoSrc = portraitSrc || profile.portraitSrc;
   const [showBack, setShowBack] = useState(false);
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const preferredSrc = portraitSrc || profile.portraitSrc;
+  const photoSrc = !photoFailed ? preferredSrc : "";
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [preferredSrc]);
 
   return (
     <div className={`mx-auto w-full max-w-full overflow-x-hidden ${className ?? ""}`}>
@@ -91,12 +97,18 @@ export function PhysicalVisitorBadge({
                   {photoSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
+                      key={photoSrc}
                       src={photoSrc}
                       alt={`${profile.displayName} 證件照`}
                       className="h-full w-full object-cover object-top"
                       draggable={false}
+                      onError={() => setPhotoFailed(true)}
                     />
-                  ) : null}
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[10px] leading-tight text-slate-400">
+                      證件照載入中或尚未上傳
+                    </div>
+                  )}
                 </div>
 
                 <p
