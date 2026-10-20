@@ -2557,12 +2557,21 @@ function escapeCsvValue(value: string) {
   return value;
 }
 
+function withExportTimestamp(filename: string) {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0) return `${filename}_${stamp}`;
+  return `${filename.slice(0, dot)}_${stamp}${filename.slice(dot)}`;
+}
+
 function downloadTextFile(filename: string, content: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.download = withExportTimestamp(filename);
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2573,7 +2582,7 @@ function downloadBlobFile(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.download = withExportTimestamp(filename);
   link.click();
   URL.revokeObjectURL(url);
 }
