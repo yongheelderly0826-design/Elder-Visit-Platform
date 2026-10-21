@@ -1,5 +1,12 @@
 import { readFileSync } from "node:fs";
-import { formatMohwPhone, formatRocDate } from "../lib/domain/mohw-life-care-export";
+import {
+  formatMohwPhone,
+  formatRocDate,
+  isIndoorPhone,
+  normalizeIndoorPhone,
+  normalizeVisitorRocDate,
+  normalizeVisitorTime,
+} from "../lib/domain/mohw-life-care-export";
 import { MOHW_LIFE_CARE_HEADERS } from "../lib/domain/mohw-life-care-form";
 import { mohwLifeCareSampleAnswers } from "../lib/domain/mohw-life-care-ui";
 import {
@@ -44,6 +51,14 @@ expect(
   formatRocDate("1959-06-14T16:00:00Z") === "048/06/15",
   `iso stamp TZ: ${formatRocDate("1959-06-14T16:00:00Z")}`,
 );
+expect(normalizeVisitorRocDate("115/8/19") === "115/08/19", `roc 115 ${normalizeVisitorRocDate("115/8/19")}`);
+expect(normalizeVisitorRocDate("99/1/2") === "099/01/02", `roc 99 ${normalizeVisitorRocDate("99/1/2")}`);
+expect(normalizeVisitorRocDate("9/1/2") === "009/01/02", `roc 9 ${normalizeVisitorRocDate("9/1/2")}`);
+expect(normalizeVisitorRocDate("0115/08/19") === "115/08/19", `roc strip ${normalizeVisitorRocDate("0115/08/19")}`);
+expect(normalizeVisitorRocDate("2026-10-15") === "115/10/15", `roc iso ${normalizeVisitorRocDate("2026-10-15")}`);
+expect(normalizeVisitorTime("9：5") === "09:05", `time ${normalizeVisitorTime("9：5")}`);
+expect(isIndoorPhone("0229282828") && isIndoorPhone("0912345678") && isIndoorPhone("912345678"), "indoor phone 0 or 9");
+expect(normalizeIndoorPhone("912345678") === "0912345678", `indoor prepend ${normalizeIndoorPhone("912345678")}`);
 expect(formatMohwPhone("02-2921-1234") === "0229211234", `phone clean ${formatMohwPhone("02-2921-1234")}`);
 expect(formatMohwPhone("0912abc3456") === "0912abc3456", `phone keep letters ${formatMohwPhone("0912abc3456")}`);
 
@@ -65,8 +80,20 @@ const mobileInLandline = validateMohwLifeCareRow(
   { row: 2, registryNationalId: "A123456789" },
 );
 expect(
-  mobileInLandline.errorLines.some((line) => line.includes("市話須為") && line.includes("09 開頭請填手機欄")),
-  `09 in J must fail: ${mobileInLandline.errorLines.join(" | ")}`,
+  !mobileInLandline.errorLines.some((line) => line.includes("室內電話")),
+  `09 indoor phone must pass: ${mobileInLandline.errorLines.join(" | ")}`,
+);
+const nineStartPhone = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    phone: "912345678",
+    mobile: "",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !nineStartPhone.errorLines.some((line) => line.includes("室內電話")),
+  `9-prefix indoor phone must pass: ${nineStartPhone.errorLines.join(" | ")}`,
 );
 
 const typoVillage = validateMohwLifeCareRow(

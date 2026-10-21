@@ -304,12 +304,14 @@ var MohwLifeCareValidator = (function () {
         var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
         pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
       }
-      // 本平台電話採國內格式；文字或缺少前導 0 不得假裝成有效電話。
+      // 室內電話允許 0 開頭（市話或 09）或 9 開頭 9 碼；先去掉分隔符再檢查。
+      var phoneText = text;
+      if (/^[0-9 ()\-]+$/.test(phoneText)) phoneText = phoneText.replace(/[ ()\-]/g, '');
       if (k2 === 'mobile' && !/^09\d{8}$/.test(text)) {
         pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼數字）');
       }
-      if (k2 === 'phone' && !/^0[2-8]\d{7,8}$/.test(text)) {
-        pushErr(errors, k2, row, '市話須為 02～08 開頭，共 9～10 碼；09 開頭請填手機欄');
+      if (k2 === 'phone' && !/^(?:0\d{8,9}|9\d{8})$/.test(phoneText)) {
+        pushErr(errors, k2, row, '室內電話請填 0 開頭（市話或 09 手機，9–10 碼）或 9 開頭的 9 碼手機');
       }
       if (['emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
           !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)) {

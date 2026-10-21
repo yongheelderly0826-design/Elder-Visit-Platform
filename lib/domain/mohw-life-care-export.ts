@@ -241,11 +241,85 @@ function toRocParts(year: number, month: number, day: number) {
   return `${String(rocYear).padStart(3, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
 }
 
+/**
+ * 訪員輸入的民國日期：
+ * 三位數年不在前面再補 0（115 → 115）；
+ * 一位或兩位數年補 0 成三碼（99 → 099、9 → 009）。
+ */
+export function normalizeVisitorRocDate(input: string): string {
+  const text = String(input ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/[．。]/g, "/")
+    .replace(/-/g, "/");
+  if (!text) return "";
+  const official = toOfficialRocDateText(text);
+  if (official) return official;
+
+  const match = text.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return text;
+  const yearDigits = match[1].replace(/^0+(?=\d)/, "");
+  if (yearDigits.length > 3) return text;
+  const year = yearDigits.length >= 3 ? yearDigits : yearDigits.padStart(3, "0");
+  const candidate = `${year}/${match[2].padStart(2, "0")}/${match[3].padStart(2, "0")}`;
+  return toOfficialRocDateText(candidate) ?? text;
+}
+
+/** 室內電話：0 開頭 9–10 碼，或 9 開頭 9 碼。 */
+export function isIndoorPhone(value: string): boolean {
+  const digits = formatMohwPhone(value).replace(/\D/g, "");
+  return /^0\d{8,9}$/.test(digits) || /^9\d{8}$/.test(digits);
+}
+
 /** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
 export function formatMohwPhone(input: string) {
   const text = String(input ?? "").trim();
   if (!text || !/^[0-9 ()-]+$/.test(text)) return text;
   return text.replace(/[ ()-]/g, "");
+}
+
+/** 室內電話送出前：9 開頭 9 碼補上前導 0，其餘保留 0 開頭數字。 */
+export function normalizeIndoorPhone(value: string): string {
+  const cleaned = formatMohwPhone(value);
+  const digits = cleaned.replace(/\D/g, "");
+  if (/^9\d{8}$/.test(digits)) return `0${digits}`;
+  if (/^0\d{8,9}$/.test(digits)) return digits;
+  return cleaned;
+}
+
+/** 時間固定半形冒號，時與分各兩碼。 */
+export function normalizeVisitorTime(input: string): string {
+  const text = String(input ?? "").normalize("NFKC").trim();
+  const match = text.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!match) return text;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return text;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+const VISITOR_ROC_DATE_KEYS = ["visit_date", "birth_date", "social_worker_date", "civil_worker_date"] as const;
+const VISITOR_TIME_KEYS = ["visit_start_time", "visit_end_time"] as const;
+
+export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
+  const next: MohwLifeCareAnswers = { ...answers };
+  for (const key of VISITOR_ROC_DATE_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeVisitorRocDate(value);
+    }
+  }
+  for (const key of VISITOR_TIME_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeVisitorTime(value);
+    }
+  }
+  const phone = next.phone;
+  if (typeof phone === "string" && phone.trim()) {
+    next.phone = normalizeIndoorPhone(phone);
+  }
+  return next;
 }
 
 /** `HH:mm` 24h; Excel serial fractions also supported. */

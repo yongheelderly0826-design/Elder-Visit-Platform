@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
 import { SignaturePad } from "@/components/consent/signature-pad";
 import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
@@ -20,6 +20,12 @@ import {
   type MohwFormField,
 } from "@/lib/domain/mohw-life-care-ui";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
+import {
+  normalizeIndoorPhone,
+  normalizeVisitorCareAnswers,
+  normalizeVisitorRocDate,
+  normalizeVisitorTime,
+} from "@/lib/domain/mohw-life-care-export";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import {
@@ -40,7 +46,6 @@ import {
   validateVisitSubmission,
 } from "@/lib/domain/visits";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
-import { maskPersonName } from "@/lib/domain/person-name";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -234,12 +239,15 @@ export function VisitDialogueForm({
     setResult(null);
     setMohwErrors([]);
 
-    const mohwAnswers = normalizeMohwAnswersOptions(
-      syncMohwConsentFromSubmission(
-        syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
-        submission,
+    const mohwAnswers = normalizeVisitorCareAnswers(
+      normalizeMohwAnswersOptions(
+        syncMohwConsentFromSubmission(
+          syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
+          submission,
+        ),
       ),
     );
+    setCareFormAnswers(mohwAnswers);
 
     if (submission.visitResult !== "未遇") {
       const localCheck = validateMohwLifeCareRow(mohwAnswers, {
@@ -442,7 +450,7 @@ export function VisitDialogueForm({
     <section className="rounded-lg border bg-card p-4 pb-28 sm:pb-4">
       <div>
         <p className="text-sm font-medium text-primary">對話式填報流程</p>
-        <h1 className="mt-2 text-2xl font-semibold">{maskPersonName(elderCase.name)}</h1>
+        <h1 className="mt-2 text-2xl font-semibold">{elderCase.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {elderCase.caseCode} · {elderCase.district} · {elderCase.village} · 第{" "}
           {schedule.visitAttempt} 次訪視
@@ -984,7 +992,7 @@ function VisitGuidePanel({ elderCase }: { elderCase: ElderCase }) {
           <p className="font-semibold">{visitGuidePrecheck.title}</p>
           <p className="mt-1 leading-5 text-muted-foreground">{visitGuidePrecheck.goal}</p>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
-            <GuideFact label="個案" value={maskPersonName(elderCase.name)} />
+            <GuideFact label="個案" value={elderCase.name} />
             <GuideFact label="案號" value={elderCase.caseCode} />
             <GuideFact label="區里" value={`${elderCase.district} ${elderCase.village}`} />
             <GuideFact label="地址" value={elderCase.address} />
@@ -1111,39 +1119,18 @@ function CareFormInput({
       : "border"
   }`;
   const rawText = typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : "";
-  const isMaskedNameField =
+  const isNameField =
     field.key === "name" ||
     field.mohwKey === "name" ||
     field.key === "emergency_contact_name" ||
     field.mohwKey === "emergency_contact_name";
+  const isPhoneField = field.mohwKey === "phone" || field.key === "phone";
 
   const errorText = error ? (
     <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
       {visitorFacingMohwError(error)}
     </p>
   ) : null;
-
-  // 訪員端畫面只顯示姓氏；完整姓名仍留在 answers 供送出／衛福部匯出
-  if (isMaskedNameField) {
-    return (
-      <div
-        id={fieldId}
-        className={`grid scroll-mt-28 gap-1 rounded-md border p-3 text-sm ${
-          error ? "border-destructive bg-destructive/5" : "bg-background"
-        }`}
-      >
-        <p className="font-medium">
-          {field.label}
-          {requiredMark}
-        </p>
-        <p className="text-base font-semibold">{maskPersonName(rawText) || "—"}</p>
-        <p className="text-xs leading-5 text-muted-foreground">
-          畫面僅顯示姓氏；送出與匯出仍使用完整姓名。
-        </p>
-        {errorText}
-      </div>
-    );
-  }
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];
@@ -1211,33 +1198,144 @@ function CareFormInput({
     );
   }
 
+  if (isTimeField) {
+    return (
+      <div id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
+        <span>
+          {field.label}
+          {requiredMark}
+        </span>
+        <HalfwidthTimeInput
+          value={rawText}
+          invalid={Boolean(error)}
+          describedBy={error ? errorId : undefined}
+          onChange={onChange}
+        />
+        {errorText}
+      </div>
+    );
+  }
+
+  const dateShown = field.type === "date" ? dateFieldValue(rawText) : rawText;
+  const placeholder = isNameField
+    ? "請填完整姓名"
+    : isPhoneField
+      ? "0 或 9 開頭，例 0229282828、0912345678"
+      : field.type === "date"
+        ? "民國年／月／日，例 115/08/19；兩位數年會補成 099"
+        : undefined;
+
   return (
     <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
       {field.label}
       {requiredMark}
       <input
         className={controlClass}
-        type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
-        placeholder={isTimeField ? "HH:mm（24小時制）" : undefined}
-        value={typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : ""}
+        type={field.type === "number" ? "number" : "text"}
+        inputMode={field.type === "date" || isPhoneField ? "numeric" : undefined}
+        placeholder={placeholder}
+        value={dateShown}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => onChange(event.target.value)}
-        onBlur={
-          field.mohwKey.endsWith("national_id")
-            ? (event) => {
-                const normalized = event.target.value
-                  .normalize("NFKC")
-                  .trim()
-                  .toUpperCase()
-                  .replace(/[^A-Z0-9]/g, "");
-                if (normalized !== event.target.value) onChange(normalized);
-              }
-            : undefined
-        }
+        onBlur={(event) => {
+          if (field.mohwKey.endsWith("national_id")) {
+            const normalized = event.target.value
+              .normalize("NFKC")
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "");
+            if (normalized !== event.target.value) onChange(normalized);
+            return;
+          }
+          if (field.type === "date") {
+            const normalized = normalizeVisitorRocDate(event.target.value);
+            if (normalized !== rawText) onChange(normalized);
+            return;
+          }
+          if (isPhoneField) {
+            const normalized = normalizeIndoorPhone(event.target.value);
+            if (normalized !== event.target.value) onChange(normalized);
+          }
+        }}
       />
       {errorText}
     </label>
+  );
+}
+
+function dateFieldValue(raw: string) {
+  const normalized = normalizeVisitorRocDate(raw);
+  if (normalized && /^\d{3}\/\d{2}\/\d{2}$/.test(normalized)) return normalized;
+  return raw;
+}
+
+function HalfwidthTimeInput({
+  value,
+  invalid,
+  describedBy,
+  onChange,
+}: {
+  value: string;
+  invalid: boolean;
+  describedBy?: string;
+  onChange: (value: string) => void;
+}) {
+  const minuteRef = useRef<HTMLInputElement>(null);
+  const normalized = value.normalize("NFKC");
+  const [hour = "", minute = ""] = normalized.split(":");
+  const hourDigits = hour.replace(/\D/g, "").slice(0, 2);
+  const minuteDigits = minute.replace(/\D/g, "").slice(0, 2);
+
+  function commit(nextHour: string, nextMinute: string, pad: boolean) {
+    const hourText = pad && nextHour ? nextHour.padStart(2, "0") : nextHour;
+    const minuteText = pad && nextMinute ? nextMinute.padStart(2, "0") : nextMinute;
+    if (!hourText && !minuteText) {
+      onChange("");
+      return;
+    }
+    onChange(pad ? normalizeVisitorTime(`${hourText}:${minuteText}`) : `${hourText}:${minuteText}`);
+  }
+
+  return (
+    <div
+      className={`flex h-10 items-center rounded-md bg-card px-2 ${
+        invalid ? "border border-destructive" : "border"
+      }`}
+    >
+      <input
+        className="w-12 bg-transparent text-center text-sm tabular-nums outline-none"
+        inputMode="numeric"
+        maxLength={2}
+        aria-label="時"
+        aria-invalid={invalid}
+        aria-describedby={describedBy}
+        value={hourDigits}
+        onChange={(event) => {
+          const next = event.target.value.replace(/\D/g, "").slice(0, 2);
+          commit(next, minuteDigits, false);
+          if (next.length === 2) minuteRef.current?.focus();
+        }}
+        onBlur={(event) => commit(event.target.value.replace(/\D/g, "").slice(0, 2), minuteDigits, true)}
+      />
+      <span className="w-4 shrink-0 text-center text-base font-semibold leading-none" aria-hidden="true">
+        :
+      </span>
+      <input
+        ref={minuteRef}
+        className="w-12 bg-transparent text-center text-sm tabular-nums outline-none"
+        inputMode="numeric"
+        maxLength={2}
+        aria-label="分"
+        aria-invalid={invalid}
+        value={minuteDigits}
+        onChange={(event) => {
+          const next = event.target.value.replace(/\D/g, "").slice(0, 2);
+          commit(hourDigits, next, false);
+        }}
+        onBlur={(event) => commit(hourDigits, event.target.value.replace(/\D/g, "").slice(0, 2), true)}
+      />
+    </div>
   );
 }
 

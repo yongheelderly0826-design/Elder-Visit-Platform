@@ -1,4 +1,9 @@
-import { buildMohwLifeCareExportRow, formatMohwPhone, toOfficialRocDateText } from "@/lib/domain/mohw-life-care-export";
+import {
+  buildMohwLifeCareExportRow,
+  formatMohwPhone,
+  isIndoorPhone,
+  toOfficialRocDateText,
+} from "@/lib/domain/mohw-life-care-export";
 import {
   MOHW_LIFE_CARE_COLUMNS,
   MOHW_LIFE_CARE_HEADERS,
@@ -546,12 +551,12 @@ export function validateMohwLifeCareRow(
       });
     }
 
-    if (column.key === "phone" && !/^0[2-8]\d{7,8}$/.test(text)) {
+    if (column.key === "phone" && !isIndoorPhone(text)) {
       pushError(errors, {
         key: column.key,
         row,
         code: "INVALID_PHONE",
-        message: "市話須為 02～08 開頭，共 9～10 碼；09 開頭請填手機欄",
+        message: "室內電話請填 0 開頭（市話或 09 手機，9–10 碼）或 9 開頭的 9 碼手機",
       });
     }
 
