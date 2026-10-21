@@ -2,6 +2,7 @@ import {
   buildMohwLifeCareExportRow,
   formatMohwPhone,
   isIndoorPhone,
+  normalizeVisitorNationalId,
   toOfficialRocDateText,
 } from "@/lib/domain/mohw-life-care-export";
 import {
@@ -271,13 +272,9 @@ export function mohwCellRef(col: number, row: number): string {
   return `${colIndexToLetter(col)}${row}`;
 }
 
-/** Strip spaces, dashes and full-width digits; keep A–Z + 0–9. */
+/** Strip spaces, dashes and full-width digits; keep A–Z + 0–9. Digit-position O becomes 0. */
 export function normalizeTaiwanId(id: string): string {
-  return String(id ?? "")
-    .normalize("NFKC")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+  return normalizeVisitorNationalId(id);
 }
 
 /** Taiwan national ID / resident certificate check digit (same algorithm as GAS Validation.gs). */

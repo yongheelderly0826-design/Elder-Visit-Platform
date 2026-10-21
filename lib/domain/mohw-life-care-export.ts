@@ -241,14 +241,48 @@ function toRocParts(year: number, month: number, day: number) {
   return `${String(rocYear).padStart(3, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
 }
 
+/** 把看起來像 0 的英文字／符號改成數字 0，並轉半形。 */
+export function sanitizeLookalikeDigits(input: string): string {
+  return String(input ?? "")
+    .normalize("NFKC")
+    .replace(/[Oo〇○]/g, "0");
+}
+
+/** 只留數字；輸入中的 O 會先改成 0。 */
+export function digitsOnly(input: string, maxLength?: number): string {
+  const digits = sanitizeLookalikeDigits(input).replace(/\D/g, "");
+  return typeof maxLength === "number" ? digits.slice(0, maxLength) : digits;
+}
+
+export function normalizeVisitorNumber(input: string, allowDecimal = false): string {
+  const text = sanitizeLookalikeDigits(input).trim();
+  if (!allowDecimal) return text.replace(/\D/g, "");
+  const cleaned = text.replace(/[^\d.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot === -1) return cleaned;
+  return `${cleaned.slice(0, firstDot)}.${cleaned.slice(firstDot + 1).replace(/\./g, "")}`;
+}
+
+/**
+ * 身分證：第一碼維持英文（O 開頭不改），其餘 O 改成 0。
+ */
+export function normalizeVisitorNationalId(input: string): string {
+  const text = String(input ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (!text) return "";
+  return `${text.charAt(0)}${text.slice(1).replace(/[O〇○]/g, "0")}`.slice(0, 10);
+}
+
 /**
  * 訪員輸入的民國日期：
  * 三位數年不在前面再補 0（115 → 115）；
  * 一位或兩位數年補 0 成三碼（99 → 099、9 → 009）。
  */
 export function normalizeVisitorRocDate(input: string): string {
-  const text = String(input ?? "")
-    .normalize("NFKC")
+  const text = sanitizeLookalikeDigits(String(input ?? ""))
     .trim()
     .replace(/[．。]/g, "/")
     .replace(/-/g, "/");
@@ -273,7 +307,7 @@ export function isIndoorPhone(value: string): boolean {
 
 /** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
 export function formatMohwPhone(input: string) {
-  const text = String(input ?? "").trim();
+  const text = sanitizeLookalikeDigits(String(input ?? "")).trim();
   if (!text || !/^[0-9 ()-]+$/.test(text)) return text;
   return text.replace(/[ ()-]/g, "");
 }
@@ -289,7 +323,7 @@ export function normalizeIndoorPhone(value: string): string {
 
 /** 時間固定半形冒號，時與分各兩碼。 */
 export function normalizeVisitorTime(input: string): string {
-  const text = String(input ?? "").normalize("NFKC").trim();
+  const text = sanitizeLookalikeDigits(input).trim();
   const match = text.match(/^(\d{1,2}):(\d{1,2})$/);
   if (!match) return text;
   const hour = Number(match[1]);
@@ -300,6 +334,16 @@ export function normalizeVisitorTime(input: string): string {
 
 const VISITOR_ROC_DATE_KEYS = ["visit_date", "birth_date", "social_worker_date", "civil_worker_date"] as const;
 const VISITOR_TIME_KEYS = ["visit_start_time", "visit_end_time"] as const;
+const VISITOR_PHONE_KEYS = [
+  "phone",
+  "mobile",
+  "emergency_contact_phone",
+  "social_worker_phone",
+  "civil_worker_phone",
+] as const;
+const VISITOR_ID_KEYS = ["national_id", "social_worker_national_id", "civil_worker_national_id"] as const;
+const VISITOR_INTEGER_KEYS = ["cohabitant_age", "sons_count", "daughters_count"] as const;
+const VISITOR_DECIMAL_KEYS = ["height_cm", "weight_kg"] as const;
 
 export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
   const next: MohwLifeCareAnswers = { ...answers };
@@ -315,9 +359,29 @@ export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwL
       next[key] = normalizeVisitorTime(value);
     }
   }
-  const phone = next.phone;
-  if (typeof phone === "string" && phone.trim()) {
-    next.phone = normalizeIndoorPhone(phone);
+  for (const key of VISITOR_PHONE_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeIndoorPhone(value);
+    }
+  }
+  for (const key of VISITOR_ID_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeVisitorNationalId(value);
+    }
+  }
+  for (const key of VISITOR_INTEGER_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeVisitorNumber(value);
+    }
+  }
+  for (const key of VISITOR_DECIMAL_KEYS) {
+    const value = next[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = normalizeVisitorNumber(value, true);
+    }
   }
   return next;
 }

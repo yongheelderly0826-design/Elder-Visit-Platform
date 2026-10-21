@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import {
+  digitsOnly,
   formatMohwPhone,
   formatRocDate,
   isIndoorPhone,
   normalizeIndoorPhone,
+  normalizeVisitorNationalId,
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "../lib/domain/mohw-life-care-export";
@@ -57,8 +59,14 @@ expect(normalizeVisitorRocDate("9/1/2") === "009/01/02", `roc 9 ${normalizeVisit
 expect(normalizeVisitorRocDate("0115/08/19") === "115/08/19", `roc strip ${normalizeVisitorRocDate("0115/08/19")}`);
 expect(normalizeVisitorRocDate("2026-10-15") === "115/10/15", `roc iso ${normalizeVisitorRocDate("2026-10-15")}`);
 expect(normalizeVisitorTime("9：5") === "09:05", `time ${normalizeVisitorTime("9：5")}`);
+expect(normalizeVisitorTime("1O:3O") === "10:30", `time O ${normalizeVisitorTime("1O:3O")}`);
+expect(normalizeVisitorRocDate("115/O8/19") === "115/08/19", `roc O ${normalizeVisitorRocDate("115/O8/19")}`);
+expect(digitsOnly("O9O") === "090", `digits O ${digitsOnly("O9O")}`);
+expect(normalizeVisitorNationalId("A12O456789") === "A120456789", `id O ${normalizeVisitorNationalId("A12O456789")}`);
+expect(normalizeVisitorNationalId("o123456789") === "O123456789", `id first O ${normalizeVisitorNationalId("o123456789")}`);
 expect(isIndoorPhone("0229282828") && isIndoorPhone("0912345678") && isIndoorPhone("912345678"), "indoor phone 0 or 9");
 expect(normalizeIndoorPhone("912345678") === "0912345678", `indoor prepend ${normalizeIndoorPhone("912345678")}`);
+expect(normalizeIndoorPhone("O912345678") === "0912345678", `indoor O ${normalizeIndoorPhone("O912345678")}`);
 expect(formatMohwPhone("02-2921-1234") === "0229211234", `phone clean ${formatMohwPhone("02-2921-1234")}`);
 expect(formatMohwPhone("0912abc3456") === "0912abc3456", `phone keep letters ${formatMohwPhone("0912abc3456")}`);
 

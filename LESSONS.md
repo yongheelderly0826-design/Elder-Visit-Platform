@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Care-form numbers must be foolproof for import
+
+- **Trigger:** Household-registration names can show `?`, and MOHW import rejects full-width `：` or English `O` typed as zero.
+- **Cause:** Visitors were given free-text date/time/phone fields; Google Forms previously let people type `O` instead of `0`.
+- **Rule:** Show full names and let visitors edit them. Date/time use fixed half-width separators; visitors type digits only. Convert lookalike `O` to `0` (keep a leading `O` on national IDs). ROC year: 3 digits stay as-is, 1–2 digits pad to 3.
+- **Evidence:** `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-life-care-export.ts`.
+- **Added on:** 2026-10-21
+
 ## Lesson: 訪視中 drill-down must use in-progress cases
 
 - **Trigger:** Managers expected「訪視中」date totals to equal the workflow count, but daily-visits summed assignments by due date.

@@ -21,8 +21,11 @@ import {
 } from "@/lib/domain/mohw-life-care-ui";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import {
+  digitsOnly,
   normalizeIndoorPhone,
   normalizeVisitorCareAnswers,
+  normalizeVisitorNationalId,
+  normalizeVisitorNumber,
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "@/lib/domain/mohw-life-care-export";
@@ -1124,7 +1127,15 @@ function CareFormInput({
     field.mohwKey === "name" ||
     field.key === "emergency_contact_name" ||
     field.mohwKey === "emergency_contact_name";
-  const isPhoneField = field.mohwKey === "phone" || field.key === "phone";
+  const isPhoneField = [
+    "phone",
+    "mobile",
+    "emergency_contact_phone",
+    "social_worker_phone",
+    "civil_worker_phone",
+  ].includes(field.mohwKey);
+  const isIdField = field.mohwKey.endsWith("national_id");
+  const isDecimalNumber = field.mohwKey === "height_cm" || field.mohwKey === "weight_kg";
 
   const errorText = error ? (
     <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
@@ -1216,13 +1227,33 @@ function CareFormInput({
     );
   }
 
-  const dateShown = field.type === "date" ? dateFieldValue(rawText) : rawText;
+  if (field.type === "date") {
+    return (
+      <div id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
+        <span>
+          {field.label}
+          {requiredMark}
+        </span>
+        <RocDateInput
+          value={rawText}
+          invalid={Boolean(error)}
+          describedBy={error ? errorId : undefined}
+          onChange={onChange}
+        />
+        <p className="text-xs font-normal leading-5 text-muted-foreground">
+          只填數字，斜線由系統帶入。三碼年不補 0，兩碼年會補成 099。
+        </p>
+        {errorText}
+      </div>
+    );
+  }
+
   const placeholder = isNameField
     ? "請填完整姓名"
     : isPhoneField
-      ? "0 或 9 開頭，例 0229282828、0912345678"
-      : field.type === "date"
-        ? "民國年／月／日，例 115/08/19；兩位數年會補成 099"
+      ? "只填數字，O 會自動改成 0"
+      : isIdField
+        ? "1 碼英文 + 9 碼數字；數字裡的 O 會改成 0"
         : undefined;
 
   return (
@@ -1231,31 +1262,37 @@ function CareFormInput({
       {requiredMark}
       <input
         className={controlClass}
-        type={field.type === "number" ? "number" : "text"}
-        inputMode={field.type === "date" || isPhoneField ? "numeric" : undefined}
+        type="text"
+        inputMode={isPhoneField || field.type === "number" ? "numeric" : undefined}
         placeholder={placeholder}
-        value={dateShown}
+        value={rawText}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={(event) => {
-          if (field.mohwKey.endsWith("national_id")) {
-            const normalized = event.target.value
-              .normalize("NFKC")
-              .trim()
-              .toUpperCase()
-              .replace(/[^A-Z0-9]/g, "");
-            if (normalized !== event.target.value) onChange(normalized);
+        onChange={(event) => {
+          const next = event.target.value;
+          if (isPhoneField) {
+            onChange(digitsOnly(next, 10));
             return;
           }
-          if (field.type === "date") {
-            const normalized = normalizeVisitorRocDate(event.target.value);
+          if (isIdField) {
+            onChange(normalizeVisitorNationalId(next));
+            return;
+          }
+          if (field.type === "number") {
+            onChange(normalizeVisitorNumber(next, isDecimalNumber));
+            return;
+          }
+          onChange(next);
+        }}
+        onBlur={(event) => {
+          if (isPhoneField) {
+            const normalized = normalizeIndoorPhone(event.target.value);
             if (normalized !== rawText) onChange(normalized);
             return;
           }
-          if (isPhoneField) {
-            const normalized = normalizeIndoorPhone(event.target.value);
-            if (normalized !== event.target.value) onChange(normalized);
+          if (isIdField) {
+            const normalized = normalizeVisitorNationalId(event.target.value);
+            if (normalized !== rawText) onChange(normalized);
           }
         }}
       />
@@ -1264,10 +1301,108 @@ function CareFormInput({
   );
 }
 
-function dateFieldValue(raw: string) {
-  const normalized = normalizeVisitorRocDate(raw);
-  if (normalized && /^\d{3}\/\d{2}\/\d{2}$/.test(normalized)) return normalized;
-  return raw;
+function splitRocDateParts(raw: string): [string, string, string] {
+  if (!raw.trim()) return ["", "", ""];
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw) || /^\d{4}\/\d{1,2}\/\d{1,2}/.test(raw)) {
+    const official = normalizeVisitorRocDate(raw);
+    if (/^\d{3}\/\d{2}\/\d{2}$/.test(official)) {
+      const [year, month, day] = official.split("/");
+      return [year, month, day];
+    }
+  }
+  const parts = raw.replace(/[-．。]/g, "/").split("/");
+  return [digitsOnly(parts[0] ?? "", 3), digitsOnly(parts[1] ?? "", 2), digitsOnly(parts[2] ?? "", 2)];
+}
+
+function boxedInputClass() {
+  return "w-12 bg-transparent text-center text-sm tabular-nums outline-none";
+}
+
+function RocDateInput({
+  value,
+  invalid,
+  describedBy,
+  onChange,
+}: {
+  value: string;
+  invalid: boolean;
+  describedBy?: string;
+  onChange: (value: string) => void;
+}) {
+  const monthRef = useRef<HTMLInputElement>(null);
+  const dayRef = useRef<HTMLInputElement>(null);
+  const [year, month, day] = splitRocDateParts(value);
+
+  function commit(nextYear: string, nextMonth: string, nextDay: string, pad: boolean) {
+    const yearText = digitsOnly(nextYear, 3);
+    const monthText = digitsOnly(nextMonth, 2);
+    const dayText = digitsOnly(nextDay, 2);
+    if (!yearText && !monthText && !dayText) {
+      onChange("");
+      return;
+    }
+    const joined = `${yearText}/${monthText}/${dayText}`;
+    onChange(pad && yearText && monthText && dayText ? normalizeVisitorRocDate(joined) : joined);
+  }
+
+  return (
+    <div
+      className={`flex h-10 items-center rounded-md bg-card px-2 ${
+        invalid ? "border border-destructive" : "border"
+      }`}
+    >
+      <input
+        className="w-14 bg-transparent text-center text-sm tabular-nums outline-none"
+        inputMode="numeric"
+        maxLength={3}
+        aria-label="民國年"
+        aria-invalid={invalid}
+        aria-describedby={describedBy}
+        value={year}
+        onChange={(event) => {
+          const next = digitsOnly(event.target.value, 3);
+          commit(next, month, day, false);
+          if (next.length === 3) monthRef.current?.focus();
+        }}
+        onBlur={(event) => commit(event.target.value, month, day, true)}
+      />
+      <span className="w-4 shrink-0 text-center text-base font-semibold leading-none" aria-hidden="true">
+        /
+      </span>
+      <input
+        ref={monthRef}
+        className={boxedInputClass()}
+        inputMode="numeric"
+        maxLength={2}
+        aria-label="月"
+        aria-invalid={invalid}
+        value={month}
+        onChange={(event) => {
+          const next = digitsOnly(event.target.value, 2);
+          commit(year, next, day, false);
+          if (next.length === 2) dayRef.current?.focus();
+        }}
+        onBlur={(event) => commit(year, event.target.value, day, true)}
+      />
+      <span className="w-4 shrink-0 text-center text-base font-semibold leading-none" aria-hidden="true">
+        /
+      </span>
+      <input
+        ref={dayRef}
+        className={boxedInputClass()}
+        inputMode="numeric"
+        maxLength={2}
+        aria-label="日"
+        aria-invalid={invalid}
+        value={day}
+        onChange={(event) => {
+          const next = digitsOnly(event.target.value, 2);
+          commit(year, month, next, false);
+        }}
+        onBlur={(event) => commit(year, month, event.target.value, true)}
+      />
+    </div>
+  );
 }
 
 function HalfwidthTimeInput({
@@ -1282,14 +1417,13 @@ function HalfwidthTimeInput({
   onChange: (value: string) => void;
 }) {
   const minuteRef = useRef<HTMLInputElement>(null);
-  const normalized = value.normalize("NFKC");
-  const [hour = "", minute = ""] = normalized.split(":");
-  const hourDigits = hour.replace(/\D/g, "").slice(0, 2);
-  const minuteDigits = minute.replace(/\D/g, "").slice(0, 2);
+  const [hour = "", minute = ""] = value.split(":");
+  const hourDigits = digitsOnly(hour, 2);
+  const minuteDigits = digitsOnly(minute, 2);
 
   function commit(nextHour: string, nextMinute: string, pad: boolean) {
-    const hourText = pad && nextHour ? nextHour.padStart(2, "0") : nextHour;
-    const minuteText = pad && nextMinute ? nextMinute.padStart(2, "0") : nextMinute;
+    const hourText = digitsOnly(nextHour, 2);
+    const minuteText = digitsOnly(nextMinute, 2);
     if (!hourText && !minuteText) {
       onChange("");
       return;
@@ -1304,7 +1438,7 @@ function HalfwidthTimeInput({
       }`}
     >
       <input
-        className="w-12 bg-transparent text-center text-sm tabular-nums outline-none"
+        className={boxedInputClass()}
         inputMode="numeric"
         maxLength={2}
         aria-label="時"
@@ -1312,28 +1446,28 @@ function HalfwidthTimeInput({
         aria-describedby={describedBy}
         value={hourDigits}
         onChange={(event) => {
-          const next = event.target.value.replace(/\D/g, "").slice(0, 2);
+          const next = digitsOnly(event.target.value, 2);
           commit(next, minuteDigits, false);
           if (next.length === 2) minuteRef.current?.focus();
         }}
-        onBlur={(event) => commit(event.target.value.replace(/\D/g, "").slice(0, 2), minuteDigits, true)}
+        onBlur={(event) => commit(event.target.value, minuteDigits, true)}
       />
       <span className="w-4 shrink-0 text-center text-base font-semibold leading-none" aria-hidden="true">
         :
       </span>
       <input
         ref={minuteRef}
-        className="w-12 bg-transparent text-center text-sm tabular-nums outline-none"
+        className={boxedInputClass()}
         inputMode="numeric"
         maxLength={2}
         aria-label="分"
         aria-invalid={invalid}
         value={minuteDigits}
         onChange={(event) => {
-          const next = event.target.value.replace(/\D/g, "").slice(0, 2);
+          const next = digitsOnly(event.target.value, 2);
           commit(hourDigits, next, false);
         }}
-        onBlur={(event) => commit(hourDigits, event.target.value.replace(/\D/g, "").slice(0, 2), true)}
+        onBlur={(event) => commit(hourDigits, event.target.value, true)}
       />
     </div>
   );

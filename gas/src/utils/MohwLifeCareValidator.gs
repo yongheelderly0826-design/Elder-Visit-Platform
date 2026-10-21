@@ -162,8 +162,14 @@ var MohwLifeCareValidator = (function () {
     return true;
   }
 
+  function lookalikeToZero(value) {
+    var text = String(value == null ? '' : value);
+    if (text.normalize) text = text.normalize('NFKC');
+    return text.replace(/[OoＯｏ〇○]/g, '0');
+  }
+
   function isHhMm(value) {
-    var m = String(value).match(/^(\d{2}):(\d{2})$/);
+    var m = lookalikeToZero(value).match(/^(\d{2}):(\d{2})$/);
     if (!m) return false;
     var h = Number(m[1]);
     var mm = Number(m[2]);
@@ -173,7 +179,9 @@ var MohwLifeCareValidator = (function () {
   function normId(value) {
     var text = String(value || '');
     if (text.normalize) text = text.normalize('NFKC');
-    return text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    text = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!text) return '';
+    return text.charAt(0) + text.slice(1).replace(/[O〇○]/g, '0');
   }
 
   function villageMissing(city, district, village) {
@@ -187,7 +195,7 @@ var MohwLifeCareValidator = (function () {
   }
 
   function isOfficialRoc(value) {
-    var text = asString(value);
+    var text = lookalikeToZero(asString(value));
     var m = text.match(/^(\d{3})\/(\d{2})\/(\d{2})$/);
     if (!m || Number(m[1]) < 1) return false;
     var y = Number(m[1]) + 1911, mo = Number(m[2]), d = Number(m[3]);
@@ -286,10 +294,10 @@ var MohwLifeCareValidator = (function () {
           pushErr(errors, k2, row, '選項不符合範本允許值（多選請用半形分號 ;）');
         }
       }
-      if (field.type === '數字' && !/^\d+(\.\d+)?$/.test(text)) {
+      if (field.type === '數字' && !/^\d+(\.\d+)?$/.test(lookalikeToZero(text))) {
         pushErr(errors, k2, row, '須填寫數字');
       }
-      if (['cohabitant_age', 'sons_count', 'daughters_count'].indexOf(k2) !== -1 && !/^\d+$/.test(text)) {
+      if (['cohabitant_age', 'sons_count', 'daughters_count'].indexOf(k2) !== -1 && !/^\d+$/.test(lookalikeToZero(text))) {
         pushErr(errors, k2, row, '須填寫非負整數');
       }
       if (k2 === 'social_worker_role_other' && text.length > 10) {
@@ -300,21 +308,25 @@ var MohwLifeCareValidator = (function () {
       }
 
 
-      if (ID_KEYS[k2] && (!/^[A-Za-z]\d{9}$/.test(text) || !Validation.validateTaiwanId(text))) {
-        var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
-        pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
+      if (ID_KEYS[k2]) {
+        var idText = normId(text);
+        if (!/^[A-Za-z]\d{9}$/.test(idText) || !Validation.validateTaiwanId(idText)) {
+          var idLabel = (MohwLifeCareMapper.headers && MohwLifeCareMapper.headers[col2 - 1]) || k2;
+          pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
+        }
       }
-      // 室內電話允許 0 開頭（市話或 09）或 9 開頭 9 碼；先去掉分隔符再檢查。
-      var phoneText = text;
+      // 室內電話允許 0 開頭（市話或 09）或 9 開頭 9 碼；先把 O 改成 0 再去掉分隔符。
+      var phoneText = lookalikeToZero(text);
       if (/^[0-9 ()\-]+$/.test(phoneText)) phoneText = phoneText.replace(/[ ()\-]/g, '');
-      if (k2 === 'mobile' && !/^09\d{8}$/.test(text)) {
+      if (/^9\d{8}$/.test(phoneText)) phoneText = '0' + phoneText;
+      if (k2 === 'mobile' && !/^09\d{8}$/.test(phoneText)) {
         pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼數字）');
       }
-      if (k2 === 'phone' && !/^(?:0\d{8,9}|9\d{8})$/.test(phoneText)) {
+      if (k2 === 'phone' && !/^0\d{8,9}$/.test(phoneText)) {
         pushErr(errors, k2, row, '室內電話請填 0 開頭（市話或 09 手機，9–10 碼）或 9 開頭的 9 碼手機');
       }
       if (['emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
-          !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)) {
+          !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(phoneText)) {
         pushErr(errors, k2, row, '電話格式不正確（請填含前導 0 的國內市話或手機，不含分機）');
       }
       if (DATE_KEYS[k2] && !isOfficialRoc(answers[k2])) {
