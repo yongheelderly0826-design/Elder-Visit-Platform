@@ -13,6 +13,7 @@ import {
   IdCard,
   KeyRound,
   Mail,
+  PenLine,
   Plus,
   RefreshCw,
   Save,
@@ -26,6 +27,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useCan } from "@/components/auth/permission-provider";
 import { Button } from "@/components/ui/button";
+import { VisitorCorrectionDialog } from "@/components/workspace/visitor-correction-dialog";
 import { workspaceRoles } from "@/lib/domain/permissions";
 import { visitors as defaultVisitors } from "@/lib/domain/assignments";
 import type {
@@ -42,6 +44,7 @@ import type {
   Workspace,
   WorkspaceRoleKey,
 } from "@/lib/domain/types";
+import type { VisitorCorrectionResult } from "@/lib/domain/user-management";
 
 type UsersPayload = {
   workspace: Workspace;
@@ -296,6 +299,37 @@ export function UsersPanel() {
     );
   }
 
+  function handleVisitorCorrected(result: VisitorCorrectionResult) {
+    setPayload((current) =>
+      current
+        ? {
+            ...current,
+            registrationRequests: current.registrationRequests.map((request) =>
+              request.id === result.requestId
+                ? {
+                    ...request,
+                    fullName: result.fullName,
+                    visitorRegistrationProfile: request.visitorRegistrationProfile
+                      ? {
+                          ...request.visitorRegistrationProfile,
+                          phone: result.phone || request.visitorRegistrationProfile.phone,
+                          displayName:
+                            result.displayName ?? request.visitorRegistrationProfile.displayName,
+                          headshotProcessedUrl: result.photoUpdated
+                            ? `/api/users/gas-headshot/${encodeURIComponent(result.visitorId)}?ts=${Date.now()}`
+                            : request.visitorRegistrationProfile.headshotProcessedUrl,
+                        }
+                      : request.visitorRegistrationProfile,
+                  }
+                : request,
+            ),
+          }
+        : current,
+    );
+    setRegistrationMessage(result.message);
+    void loadUsers();
+  }
+
   function handleVisitorVerified(requestId: string) {
     setPayload((current) =>
       current
@@ -456,6 +490,7 @@ export function UsersPanel() {
             requests={formalApprovedRequests}
             onInvited={handleVisitorInvited}
             onVerified={handleVisitorVerified}
+            onCorrected={handleVisitorCorrected}
           />
           )}
 
@@ -467,6 +502,7 @@ export function UsersPanel() {
               )}
               onInvited={handleVisitorInvited}
               onVerified={handleVisitorVerified}
+              onCorrected={handleVisitorCorrected}
             />
           )}
 
@@ -953,11 +989,13 @@ function ApprovedVisitorRegistry({
   requests,
   onInvited,
   onVerified,
+  onCorrected,
 }: {
   mode: "approved" | "supplement";
   requests: UserRegistrationRequest[];
   onInvited: (result: VisitorInvitationResult) => void;
   onVerified: (requestId: string) => void;
+  onCorrected: (result: VisitorCorrectionResult) => void;
 }) {
   const canManageUsers = useCan("users.manage");
   const [query, setQuery] = useState("");
@@ -970,6 +1008,7 @@ function ApprovedVisitorRegistry({
   const [batchAction, setBatchAction] = useState<"invite" | "verify" | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [generatedPasswordUrl, setGeneratedPasswordUrl] = useState<string | null>(null);
+  const [correctingRequest, setCorrectingRequest] = useState<UserRegistrationRequest | null>(null);
   const [exportingPhotos, setExportingPhotos] = useState(false);
   const [exportingPassbooks, setExportingPassbooks] = useState(false);
   const baseFilteredRequests = useMemo(() => {
@@ -1736,6 +1775,17 @@ function ApprovedVisitorRegistry({
                       {resettingPasswordRequestId === request.id ? "寄送中" : "重設密碼"}
                     </Button>
                   )}
+                {canManageUsers && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setCorrectingRequest(request)}
+                  >
+                    <PenLine className="h-4 w-4" />
+                    補正姓名／照片
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant={isAssignableVisitor(request) ? "outline" : "default"}
@@ -1903,6 +1953,17 @@ function ApprovedVisitorRegistry({
                             {resettingPasswordRequestId === request.id ? "寄送中" : "重設密碼"}
                           </Button>
                         )}
+                      {canManageUsers && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCorrectingRequest(request)}
+                        >
+                          <PenLine className="h-4 w-4" />
+                          補正
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         size="sm"
@@ -1946,6 +2007,17 @@ function ApprovedVisitorRegistry({
         CSV 與 JSON 僅提供名冊和照片狀態；需交付證件照時，請使用「匯出證件照 ZIP」，照片會依訪員正式編碼命名。
       </p>
       )}
+      {correctingRequest ? (
+        <VisitorCorrectionDialog
+          request={correctingRequest}
+          onClose={() => setCorrectingRequest(null)}
+          onSaved={(result) => {
+            setCorrectingRequest(null);
+            setInviteMessage(result.message);
+            onCorrected(result);
+          }}
+        />
+      ) : null}
     </section>
   );
 }

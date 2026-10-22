@@ -24,6 +24,9 @@ var ApiRouter = (function () {
     'accounts.upsertAuth': function (p, b) { return UserAccountModule.accounts.upsertAuth(b); },
     'accounts.getHeadshot': function (p) { return UserAccountModule.accounts.getHeadshot(p); },
     'accounts.setHeadshot': function (p, b) { return UserAccountModule.accounts.setHeadshot(b || p); },
+    'accounts.patchApprovedVisitor': function (p, b) {
+      return UserAccountModule.accounts.patchApprovedVisitor(b || p);
+    },
     'accounts.sendLoginCredentials': function (p, b) {
       return UserAccountModule.accounts.sendLoginCredentials(b || p);
     },

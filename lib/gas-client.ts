@@ -262,6 +262,25 @@ export const gasClient = {
         photo_url: string;
         registrations_updated: number;
       }>("accounts.setHeadshot", { method: "POST", body }),
+    patchApprovedVisitor: (body: {
+      visitor_id?: string;
+      request_id?: string;
+      name?: string;
+      phone?: string;
+      data_url?: string;
+      base64?: string;
+      mime?: string;
+    }) =>
+      gasFetch<{
+        visitor_id: string;
+        name: string;
+        phone: string;
+        email: string;
+        photo_url: string;
+        photo_updated: boolean;
+        registrations_updated: number;
+        accounts_updated: number;
+      }>("accounts.patchApprovedVisitor", { method: "POST", body }),
     sendLoginCredentials: (body: {
       email: string;
       full_name?: string;

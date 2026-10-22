@@ -544,6 +544,128 @@ var UserAccountModule = (function () {
     };
   }
 
+  function rebuildDisplayName_(profile, fullName) {
+    var root = String(profile.rootUnitName || '永和區公所');
+    var department =
+      profile.departmentName === '其他'
+        ? String(profile.departmentOther || '').trim() || '其他單位'
+        : String(profile.departmentName || '');
+    var jobTitle =
+      profile.jobTitle === '其他'
+        ? String(profile.jobTitleOther || '').trim() || '其他職稱'
+        : profile.jobTitle === '其他（鄰長）'
+          ? '鄰長'
+          : String(profile.jobTitle || '');
+    return root + department + '-' + fullName + '-' + jobTitle;
+  }
+
+  function normalizeVisitorPhone_(value) {
+    var digits = String(value || '').replace(/[０-９]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30);
+    }).replace(/\D/g, '');
+    if (/^9\d{8}$/.test(digits)) return '0' + digits;
+    return digits;
+  }
+
+  /**
+   * 承辦補正已核准訪員：只允許姓名、電話、證件照。
+   * 同步訪查員主檔、註冊檔與登入帳號顯示名稱。
+   */
+  function patchApprovedVisitor(data) {
+    return withLock_(function () {
+      data = data || {};
+      var visitorId = String(data.visitor_id || '');
+      var requestId = String(data.request_id || '');
+      if (!visitorId && requestId) {
+        var linked = findOne_(REGISTRATIONS, 'request_id', requestId);
+        visitorId = linked ? String(linked.visitor_id || '') : '';
+      }
+      if (!visitorId) throw error_('VALIDATION_ERROR', '缺少 visitor_id。');
+
+      var visitor = findOne_(VISITORS, 'visitor_id', visitorId);
+      if (!visitor) throw error_('NOT_FOUND', '找不到訪查員：' + visitorId);
+
+      var name = data.name != null ? String(data.name).trim() : '';
+      var phone = data.phone != null ? normalizeVisitorPhone_(data.phone) : '';
+      var dataUrl = String(data.data_url || '');
+      if (!dataUrl && data.base64) {
+        dataUrl =
+          'data:' +
+          String(data.mime || 'image/jpeg') +
+          ';base64,' +
+          String(data.base64);
+      }
+      var hasPhoto = /^data:image\/[A-Za-z0-9.+-]+;base64,/.test(dataUrl);
+      if (!name && !phone && !hasPhoto) {
+        throw error_('VALIDATION_ERROR', '請至少修改姓名、電話或證件照其中一項。');
+      }
+      if (name && name.length < 2) {
+        throw error_('VALIDATION_ERROR', '姓名至少 2 個字。');
+      }
+      if (phone && !/^09\d{8}$/.test(phone)) {
+        throw error_('VALIDATION_ERROR', '手機請填 09 開頭的 10 碼數字。');
+      }
+
+      var now = now_();
+      var visitorPatch = { updated_at: now };
+      if (name) visitorPatch.name = name;
+      if (phone) visitorPatch.phone = phone;
+      var photoUrl = '';
+      if (hasPhoto) {
+        photoUrl = persistDataImage_(dataUrl, visitorId + '-headshot-' + Date.now());
+        visitorPatch.photo_url = photoUrl;
+      }
+      SheetHelper.updateByKey(VISITORS, 'visitor_id', visitorId, visitorPatch);
+
+      var registrations = SheetHelper.rowsToObjects(SheetHelper.getSheet(REGISTRATIONS));
+      var updatedRegs = 0;
+      for (var i = 0; i < registrations.length; i++) {
+        if (String(registrations[i].visitor_id || '') !== visitorId) continue;
+        var profile = parseProfile_(registrations[i]);
+        if (name) profile.displayName = rebuildDisplayName_(profile, name);
+        if (phone) profile.phone = phone;
+        if (photoUrl) {
+          profile.headshotProcessedUrl = photoUrl;
+          profile.headshotOriginalUrl = photoUrl;
+        }
+        var registrationPatch = {
+          profile_json: JSON.stringify(profile),
+          updated_at: now,
+        };
+        if (name) registrationPatch.full_name = name;
+        SheetHelper.updateByKey(REGISTRATIONS, 'request_id', registrations[i].request_id, registrationPatch);
+        updatedRegs += 1;
+      }
+
+      var updatedAccounts = 0;
+      if (name) {
+        var accounts = SheetHelper.rowsToObjects(SheetHelper.getSheet(ACCOUNTS));
+        for (var j = 0; j < accounts.length; j++) {
+          if (String(accounts[j].visitor_id || '') !== visitorId) continue;
+          SheetHelper.updateByKey(ACCOUNTS, 'account_id', accounts[j].account_id, {
+            full_name: name,
+            updated_at: now,
+          });
+          updatedAccounts += 1;
+        }
+      }
+
+      if (typeof ReadCache !== 'undefined' && ReadCache.bump) ReadCache.bump();
+
+      var latest = findOne_(VISITORS, 'visitor_id', visitorId) || visitor;
+      return {
+        visitor_id: visitorId,
+        name: String(latest.name || ''),
+        phone: String(latest.phone || ''),
+        email: String(latest.email || ''),
+        photo_url: String(latest.photo_url || ''),
+        photo_updated: Boolean(photoUrl),
+        registrations_updated: updatedRegs,
+        accounts_updated: updatedAccounts,
+      };
+    });
+  }
+
   /** 替換訪員證件照：寫入 Drive，更新主檔 photo_url 與註冊 profile。 */
   function setHeadshot(data) {
     return withLock_(function () {
@@ -663,6 +785,7 @@ var UserAccountModule = (function () {
       upsertAuth: upsertAuth,
       getHeadshot: getHeadshot,
       setHeadshot: setHeadshot,
+      patchApprovedVisitor: patchApprovedVisitor,
       sendLoginCredentials: sendLoginCredentials,
     },
   };

@@ -1,4 +1,5 @@
 import { getCurrentWorkspace } from "@/lib/domain/mock-data";
+import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import { getRuntimeEnvValue, hasRuntimeEnvValue } from "@/lib/runtime/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getHeadshotPreviewUrl, uploadRegistrationHeadshot } from "@/lib/domain/visitor-headshots";
@@ -448,6 +449,101 @@ export async function issueGasPasswordLink(
     };
   } catch (error) {
     throw new Error(toGasUserMessage(error, mode === "invite" ? "無法產生設定密碼連結。" : "無法產生重設密碼連結。"));
+  }
+}
+
+export type VisitorCorrectionInput = {
+  requestId: string;
+  fullName?: string;
+  phone?: string;
+  headshotDataUrl?: string;
+};
+
+export type VisitorCorrectionResult = {
+  requestId: string;
+  visitorId: string;
+  fullName: string;
+  phone: string;
+  photoUpdated: boolean;
+  displayName: string | null;
+  message: string;
+};
+
+export async function correctApprovedVisitor(
+  input: VisitorCorrectionInput,
+): Promise<VisitorCorrectionResult> {
+  const requestId = input.requestId.trim();
+  if (!requestId) {
+    throw new Error("缺少訪員註冊申請編號。");
+  }
+
+  const registration = await gasClient.registrations.get(requestId);
+  if (!registration) {
+    throw new Error("找不到這位訪員的註冊資料。");
+  }
+  if (normalizeRegistrationStatus(registration.status) !== "approved") {
+    throw new Error("僅能補正已通過的訪員。");
+  }
+
+  const visitorId = String(registration.visitor_id || "").trim();
+  if (!visitorId) {
+    throw new Error("這筆申請還沒有訪員編碼，無法補正。");
+  }
+
+  const fullName = input.fullName?.trim() ?? "";
+  const phone = input.phone != null ? normalizeTaiwanMobilePhone(input.phone) : "";
+  const headshotDataUrl = input.headshotDataUrl?.trim() ?? "";
+
+  if (!fullName && !phone && !headshotDataUrl) {
+    throw new Error("請至少修改姓名、電話或證件照其中一項。");
+  }
+  if (fullName && fullName.length < 2) {
+    throw new Error("姓名至少 2 個字。");
+  }
+  if (phone && !/^09\d{8}$/.test(phone)) {
+    throw new Error("手機請填 09 開頭的 10 碼數字。");
+  }
+  if (headshotDataUrl && !/^data:image\/[A-Za-z0-9.+-]+;base64,/.test(headshotDataUrl)) {
+    throw new Error("證件照格式不正確，請重新選擇照片。");
+  }
+
+  try {
+    const patched = await gasClient.accounts.patchApprovedVisitor({
+      visitor_id: visitorId,
+      request_id: requestId,
+      ...(fullName ? { name: fullName } : {}),
+      ...(phone ? { phone } : {}),
+      ...(headshotDataUrl ? { data_url: headshotDataUrl } : {}),
+    });
+    const nextName = patched.name || fullName || registration.full_name;
+    const profile = registration.profile ?? {};
+    const displayName = fullName
+      ? createVisitorDisplayName({
+          rootUnitName: String(profile.rootUnitName || "永和區公所"),
+          departmentName: String(profile.departmentName || "其他"),
+          departmentOther: typeof profile.departmentOther === "string" ? profile.departmentOther : null,
+          fullName: nextName,
+          jobTitle: String(profile.jobTitle || "其他"),
+          jobTitleOther: typeof profile.jobTitleOther === "string" ? profile.jobTitleOther : null,
+        })
+      : typeof profile.displayName === "string"
+        ? profile.displayName
+        : null;
+    const changed: string[] = [];
+    if (fullName) changed.push("姓名");
+    if (phone) changed.push("電話");
+    if (patched.photo_updated) changed.push("證件照");
+    return {
+      requestId,
+      visitorId: patched.visitor_id,
+      fullName: nextName,
+      phone: patched.phone || phone || String(profile.phone || ""),
+      photoUpdated: patched.photo_updated,
+      displayName,
+      message: `${nextName} 已更新${changed.join("、") || "資料"}。`,
+    };
+  } catch (error) {
+    throw new Error(toGasUserMessage(error, "訪員資料補正失敗，請稍後再試。"));
   }
 }
 
@@ -986,7 +1082,7 @@ function normalizeRegistrationNationalId(value: string | null | undefined) {
 }
 
 function normalizeRegistrationPhone(value: string | null | undefined) {
-  return (value ?? "").replace(/[^\d+]/g, "");
+  return normalizeTaiwanMobilePhone(value);
 }
 
 function getDuplicateRegistrationChecks(request: UserRegistrationRequest) {

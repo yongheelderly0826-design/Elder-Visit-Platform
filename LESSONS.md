@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Manager visitor corrections stay on the approved roster
+
+- **Trigger:** Badge photos and roster names were wrong; operators had to patch Drive via scripts.
+- **Cause:** GAS already had `visitors.update` / `accounts.setHeadshot`, but the users panel had no whitelist editor.
+- **Rule:** First version only corrects name, mobile, and headshot on approved visitors. Do not expose generic sheet updates. Keep old Drive photos. Sync 訪查員主檔, 註冊檔, and login display name together.
+- **Evidence:** `components/workspace/visitor-correction-dialog.tsx`, `gas/src/modules/UserAccountModule.gs` `patchApprovedVisitor`.
+- **Added on:** 2026-10-22
+
 ## Lesson: Care-form numbers must be foolproof for import
 
 - **Trigger:** Household-registration names can show `?`, and MOHW import rejects full-width `：` or English `O` typed as zero.
