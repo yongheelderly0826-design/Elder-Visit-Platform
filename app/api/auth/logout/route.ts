@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedNext = request.nextUrl.searchParams.get("next");
-  const nextPath = requestedNext === "/visitor/login" ? requestedNext : "/login";
+  const allowedNext = new Set(["/login", "/login/manager", "/yonghe", "/visitor/login"]);
+  const nextPath = requestedNext && allowedNext.has(requestedNext) ? requestedNext : "/login";
   const response = NextResponse.redirect(new URL(nextPath, request.url));
 
   response.cookies.set("demo_role", "", {

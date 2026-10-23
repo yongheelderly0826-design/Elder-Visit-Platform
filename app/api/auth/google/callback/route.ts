@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const stateRaw = url.searchParams.get("state");
 
   if (error || !code) {
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error ?? "google_denied")}`, request.url));
+    return NextResponse.redirect(new URL(`/yonghe?error=${encodeURIComponent(error ?? "google_denied")}`, request.url));
   }
 
   let nextPath = "/dashboard";
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=google_token", request.url));
+    return NextResponse.redirect(new URL("/yonghe?error=google_token", request.url));
   }
 
   const tokenJson = (await tokenRes.json()) as GoogleTokenResponse;
@@ -66,14 +66,14 @@ export async function GET(request: Request) {
   });
 
   if (!userRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=google_profile", request.url));
+    return NextResponse.redirect(new URL("/yonghe?error=google_profile", request.url));
   }
 
   const profile = (await userRes.json()) as GoogleUserInfo;
   const email = profile.email?.toLowerCase();
 
   if (!email || !isAllowedManagerEmail(email)) {
-    return NextResponse.redirect(new URL("/login?error=not_allowed", request.url));
+    return NextResponse.redirect(new URL("/yonghe?error=not_allowed", request.url));
   }
 
   const session = encodeManagerSession({

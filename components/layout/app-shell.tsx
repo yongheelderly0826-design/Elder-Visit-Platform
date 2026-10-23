@@ -115,7 +115,13 @@ export async function AppShell({
             <p className="mt-1 text-sm font-semibold">{role.label}</p>
           </div>
           <a
-            href="/api/auth/logout"
+            href={
+              roleKey === "visitor"
+                ? "/api/auth/logout?next=/visitor/login"
+                : roleKey === "workspace_owner" || roleKey === "workspace_manager"
+                  ? "/api/auth/logout?next=/yonghe"
+                  : "/api/auth/logout"
+            }
             className="mt-3 flex h-10 items-center justify-center gap-2 rounded-md border bg-background text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <LogOut className="h-4 w-4" />

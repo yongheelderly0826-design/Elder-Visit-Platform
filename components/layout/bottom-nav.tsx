@@ -136,7 +136,9 @@ export function BottomNav({
               href={
                 roleKey === "visitor"
                   ? "/api/auth/logout?next=/visitor/login"
-                  : "/api/auth/logout"
+                  : roleKey === "workspace_owner" || roleKey === "workspace_manager"
+                    ? "/api/auth/logout?next=/yonghe"
+                    : "/api/auth/logout"
               }
               className="flex h-10 items-center justify-center gap-2 rounded-md border bg-background text-sm font-medium text-muted-foreground"
             >

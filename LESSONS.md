@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Manager default-email login stays off the public home
+
+- **Trigger:** The public login showed the prefilled 管理者 Google 帳號 entry.
+- **Cause:** `/login` mixed visitor email/password with the allowlisted manager shortcut.
+- **Rule:** Keep the manager default-email form on unlisted `/yonghe` (no public link). Homepage `/`, `/register`, and `/login` only show visitor register/login. Old `/login/manager` redirects to `/yonghe`.
+- **Evidence:** `app/yonghe/page.tsx`, `components/auth/manager-login-panel.tsx`, `components/auth/login-panel.tsx`.
+- **Added on:** 2026-10-23
+
 ## Lesson: Manager visitor corrections stay on the approved roster
 
 - **Trigger:** Badge photos and roster names were wrong; operators had to patch Drive via scripts.

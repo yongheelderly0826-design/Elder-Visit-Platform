@@ -30,15 +30,16 @@
 
 | 項目 | 內容 |
 |------|------|
-| 網址 | https://elder-visit-platform-ruby.vercel.app/login |
-| 承辦人登入 | 輸入 `yongheelderly0826@gmail.com` → 按 **以管理者進入** |
+| 訪員／註冊入口 | https://elder-visit-platform-ruby.vercel.app/login |
+| 承辦人登入（不公開顯示） | https://elder-visit-platform-ruby.vercel.app/yonghe |
+| 承辦人帳號 | 輸入 `yongheelderly0826@gmail.com` → 按 **以管理者進入** |
 | 訪員登入 | 使用 Email ＋ 密碼（須先完成註冊並經承辦審核） |
 
 ### 2.2 備用／開發網站
 
 | 網址 | 說明 |
 |------|------|
-| https://elder-visit-platform.vercel.app/login | 同一套 GAS 後端，資料相同 |
+| https://elder-visit-platform.vercel.app/yonghe | 同一套 GAS 後端，資料相同；承辦入口同樣不公開顯示 |
 
 ### 2.3 直接編輯試算表（進階）
 

@@ -57,7 +57,7 @@ GOOGLE_OWNER_EMAILS=yongheelderly0826@gmail.com
 npm run dev
 ```
 
-瀏覽器開：http://localhost:3000/login  
+瀏覽器開：http://localhost:3000/yonghe（此頁不公開顯示於首頁／訪員登入）  
 輸入：`yongheelderly0826@gmail.com` → **以管理者進入**
 
 ### 4. 直接看／改資料（可選）

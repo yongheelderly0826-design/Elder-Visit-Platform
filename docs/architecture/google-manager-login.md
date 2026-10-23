@@ -13,7 +13,7 @@
 ## 管理者怎麼用
 
 1. 本機執行 `npm run dev`
-2. 開啟 http://localhost:3000/login
+2. 開啟 http://localhost:3000/yonghe（此頁不公開顯示於首頁／訪員登入）
 3. 輸入 `yongheelderly0826@gmail.com` → **以管理者進入**
 4. 進入 `/dashboard` 管理個案、派案、匯入、報表
 
