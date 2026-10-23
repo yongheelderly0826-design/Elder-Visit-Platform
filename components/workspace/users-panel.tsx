@@ -911,6 +911,7 @@ function PendingReviewDeck({
             </div>
 
             <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
+              <StatusTile label="註冊時間" value={formatRosterDateTime(currentRequest.submittedAt)} />
               <StatusTile label="申請單位" value={currentRequest.requestedUnitName} />
               <StatusTile label="科室 / 類別" value={`${profile?.departmentName ?? "未填"} / ${workerLabel}`} />
               <StatusTile label="職稱" value={profile ? normalizedJobTitle(profile) : "未填"} />
@@ -1283,6 +1284,7 @@ function ApprovedVisitorRegistry({
         訪員正式編碼: profile?.visitorCode ?? "",
         顯示名稱: profile?.displayName ?? request.fullName,
         姓名: request.fullName,
+        註冊時間: formatRosterDateTime(request.submittedAt),
         信箱: request.email,
         公務信箱: profile?.officialEmail ?? "",
         手機: profile?.phone ?? "",
@@ -1725,6 +1727,7 @@ function ApprovedVisitorRegistry({
                 </div>
               )}
               <div className="mt-3 grid gap-2 rounded-md bg-secondary/50 p-3 text-sm sm:grid-cols-2">
+                <p>註冊時間：{formatRosterDateTime(request.submittedAt)}</p>
                 <p>手機：{profile?.phone ?? "未填"}</p>
                 <p>訪員證：{profile?.visitorCertificateNo ?? "待補"}</p>
                 <p>訓練：{profile?.trainingCompleted ? "已完成" : "未完成"}</p>
@@ -1866,6 +1869,9 @@ function ApprovedVisitorRegistry({
                     <p className="font-medium">{request.fullName}</p>
                     <p className="mt-1 max-w-[240px] text-xs text-muted-foreground">
                       {profile?.displayName ?? request.fullName}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      註冊 {formatRosterDateTime(request.submittedAt)}
                     </p>
                   </td>
                   <td className="px-3 py-3">
@@ -2111,6 +2117,21 @@ function formatDateTime(value: string) {
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+      }).format(parsed);
+}
+
+function formatRosterDateTime(value: string | null | undefined) {
+  if (!value?.trim()) return "未記錄";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat("zh-TW", {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
       }).format(parsed);
 }
 
