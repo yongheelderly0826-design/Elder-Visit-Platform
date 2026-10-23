@@ -30,7 +30,22 @@ export type GasBadgePrintVisitor = {
   hasPhoto: boolean;
 };
 
-export type GasBadgePrintMode = "front" | "back" | "duplex";
+export type GasBadgePrintMode = "front" | "back" | "duplex" | "check";
+
+/** 直式 A4、長邊翻面：左右對調。0↔1、2↔3 */
+export function duplexLongEdgeSlot(frontIndex: number): number {
+  return frontIndex ^ 1;
+}
+
+/** 把正面 2×2 的人放到翻面後會對準的背面格子。 */
+export function placeBackSlots<T>(frontChunk: T[], size = GAS_BADGES_PER_A4_PAGE): Array<T | null> {
+  const slots: Array<T | null> = Array.from({ length: size }, () => null);
+  frontChunk.forEach((item, frontIndex) => {
+    if (frontIndex >= size) return;
+    slots[duplexLongEdgeSlot(frontIndex)] = item;
+  });
+  return slots;
+}
 
 function asVisitorRows(data: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(data)) return data as Array<Record<string, unknown>>;

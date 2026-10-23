@@ -6,13 +6,16 @@ import { GasSleeveBadgeTile } from "@/components/badges/gas-sleeve-badge-tile";
 import { PrintButton } from "@/components/badges/print-button";
 import {
   chunkForA4Pages,
+  placeBackSlots,
   type GasBadgePrintMode,
   type GasBadgePrintVisitor,
 } from "@/lib/domain/gas-physical-badge-print";
 
 type SheetPage =
   | { kind: "front"; visitors: GasBadgePrintVisitor[] }
-  | { kind: "back"; count: number };
+  | { kind: "back"; slots: Array<GasBadgePrintVisitor | null> }
+  | { kind: "check-front" }
+  | { kind: "check-back" };
 
 const HEADSHOT_CONCURRENCY = 3;
 
@@ -142,7 +145,10 @@ export function GasBadgePrintSheet({
 
   const pages = useMemo(() => buildPages(visitors, mode), [visitors, mode]);
   const withPhoto = visitors.filter((row) => row.hasPhoto).length;
-  const imagesReady = !loading && !portraitsLoading && visitors.length > 0;
+  const imagesReady =
+    mode === "check"
+      ? !loading
+      : !loading && !portraitsLoading && visitors.length > 0;
 
   return (
     <div className="gas-print-root min-h-screen bg-slate-100 text-slate-950 print:bg-white">
@@ -152,7 +158,7 @@ export function GasBadgePrintSheet({
         <div>
           <h1 className="text-lg font-semibold">GAS 紙本訪員證（證件套）列印</h1>
           <p className="mt-1 text-sm text-slate-600">
-            A4 每頁 2×2 張，可裁切。正面含證件照與姓名；背面為統一守則版。證件照會限速載入，請等完成後再列印。
+            A4 每頁 2×2 張，可裁切。只印一張時背面會左右對調，長邊翻面後才會對準正面。請先用「對位檢查」印一組數字確認，再雙面列印。
           </p>
           <p className="mt-2 text-sm text-slate-500">
             {loading
@@ -173,7 +179,8 @@ export function GasBadgePrintSheet({
               [
                 ["front", "只印正面"],
                 ["back", "只印背面"],
-                ["duplex", "正反交錯（雙面）"],
+                ["duplex", "雙面列印"],
+                ["check", "對位檢查"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -200,22 +207,27 @@ export function GasBadgePrintSheet({
         </div>
       )}
 
-      {loading ? (
+      {loading && mode !== "check" ? (
         <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin" />
           正在讀取 GAS 訪員名冊…
         </div>
-      ) : visitors.length === 0 ? (
+      ) : visitors.length === 0 && mode !== "check" ? (
         <div className="mx-auto max-w-5xl rounded-lg border border-dashed bg-white p-8 text-center text-slate-500">
           沒有可列印的已核准訪員。請確認 GAS 名冊後再試。
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-full flex-col items-center gap-6 print:max-w-none print:gap-0">
-          {portraitsLoading && (
+          {portraitsLoading && mode !== "check" && (
             <div className="print:hidden flex items-center justify-center gap-2 rounded-lg border bg-white p-3 text-sm text-slate-600">
               <Loader2 className="h-4 w-4 animate-spin" />
               正在限速載入證件照（每次 {HEADSHOT_CONCURRENCY} 張），請勿關閉此頁…
             </div>
+          )}
+          {mode === "check" && (
+            <p className="print:hidden mx-auto max-w-5xl rounded-md border bg-white px-3 py-2 text-sm text-slate-600">
+              請用雙面、長邊翻面列印這兩頁。翻面後對光看，同一格應看到同一個數字。若 1 對到 2，代表印表機改成了短邊翻面。
+            </p>
           )}
           {pages.map((page, pageIndex) => (
             <section
@@ -236,18 +248,38 @@ export function GasBadgePrintSheet({
                         <p className="cut-caption print:hidden">{visitor.visitorId}</p>
                       </div>
                     ))
-                  : Array.from({ length: page.count }).map((_, index) => (
-                      <div key={`back-${pageIndex}-${index}`} className="a4-cell">
-                        <GasSleeveBadgeTile side="back" />
+                  : null}
+                {page.kind === "front"
+                  ? Array.from({ length: Math.max(0, 4 - page.visitors.length) }).map((_, index) => (
+                      <div key={`empty-${pageIndex}-${index}`} className="a4-cell a4-cell-empty" />
+                    ))
+                  : null}
+                {page.kind === "back"
+                  ? page.slots.map((visitor, index) =>
+                      visitor ? (
+                        <div key={`${visitor.visitorId}-back-${index}`} className="a4-cell">
+                          <GasSleeveBadgeTile side="back" />
+                        </div>
+                      ) : (
+                        <div key={`back-empty-${pageIndex}-${index}`} className="a4-cell a4-cell-empty" />
+                      ),
+                    )
+                  : null}
+                {page.kind === "check-front" || page.kind === "check-back"
+                  ? checkSlotNumbers(page.kind).map((label, index) => (
+                      <div key={`${page.kind}-${index}`} className="a4-cell">
+                        <div className="align-check-cell">
+                          <span className="align-check-num">{label}</span>
+                          <span className="align-check-cap">
+                            {page.kind === "check-front" ? "正面" : "背面"}
+                          </span>
+                        </div>
                       </div>
-                    ))}
-                {page.kind === "front" &&
-                  Array.from({ length: Math.max(0, 4 - page.visitors.length) }).map((_, index) => (
-                    <div key={`empty-${pageIndex}-${index}`} className="a4-cell a4-cell-empty" />
-                  ))}
+                    ))
+                  : null}
               </div>
               <p className="page-footer print:hidden">
-                第 {pageIndex + 1} / {pages.length} 面 · {page.kind === "front" ? "正面" : "背面"}
+                第 {pageIndex + 1} / {pages.length} 面 · {pageLabel(page.kind)}
               </p>
             </section>
           ))}
@@ -258,6 +290,10 @@ export function GasBadgePrintSheet({
 }
 
 function buildPages(visitors: GasBadgePrintVisitor[], mode: GasBadgePrintMode): SheetPage[] {
+  if (mode === "check") {
+    return [{ kind: "check-front" }, { kind: "check-back" }];
+  }
+
   const frontChunks = chunkForA4Pages(visitors);
   if (frontChunks.length === 0) return [];
 
@@ -265,15 +301,26 @@ function buildPages(visitors: GasBadgePrintVisitor[], mode: GasBadgePrintMode): 
     return frontChunks.map((chunk) => ({ kind: "front", visitors: chunk }));
   }
   if (mode === "back") {
-    return frontChunks.map((chunk) => ({ kind: "back", count: chunk.length }));
+    return frontChunks.map((chunk) => ({ kind: "back", slots: placeBackSlots(chunk) }));
   }
 
   const duplex: SheetPage[] = [];
   for (const chunk of frontChunks) {
     duplex.push({ kind: "front", visitors: chunk });
-    duplex.push({ kind: "back", count: chunk.length });
+    duplex.push({ kind: "back", slots: placeBackSlots(chunk) });
   }
   return duplex;
+}
+
+function checkSlotNumbers(kind: "check-front" | "check-back"): number[] {
+  const front = [1, 2, 3, 4];
+  if (kind === "check-front") return front;
+  return placeBackSlots(front).map((value) => value ?? 0);
+}
+
+function pageLabel(kind: SheetPage["kind"]) {
+  if (kind === "front" || kind === "check-front") return "正面";
+  return "背面";
 }
 
 const printStyles = `
@@ -354,6 +401,30 @@ const printStyles = `
     text-align: center;
     font-size: 12px;
     color: #64748b;
+  }
+
+  .align-check-cell {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1.2pt solid #0f766e;
+    background: #f0fdfa;
+    color: #0f766e;
+  }
+
+  .align-check-num {
+    font-size: 48pt;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .align-check-cap {
+    margin-top: 4mm;
+    font-size: 14pt;
+    font-weight: 600;
   }
 
   @media print {

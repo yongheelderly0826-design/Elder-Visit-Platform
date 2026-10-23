@@ -24,6 +24,8 @@ export default async function GasPhysicalBadgePrintPage({
 }
 
 function parseMode(value?: string): GasBadgePrintMode {
-  if (value === "front" || value === "back" || value === "duplex") return value;
+  if (value === "front" || value === "back" || value === "duplex" || value === "check") {
+    return value;
+  }
   return "duplex";
 }

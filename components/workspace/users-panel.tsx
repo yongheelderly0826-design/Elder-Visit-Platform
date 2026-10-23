@@ -1438,7 +1438,7 @@ function ApprovedVisitorRegistry({
         : "GAS 全部已核准訪員";
 
     const confirmed = window.confirm(
-      `將開啟紙本證件套列印頁（A4、2×2 裁切），範圍：${scopeLabel}。\n\n可於列印頁選擇「只印正面／只印背面／正反交錯（雙面）」。`,
+      `將開啟紙本證件套列印頁（A4、2×2 裁切），範圍：${scopeLabel}。\n\n可先印「對位檢查」確認長邊翻面後數字重合，再選「雙面列印」。`,
     );
     if (!confirmed) return;
 
