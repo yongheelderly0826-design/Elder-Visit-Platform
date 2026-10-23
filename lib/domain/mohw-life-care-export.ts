@@ -299,10 +299,40 @@ export function normalizeVisitorRocDate(input: string): string {
   return toOfficialRocDateText(candidate) ?? text;
 }
 
-/** 室內電話：0 開頭 9–10 碼，或 9 開頭 9 碼。 */
+/** 長者無電話／手機。 */
+export const CASE_PHONE_NONE = "0000000000";
+/** 長者不願提供電話。 */
+export const CASE_PHONE_REFUSED = "9999999999";
+
+function phoneDigits(value: string): string {
+  return formatMohwPhone(value).replace(/\D/g, "");
+}
+
+/** 個案電話約定碼：10 個 0＝無電話，10 個 9＝不願提供。 */
+export function isCasePhoneSentinel(value: string): boolean {
+  const digits = phoneDigits(value);
+  return digits === CASE_PHONE_NONE || digits === CASE_PHONE_REFUSED;
+}
+
+/** 室內電話：0 開頭 9–10 碼，或 9 開頭 9 碼；亦接受個案約定碼。 */
 export function isIndoorPhone(value: string): boolean {
-  const digits = formatMohwPhone(value).replace(/\D/g, "");
+  if (isCasePhoneSentinel(value)) return true;
+  const digits = phoneDigits(value);
   return /^0\d{8,9}$/.test(digits) || /^9\d{8}$/.test(digits);
+}
+
+/** 手機：09 開頭 10 碼，或個案約定碼。 */
+export function isElderMobile(value: string): boolean {
+  if (isCasePhoneSentinel(value)) return true;
+  return /^09\d{8}$/.test(phoneDigits(value));
+}
+
+/** 緊急聯絡電話：可空白；有填時接受市話、手機或個案約定碼。 */
+export function isEmergencyContactPhone(value: string): boolean {
+  const digits = phoneDigits(value);
+  if (!digits) return true;
+  if (isCasePhoneSentinel(digits)) return true;
+  return /^(?:09\d{8}|0[2-8]\d{7,8})$/.test(digits);
 }
 
 /** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
@@ -312,10 +342,11 @@ export function formatMohwPhone(input: string) {
   return text.replace(/[ ()-]/g, "");
 }
 
-/** 室內電話送出前：9 開頭 9 碼補上前導 0，其餘保留 0 開頭數字。 */
+/** 室內電話送出前：9 開頭 9 碼補上前導 0；10 個 0／10 個 9 原樣保留。 */
 export function normalizeIndoorPhone(value: string): string {
   const cleaned = formatMohwPhone(value);
   const digits = cleaned.replace(/\D/g, "");
+  if (isCasePhoneSentinel(digits)) return digits;
   if (/^9\d{8}$/.test(digits)) return `0${digits}`;
   if (/^0\d{8,9}$/.test(digits)) return digits;
   return cleaned;

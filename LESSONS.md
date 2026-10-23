@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Elder phone sentinels are 10 zeros or 10 nines
+
+- **Trigger:** Visitors needed a way to record no phone / refused phone; `9999999999` failed mobile validation and emergency `0000000000` also failed.
+- **Cause:** Mobile required `09xxxxxxxx`; emergency required a real landline or mobile.
+- **Rule:** On 電話／手機 accept `0000000000` (none) and `9999999999` (refused). Emergency contact phone is optional—empty is fine. Do not apply these codes to 訪查人 phones.
+- **Evidence:** `lib/domain/mohw-life-care-export.ts`, `lib/domain/mohw-life-care-validation.ts`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-23
+
 ## Lesson: Manager default-email login stays off the public home
 
 - **Trigger:** The public login showed the prefilled 管理者 Google 帳號 entry.

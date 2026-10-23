@@ -319,13 +319,18 @@ var MohwLifeCareValidator = (function () {
       var phoneText = lookalikeToZero(text);
       if (/^[0-9 ()\-]+$/.test(phoneText)) phoneText = phoneText.replace(/[ ()\-]/g, '');
       if (/^9\d{8}$/.test(phoneText)) phoneText = '0' + phoneText;
-      if (k2 === 'mobile' && !/^09\d{8}$/.test(phoneText)) {
-        pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼數字）');
+      var casePhoneSentinel = phoneText === '0000000000' || phoneText === '9999999999';
+      if (k2 === 'mobile' && !casePhoneSentinel && !/^09\d{8}$/.test(phoneText)) {
+        pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼，無電話填 0000000000，不願提供填 9999999999）');
       }
-      if (k2 === 'phone' && !/^0\d{8,9}$/.test(phoneText)) {
-        pushErr(errors, k2, row, '室內電話請填 0 開頭（市話或 09 手機，9–10 碼）或 9 開頭的 9 碼手機');
+      if (k2 === 'phone' && !casePhoneSentinel && !/^0\d{8,9}$/.test(phoneText)) {
+        pushErr(errors, k2, row, '室內電話請填市話或 09 手機；無電話填 0000000000，不願提供填 9999999999');
       }
-      if (['emergency_contact_phone', 'social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
+      if (k2 === 'emergency_contact_phone' && !casePhoneSentinel &&
+          !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(phoneText)) {
+        pushErr(errors, k2, row, '緊急聯絡電話非必填；有填請用市話或手機，沒有可留空');
+      }
+      if (['social_worker_phone', 'civil_worker_phone'].indexOf(k2) !== -1 &&
           !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(phoneText)) {
         pushErr(errors, k2, row, '電話格式不正確（請填含前導 0 的國內市話或手機，不含分機）');
       }

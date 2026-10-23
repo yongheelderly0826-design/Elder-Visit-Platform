@@ -67,6 +67,9 @@ expect(normalizeVisitorNationalId("o123456789") === "O123456789", `id first O ${
 expect(isIndoorPhone("0229282828") && isIndoorPhone("0912345678") && isIndoorPhone("912345678"), "indoor phone 0 or 9");
 expect(normalizeIndoorPhone("912345678") === "0912345678", `indoor prepend ${normalizeIndoorPhone("912345678")}`);
 expect(normalizeIndoorPhone("O912345678") === "0912345678", `indoor O ${normalizeIndoorPhone("O912345678")}`);
+expect(normalizeIndoorPhone("9999999999") === "9999999999", "keep 10 nines");
+expect(normalizeIndoorPhone("0000000000") === "0000000000", "keep 10 zeros");
+expect(isIndoorPhone("9999999999") && isIndoorPhone("0000000000"), "sentinels are valid phones");
 expect(formatMohwPhone("02-2921-1234") === "0229211234", `phone clean ${formatMohwPhone("02-2921-1234")}`);
 expect(formatMohwPhone("0912abc3456") === "0912abc3456", `phone keep letters ${formatMohwPhone("0912abc3456")}`);
 
@@ -146,6 +149,34 @@ const badPhone = validateMohwLifeCareRow(
 expect(
   badPhone.errorLines.some((line) => line.includes("手機格式不正確")),
   `short mobile must fail: ${badPhone.errorLines.join(" | ")}`,
+);
+
+const nonePhone = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    phone: "0000000000",
+    mobile: "9999999999",
+    emergency_contact_phone: "",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !nonePhone.errorLines.some((line) => /電話格式|手機格式|室內電話|緊急聯絡/.test(line)),
+  `case phone sentinels and empty emergency must pass: ${nonePhone.errorLines.join(" | ")}`,
+);
+
+const refusedPhone = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    phone: "9999999999",
+    mobile: "0000000000",
+    emergency_contact_phone: "0000000000",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !refusedPhone.errorLines.some((line) => /電話格式|手機格式|室內電話|緊急聯絡/.test(line)),
+  `refused/none codes on all three phones must pass: ${refusedPhone.errorLines.join(" | ")}`,
 );
 
 const refused = validateMohwLifeCareRow(

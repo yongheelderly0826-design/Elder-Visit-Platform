@@ -1,6 +1,8 @@
 import {
   buildMohwLifeCareExportRow,
   formatMohwPhone,
+  isElderMobile,
+  isEmergencyContactPhone,
   isIndoorPhone,
   normalizeVisitorNationalId,
   toOfficialRocDateText,
@@ -539,12 +541,12 @@ export function validateMohwLifeCareRow(
       });
     }
 
-    if (column.key === "mobile" && !/^09\d{8}$/.test(text)) {
+    if (column.key === "mobile" && !isElderMobile(text)) {
       pushError(errors, {
         key: column.key,
         row,
         code: "INVALID_PHONE",
-        message: "手機格式不正確（請填 09 開頭的 10 碼數字）",
+        message: "手機格式不正確（請填 09 開頭的 10 碼，無電話填 0000000000，不願提供填 9999999999）",
       });
     }
 
@@ -553,14 +555,21 @@ export function validateMohwLifeCareRow(
         key: column.key,
         row,
         code: "INVALID_PHONE",
-        message: "室內電話請填 0 開頭（市話或 09 手機，9–10 碼）或 9 開頭的 9 碼手機",
+        message: "室內電話請填市話或 09 手機；無電話填 0000000000，不願提供填 9999999999",
+      });
+    }
+
+    if (column.key === "emergency_contact_phone" && !isEmergencyContactPhone(text)) {
+      pushError(errors, {
+        key: column.key,
+        row,
+        code: "INVALID_PHONE",
+        message: "緊急聯絡電話非必填；有填請用市話或手機，沒有可留空",
       });
     }
 
     if (
-      (column.key === "emergency_contact_phone" ||
-        column.key === "social_worker_phone" ||
-        column.key === "civil_worker_phone") &&
+      (column.key === "social_worker_phone" || column.key === "civil_worker_phone") &&
       !/^(?:09\d{8}|0[2-8]\d{7,8})$/.test(text)
     ) {
       pushError(errors, {

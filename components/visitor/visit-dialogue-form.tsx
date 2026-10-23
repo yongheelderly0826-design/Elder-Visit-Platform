@@ -1248,13 +1248,26 @@ function CareFormInput({
     );
   }
 
+  const isElderPhoneField = field.mohwKey === "phone" || field.mohwKey === "mobile";
+  const isEmergencyPhoneField = field.mohwKey === "emergency_contact_phone";
   const placeholder = isNameField
     ? "請填完整姓名"
-    : isPhoneField
-      ? "只填數字，O 會自動改成 0"
-      : isIdField
-        ? "1 碼英文 + 9 碼數字；數字裡的 O 會改成 0"
-        : undefined;
+    : isElderPhoneField
+      ? "0000000000 或 9999999999 或實際電話"
+      : isEmergencyPhoneField
+        ? "沒有可留空"
+        : isPhoneField
+          ? "只填數字，O 會自動改成 0"
+          : isIdField
+            ? "1 碼英文 + 9 碼數字；數字裡的 O 會改成 0"
+            : undefined;
+  const phoneHint = isElderPhoneField
+    ? "無手機及電話請填 0000000000；不願提供請填 9999999999。"
+    : isEmergencyPhoneField
+      ? "非必填，沒有可留空。"
+      : isPhoneField
+        ? "只填數字，O 會自動改成 0"
+        : null;
 
   return (
     <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
@@ -1296,6 +1309,9 @@ function CareFormInput({
           }
         }}
       />
+      {phoneHint ? (
+        <p className="text-xs font-normal leading-5 text-muted-foreground">{phoneHint}</p>
+      ) : null}
       {errorText}
     </label>
   );
