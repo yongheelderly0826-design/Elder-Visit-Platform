@@ -5,6 +5,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Manager desk care forms reuse the visitor submit path
+
+- **Trigger:** Office staff key paper care forms and must attach them to a visitor without a new export pipeline.
+- **Cause:** Creating a separate desk table would drift from the 102-column gold export.
+- **Rule:** Desk flow creates or reuses a case, dispatches `公所代填・紙本` to the chosen visitor, then submits through `careform.submit`. After status is submitted, the visitor page is read-only. Do not skip audit or invent a second MOHW path. `cases.create` must be deployed with GAS before live desk-create works.
+- **Evidence:** `app/manager/care-forms/`, `app/api/manager/care-forms/prepare/route.ts`, `gas/src/modules/CaseModule.gs`.
+- **Added on:** 2026-10-24
+
 ## Lesson: Elder phone sentinels are 10 zeros or 10 nines
 
 - **Trigger:** Visitors needed a way to record no phone / refused phone; `9999999999` failed mobile validation and emergency `0000000000` also failed.

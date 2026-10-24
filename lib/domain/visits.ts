@@ -45,9 +45,13 @@ export function getVisitStatusLabel(status: VisitSchedule["status"]) {
   return labels[status];
 }
 
-export function validateVisitSubmission(submission: VisitSubmission) {
+export function validateVisitSubmission(
+  submission: VisitSubmission,
+  options?: { requireMissedGps?: boolean },
+) {
   const missing: string[] = [];
   const hasGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
+  const requireMissedGps = options?.requireMissedGps !== false;
 
   if (!submission.visitResult) {
     missing.push("訪查結果");
@@ -63,7 +67,7 @@ export function validateVisitSubmission(submission: VisitSubmission) {
     if (slotCount < missedVisitMinSlots) {
       missing.push(`未遇時段佐證照片（需 ${missedVisitMinSlots}–${missedVisitMaxSlots} 個不同時段）`);
     }
-    if (!hasGps) {
+    if (requireMissedGps && !hasGps) {
       missing.push("未遇定位");
     }
   }

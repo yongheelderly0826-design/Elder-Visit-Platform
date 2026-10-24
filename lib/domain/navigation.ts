@@ -37,6 +37,7 @@ export type NavKey =
   | "profile"
   | "cases"
   | "assignments"
+  | "careForms"
   | "dailyVisits"
   | "audit"
   | "highCare"
@@ -164,6 +165,15 @@ export const navItems: NavItem[] = [
     href: "/manager/assignments",
     icon: ClipboardList,
     requiredCapabilities: ["assignment.manage"],
+    group: "operations",
+  },
+  {
+    key: "careForms",
+    label: "關懷表建檔",
+    href: "/manager/care-forms",
+    icon: FileText,
+    requiredCapabilities: ["visits.submit"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",
   },
   {

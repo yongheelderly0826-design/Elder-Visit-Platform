@@ -49,6 +49,7 @@ import {
   validateVisitSubmission,
 } from "@/lib/domain/visits";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
+import { MANAGER_DESK_NOTE } from "@/lib/domain/manager-care-form-desk";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -112,9 +113,19 @@ const optionalPhotoCategories = ["補充照片", "本人同意照片", "環境�
 export function VisitDialogueForm({
   elderCase,
   schedule,
+  variant = "visitor",
+  readonly = false,
+  visitorName,
+  initialTimes,
+  initialAnswers,
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
+  variant?: "visitor" | "manager_desk";
+  readonly?: boolean;
+  visitorName?: string;
+  initialTimes?: { visitDate?: string; visitStartTime?: string; visitEndTime?: string };
+  initialAnswers?: MohwLifeCareAnswers;
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
@@ -127,9 +138,17 @@ export function VisitDialogueForm({
     {},
   );
   const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
-  const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() =>
-    createInitialMohwAnswers(elderCase, schedule),
-  );
+  const isDeskEntry = variant === "manager_desk";
+  const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() => {
+    const initial = createInitialMohwAnswers(elderCase, schedule);
+    return {
+      ...initial,
+      ...initialAnswers,
+      ...(initialTimes?.visitDate ? { visit_date: initialTimes.visitDate } : {}),
+      ...(initialTimes?.visitStartTime ? { visit_start_time: initialTimes.visitStartTime } : {}),
+      ...(initialTimes?.visitEndTime ? { visit_end_time: initialTimes.visitEndTime } : {}),
+    };
+  });
   const [openSectionTitles, setOpenSectionTitles] = useState<string[]>(() =>
     mohwLifeCareSections
       .filter((section) => section.title.startsWith("一、"))
@@ -138,8 +157,12 @@ export function VisitDialogueForm({
   const draftKey = getVisitDraftKey(schedule.id);
   const careFormDraftKey = `${draftKey}:mohw_life_care_form`;
   const validation = useMemo(
-    () => validateVisitSubmission({ scheduleId: schedule.id, ...submission }),
-    [schedule.id, submission],
+    () =>
+      validateVisitSubmission(
+        { scheduleId: schedule.id, ...submission },
+        { requireMissedGps: !isDeskEntry },
+      ),
+    [isDeskEntry, schedule.id, submission],
   );
   const paymentEligibility = useMemo(
     () => getPaymentEligibility({ scheduleId: schedule.id, ...submission }),
@@ -188,8 +211,10 @@ export function VisitDialogueForm({
   const hasVisitGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
   const missedSlotCount = countMissedVisitPhotoSlots(submission.photoNames);
   const needsMissedVisitEvidence =
-    isMissedVisit && (missedSlotCount < missedVisitMinSlots || !hasVisitGps);
+    isMissedVisit &&
+    (missedSlotCount < missedVisitMinSlots || (!isDeskEntry && !hasVisitGps));
   const canSubmitVisit =
+    !readonly &&
     validation.ok &&
     !isSubmitting &&
     (isMissedVisit || (careFormCompletion.percent >= 100 && mohwValidation.ok));
@@ -203,6 +228,7 @@ export function VisitDialogueForm({
           : "拍照或上傳後自動取得";
 
   useEffect(() => {
+    if (readonly) return;
     const stored = window.localStorage.getItem(draftKey);
 
     if (stored) {
@@ -228,16 +254,18 @@ export function VisitDialogueForm({
     } else if (schedule.id === "schedule_ntpc_demo") {
       setCareFormAnswers(mohwLifeCareSampleAnswers);
     }
-  }, [careFormDraftKey, draftKey, schedule.id]);
+  }, [careFormDraftKey, draftKey, readonly, schedule.id]);
 
   useEffect(() => {
+    if (readonly) return;
     const draft = createVisitDraft(submission);
     window.localStorage.setItem(draftKey, JSON.stringify(draft));
     window.localStorage.setItem(careFormDraftKey, JSON.stringify(careFormAnswers));
     setDraftState("saved");
-  }, [careFormAnswers, careFormDraftKey, draftKey, submission]);
+  }, [careFormAnswers, careFormDraftKey, draftKey, readonly, submission]);
 
   async function submitVisit() {
+    if (readonly) return;
     setIsSubmitting(true);
     setResult(null);
     setMohwErrors([]);
@@ -284,12 +312,16 @@ export function VisitDialogueForm({
         caseCode: elderCase.caseCode,
         careFormAnswers: mohwAnswers,
         registryNationalId: elderCase.nationalId ?? "",
+        deskEntry: isDeskEntry,
         missedVisitPhotos: missedPhotos.map((item) => ({
           slot: item.slot,
           fileName: item.fileName,
           dataUrl: item.dataUrl,
         })),
         ...submission,
+        notes: isDeskEntry
+          ? [MANAGER_DESK_NOTE, submission.notes].filter(Boolean).join("；")
+          : submission.notes,
       }),
     });
     const data = (await response.json()) as {
@@ -452,13 +484,21 @@ export function VisitDialogueForm({
   return (
     <section className="rounded-lg border bg-card p-4 pb-28 sm:pb-4">
       <div>
-        <p className="text-sm font-medium text-primary">對話式填報流程</p>
-        <h1 className="mt-2 text-2xl font-semibold">{elderCase.name}</h1>
+        <p className="text-sm font-medium text-primary">
+          {isDeskEntry ? "公所代填・紙本" : "對話式填報流程"}
+        </p>
+        <h1 className="mt-2 text-2xl font-semibold">{elderCase.name || "未填姓名"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {elderCase.caseCode} · {elderCase.district} · {elderCase.village} · 第{" "}
           {schedule.visitAttempt} 次訪視
+          {isDeskEntry && visitorName ? ` · 指定訪員 ${visitorName}` : ""}
         </p>
-        {draftState !== "idle" && (
+        {readonly ? (
+          <p className="mt-3 rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
+            此筆已送出，訪員只能查看。如需修改請由承辦在「關懷表建檔」處理。
+          </p>
+        ) : null}
+        {draftState !== "idle" && !readonly && (
           <p className="mt-3 inline-flex items-center gap-2 rounded-md bg-secondary px-2 py-1 text-xs font-medium">
             <Save className="h-3.5 w-3.5" />
             {draftState === "restored" ? "已恢復離線草稿" : "草稿已自動保存"}
@@ -466,22 +506,24 @@ export function VisitDialogueForm({
         )}
       </div>
 
-      <div className="mt-5 space-y-4">
-        <VisitGuidePanel elderCase={elderCase} />
+      <fieldset disabled={readonly} className="mt-5 min-w-0 space-y-4 border-0 p-0">
+        {isDeskEntry ? null : <VisitGuidePanel elderCase={elderCase} />}
 
-        <VisitAssignmentClock
-          assignmentId={schedule.id}
-          visitorId={schedule.visitorId}
-          visitAddress={elderCase.address}
-          onTimesChange={({ visitDate, visitStartTime, visitEndTime }) => {
-            setCareFormAnswers((current) => ({
-              ...current,
-              ...(visitDate ? { visit_date: visitDate } : {}),
-              ...(visitStartTime ? { visit_start_time: visitStartTime } : {}),
-              ...(visitEndTime ? { visit_end_time: visitEndTime } : {}),
-            }));
-          }}
-        />
+        {isDeskEntry ? null : (
+          <VisitAssignmentClock
+            assignmentId={schedule.id}
+            visitorId={schedule.visitorId}
+            visitAddress={elderCase.address}
+            onTimesChange={({ visitDate, visitStartTime, visitEndTime }) => {
+              setCareFormAnswers((current) => ({
+                ...current,
+                ...(visitDate ? { visit_date: visitDate } : {}),
+                ...(visitStartTime ? { visit_start_time: visitStartTime } : {}),
+                ...(visitEndTime ? { visit_end_time: visitEndTime } : {}),
+              }));
+            }}
+          />
+        )}
 
         <section className="rounded-lg border bg-background p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -729,7 +771,6 @@ export function VisitDialogueForm({
             </div>
           </div>
         ))}
-      </div>
 
       <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div id="visit-consent-section" className="scroll-mt-24 rounded-lg border bg-background p-3">
@@ -920,6 +961,7 @@ export function VisitDialogueForm({
         </div>
       </div>
 
+      {readonly ? null : (
       <div className="mt-5 hidden flex-col gap-3 sm:flex sm:flex-row sm:items-center sm:justify-end">
         <SubmissionStatus
           validationOk={validation.ok}
@@ -936,6 +978,7 @@ export function VisitDialogueForm({
           onClick={submitVisit}
         />
       </div>
+      )}
 
       {result && (
         <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -955,6 +998,7 @@ export function VisitDialogueForm({
         </section>
       )}
 
+      {readonly ? null : (
       <div className="safe-bottom fixed inset-x-0 bottom-16 z-20 border-t bg-card/95 px-3 py-3 shadow-[0_-10px_24px_rgba(15,23,42,0.08)] backdrop-blur sm:hidden">
         <div className="mx-auto grid max-w-md gap-2">
           <SubmissionStatus
@@ -975,6 +1019,8 @@ export function VisitDialogueForm({
           />
         </div>
       </div>
+      )}
+      </fieldset>
     </section>
   );
 }

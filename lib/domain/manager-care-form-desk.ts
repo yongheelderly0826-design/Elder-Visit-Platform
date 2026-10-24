@@ -1,0 +1,149 @@
+import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
+
+export const MANAGER_DESK_NOTE = "公所代填・紙本";
+
+const ACTIVE_ASSIGNMENT_STATUSES = new Set(["待接案", "進行中", "空訪續訪"]);
+
+export type DeskVisitorOption = {
+  id: string;
+  name: string;
+  badgeNo: string;
+  status: string;
+};
+
+export type DeskCaseOption = {
+  id: string;
+  caseCode: string;
+  name: string;
+  village: string;
+  address: string;
+  visitStatus: string;
+  phone: string;
+};
+
+export type DeskNewCaseInput = {
+  name: string;
+  idNumber?: string;
+  gender?: string;
+  birthDate?: string;
+  village?: string;
+  address?: string;
+  phone?: string;
+  mobile?: string;
+};
+
+export type DeskPrepareInput = {
+  caseId?: string;
+  newCase?: DeskNewCaseInput;
+  visitorId: string;
+  visitDate: string;
+  visitStartTime?: string;
+  visitEndTime?: string;
+};
+
+export function isActiveAssignmentStatus(status: string) {
+  return ACTIVE_ASSIGNMENT_STATUSES.has(String(status ?? "").trim());
+}
+
+export function parseCareformAnswers(row: unknown): MohwLifeCareAnswers | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const record = row as Record<string, unknown>;
+  if (record.answers && typeof record.answers === "object" && !Array.isArray(record.answers)) {
+    return record.answers as MohwLifeCareAnswers;
+  }
+  if (typeof record.answers_json === "string" && record.answers_json.trim()) {
+    try {
+      const parsed = JSON.parse(record.answers_json) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as MohwLifeCareAnswers;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+export function mapDeskCase(row: Record<string, unknown>): DeskCaseOption {
+  const caseId = String(row.case_id ?? row.external_id ?? "");
+  return {
+    id: caseId,
+    caseCode: String(row.encoded_id ?? row.external_id ?? caseId),
+    name: String(row.name ?? ""),
+    village: String(row.visit_village ?? row.household_village ?? ""),
+    address: String(row.address ?? ""),
+    visitStatus: String(row.visit_status ?? "待訪"),
+    phone: String(row.primary_phone ?? ""),
+  };
+}
+
+export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption {
+  return {
+    id: String(row.visitor_id ?? ""),
+    name: String(row.name ?? row.full_name ?? ""),
+    badgeNo: String(row.badge_no ?? row.visitor_code ?? ""),
+    status: String(row.status ?? ""),
+  };
+}
+
+export function toDeskElderCase(row: Record<string, unknown>): ElderCase {
+  const caseId = String(row.case_id ?? row.external_id ?? "");
+  const encodedId = String(row.encoded_id ?? "");
+  return {
+    id: caseId,
+    caseCode: encodedId || String(row.external_id ?? caseId),
+    name: String(row.name ?? ""),
+    age: Number(row.age) || 0,
+    gender: row.gender ? String(row.gender) : null,
+    nationalId: row.id_number ? String(row.id_number) : null,
+    phone: String(row.primary_phone ?? ""),
+    mobilePhone: row.secondary_phone ? String(row.secondary_phone) : null,
+    address: String(row.address ?? ""),
+    district: String(row.visit_district ?? "永和區"),
+    village: String(row.visit_village ?? row.household_village ?? ""),
+    serviceUnit: null,
+    lineIdStatus: null,
+    lineIdNote: null,
+    emergencyContactName: null,
+    emergencyContactRelationship: null,
+    emergencyContactPhone: null,
+    householdCity: "新北市",
+    householdDistrict: String(row.household_district ?? "永和區"),
+    householdVillage: row.household_village ? String(row.household_village) : null,
+    householdAddress: null,
+    residenceCity: "新北市",
+    residenceDistrict: String(row.visit_district ?? "永和區"),
+    residenceVillage: row.visit_village ? String(row.visit_village) : null,
+    residenceAddress: String(row.address ?? ""),
+    residenceAddressNote: row.contact_note ? String(row.contact_note) : null,
+    solitaryStatus: row.case_type ? String(row.case_type) : null,
+    sourceSheetName: "GAS",
+    sourceRowNumber: null,
+    importBatchCode: null,
+    importVisitResult: null,
+    importVisitorName: null,
+    requiredVisitorTypes: [],
+    coVisitRequired: false,
+    riskLevel: "medium",
+    status: "assigned",
+  };
+}
+
+export function toDeskSchedule(
+  assignment: Record<string, unknown>,
+  visitDate: string,
+): VisitSchedule {
+  return {
+    id: String(assignment.assignment_id ?? ""),
+    workspaceId: process.env.GAS_WORKSPACE_ID ?? "WS-YH-115",
+    caseId: String(assignment.case_id ?? ""),
+    visitorId: String(assignment.visitor_id ?? ""),
+    coVisitorId: null,
+    visitDate,
+    visitAttempt: 1,
+    status: "in_progress",
+    assignmentReason: String(assignment.notes ?? MANAGER_DESK_NOTE),
+    requiredFormTemplateIds: ["mohw_life_care_v1"],
+  };
+}

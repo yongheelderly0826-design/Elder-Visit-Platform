@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   CalendarCheck2,
   ChevronDown,
@@ -194,7 +195,12 @@ export function CaseRegistryDashboard() {
                   {elderCase.latestAssignmentReason}
                 </p>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/manager/care-forms?caseId=${encodeURIComponent(elderCase.id)}`}>
+                    代填關懷表
+                  </Link>
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"

@@ -47,6 +47,31 @@ var CaseModule = (function () {
     };
   }
 
+  function create(data) {
+    data = data || {};
+    Validation.requireFields(data, ['name']);
+    var row = {
+      name: String(data.name || '').trim(),
+      id_number: String(data.id_number || '').trim().toUpperCase(),
+      gender: String(data.gender || '').trim(),
+      birth_date: String(data.birth_date || '').trim(),
+      case_type: String(data.case_type || '獨老').trim() || '獨老',
+      household_district: String(data.household_district || '永和區').trim() || '永和區',
+      household_village: String(data.household_village || data.visit_village || '').trim(),
+      visit_district: String(data.visit_district || '永和區').trim() || '永和區',
+      visit_village: String(data.visit_village || data.household_village || '').trim(),
+      address: String(data.address || '').trim(),
+      primary_phone: String(data.primary_phone || '').trim(),
+      secondary_phone: String(data.secondary_phone || '').trim(),
+      contact_note: String(data.contact_note || '公所代填').trim(),
+      visit_status: '待訪',
+      dispatch_priority: String(data.dispatch_priority || '中').trim() || '中',
+    };
+    var result = importBatch({ rows: [row] });
+    var caseId = result.case_ids && result.case_ids[0];
+    return caseId ? get(caseId) : row;
+  }
+
   function importBatch(data) {
     var rows = data.rows || data;
     if (!Array.isArray(rows)) {
@@ -230,6 +255,7 @@ var CaseModule = (function () {
     list: list,
     get: get,
     getByEncoded: getByEncoded,
+    create: create,
     importBatch: importBatch,
     reencodeAll: reencodeAll,
   };

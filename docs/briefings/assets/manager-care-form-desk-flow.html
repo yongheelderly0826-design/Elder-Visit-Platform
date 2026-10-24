@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>公所代填關懷表流程</title>
+  <style>
+    :root {
+      --ink: #12324a;
+      --muted: #4b6474;
+      --line: #7aa3b3;
+      --card: #ffffff;
+      --bg: #f4f8fb;
+      --teal: #1f6f8b;
+      --ok: #2d7a4f;
+      --warn: #9a6b12;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "PingFang TC", "Noto Sans TC", "Hiragino Sans GB", sans-serif;
+    }
+    .poster {
+      width: 1400px;
+      min-height: 1860px;
+      padding: 48px 56px 40px;
+      background: var(--bg);
+    }
+    h1 {
+      margin: 0;
+      font-size: 42px;
+      letter-spacing: 0.04em;
+    }
+    .sub {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 20px;
+    }
+    .notes {
+      display: flex;
+      gap: 12px;
+      margin: 28px 0 36px;
+      flex-wrap: wrap;
+    }
+    .note {
+      background: #fff;
+      border: 1px solid #d5e3ea;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 16px;
+      color: var(--muted);
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .box {
+      width: 620px;
+      background: var(--card);
+      border: 2px solid #c5d7e0;
+      border-radius: 16px;
+      padding: 18px 22px;
+      text-align: center;
+      box-shadow: 0 6px 0 rgba(18, 50, 74, 0.04);
+    }
+    .box strong { display: block; font-size: 24px; }
+    .box span { display: block; margin-top: 6px; color: var(--muted); font-size: 16px; line-height: 1.5; }
+    .start { border-color: var(--teal); }
+    .start strong { color: var(--teal); }
+    .decision {
+      width: 560px;
+      background: #fff8e8;
+      border-color: #e0c48a;
+      border-radius: 999px;
+      padding: 22px 28px;
+    }
+    .ok { border-color: #9dcdb0; }
+    .end {
+      width: 720px;
+      background: #e8f4ef;
+      border-color: #8fbea4;
+    }
+    .end strong { color: var(--ok); }
+    .arrow {
+      width: 2px;
+      height: 28px;
+      background: var(--line);
+      position: relative;
+    }
+    .arrow::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      bottom: -2px;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 10px solid var(--line);
+    }
+    .split {
+      width: 980px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      position: relative;
+      margin-top: 8px;
+    }
+    .split::before {
+      content: "";
+      position: absolute;
+      top: -14px;
+      left: 25%;
+      right: 25%;
+      height: 14px;
+      border-top: 2px solid var(--line);
+      border-left: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+    }
+    .lane { display: flex; flex-direction: column; align-items: center; }
+    .lane-label {
+      font-size: 15px;
+      color: var(--teal);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .lane .box { width: 430px; }
+    .join {
+      width: 980px;
+      height: 18px;
+      position: relative;
+      margin: 4px 0 0;
+    }
+    .join::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 16px;
+      border-bottom: 2px solid var(--line);
+      border-left: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+    }
+    .warn { background: #fff4f0; border-color: #e3b2a4; }
+    .foot {
+      margin-top: 36px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <h1>公所代填關懷表流程</h1>
+    <p class="sub">永和區獨居長者訪查｜承辦從後台建檔，並掛到指定訪員紀錄</p>
+    <div class="notes">
+      <div class="note">無電話填 0000000000</div>
+      <div class="note">不願提供填 9999999999</div>
+      <div class="note">緊急聯絡電話可留空</div>
+      <div class="note">匯出走黃金樣本同一套檢核</div>
+    </div>
+
+    <div class="col">
+      <div class="box start">
+        <strong>後台進入「關懷表建檔」</strong>
+        <span>首頁與訪員登入不會看到這個入口</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box decision">
+        <strong>名冊有沒有這筆個案？</strong>
+      </div>
+
+      <div class="split">
+        <div class="lane">
+          <div class="lane-label">搜得到</div>
+          <div class="box">
+            <strong>選現有個案</strong>
+            <span>姓名、編碼、里別可搜尋</span>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-label">沒有／資料是空的</div>
+          <div class="box">
+            <strong>自己新增個案</strong>
+            <span>姓名、身分證、出生、村里、地址、電話</span>
+          </div>
+        </div>
+      </div>
+      <div class="join"></div>
+      <div class="arrow"></div>
+
+      <div class="box">
+        <strong>指定訪員（必選）</strong>
+        <span>這筆關懷表會算在這位訪員的任務與紀錄上</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box">
+        <strong>填訪視日期、開始、結束時間</strong>
+        <span>依紙本填寫，不到宅打卡</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box decision">
+        <strong>這位訪員是否已有此個案派案？</strong>
+      </div>
+
+      <div class="split">
+        <div class="lane">
+          <div class="lane-label">沒有</div>
+          <div class="box">
+            <strong>系統代建紙本派案</strong>
+            <span>來源標記：公所代填・紙本</span>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-label">已有</div>
+          <div class="box">
+            <strong>沿用原派案</strong>
+            <span>已派給別人則改選該訪員，或先結束原派案</span>
+          </div>
+        </div>
+      </div>
+      <div class="join"></div>
+      <div class="arrow"></div>
+
+      <div class="box">
+        <strong>填 102 欄生活關懷表</strong>
+        <span>名冊空白欄位由承辦在表上補齊。未遇仍要 3–5 個時段佐證照</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box decision">
+        <strong>欄位檢核通過？</strong>
+      </div>
+      <div class="arrow"></div>
+      <div class="box ok">
+        <strong>送出</strong>
+        <span>寫入關懷表，並掛到指定訪員紀錄</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box warn">
+        <strong>訪員任務可看、不能改</strong>
+        <span>要修改回承辦這頁處理</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box">
+        <strong>進入稽核</strong>
+        <span>通過後才可匯出</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box end">
+        <strong>匯出衛福部 xlsx</strong>
+        <span>與黃金樣本同一套檢核，不另做格式</span>
+      </div>
+    </div>
+
+    <p class="foot">
+      適用：紙本訪視由公所代登。訪員手機填表流程不變。<br />
+      永和區獨居長者訪查管理平台
+    </p>
+  </div>
+</body>
+</html>

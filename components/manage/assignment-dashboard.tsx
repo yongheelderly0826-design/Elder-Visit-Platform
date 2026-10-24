@@ -144,13 +144,22 @@ export function AssignmentDashboard() {
               系統先用規則產生建議，再由承辦或督導確認；有風險提醒時不直接派案。
             </p>
           </div>
-          <Link
-            className="inline-flex items-center gap-2 text-sm font-medium text-primary"
-            href="/system/sitemap"
-          >
-            查看完整流程導覽
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <Link
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+              href="/manager/care-forms"
+            >
+              代填關懷表
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+              href="/system/sitemap"
+            >
+              查看完整流程導覽
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

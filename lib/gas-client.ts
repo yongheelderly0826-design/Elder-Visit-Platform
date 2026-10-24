@@ -314,6 +314,8 @@ export const gasClient = {
       }>("cases.reencode", { method: "POST", body: {} }),
     import: (body: { rows: unknown[] }) =>
       gasFetch<{ imported: number; case_ids: string[] }>("cases.import", { method: "POST", body }),
+    create: (body: Record<string, string>) =>
+      gasFetch<Record<string, unknown>>("cases.create", { method: "POST", body }),
   },
   assignments: {
     list: (params?: { visitor_id?: string; status?: string; active_only?: string }) =>

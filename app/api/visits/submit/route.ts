@@ -17,6 +17,7 @@ import {
 } from "@/lib/domain/visits";
 import { getSystemStatus } from "@/lib/system/env";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
+import { MANAGER_DESK_NOTE } from "@/lib/domain/manager-care-form-desk";
 
 type MissedVisitPhotoPayload = {
   slot: string;
@@ -32,6 +33,7 @@ type VisitSubmitPayload = VisitSubmission & {
   careFormAnswers?: MohwLifeCareAnswers;
   missedVisitPhotos?: MissedVisitPhotoPayload[];
   registryNationalId?: string | null;
+  deskEntry?: boolean;
 };
 
 export async function POST(request: NextRequest) {
@@ -53,7 +55,9 @@ export async function POST(request: NextRequest) {
     notes: body.notes,
   };
 
-  const validation = validateVisitSubmission(submission);
+  const validation = validateVisitSubmission(submission, {
+    requireMissedGps: body.deskEntry !== true,
+  });
 
   if (!validation.ok) {
     return NextResponse.json(
@@ -151,7 +155,9 @@ export async function POST(request: NextRequest) {
         missed_visit_photos: missedVisitPhotos,
         gps_lat: submission.gpsLat,
         gps_lng: submission.gpsLng,
-        notes: submission.notes,
+        notes: body.deskEntry
+          ? [MANAGER_DESK_NOTE, submission.notes].filter(Boolean).join("；")
+          : submission.notes,
       });
       invalidateGasReadCaches();
     } catch (error) {
