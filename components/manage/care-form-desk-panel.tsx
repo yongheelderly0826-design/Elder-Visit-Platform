@@ -49,42 +49,103 @@ export function CareFormDeskPanel({
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [casesLoading, setCasesLoading] = useState(false);
+  const [villageCases, setVillageCases] = useState<DeskCaseOption[]>([]);
+  const [metaLoading, setMetaLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
-      const response = await fetch("/api/manager/care-forms/options");
-      const json = (await response.json()) as { data?: OptionsPayload; error?: { message?: string } };
-      if (!response.ok) {
-        setMessage(json.error?.message ?? "無法載入個案與訪查員");
-        return;
-      }
-      const payload = json.data ?? { cases: [], visitors: [] };
-      setOptions(payload);
-
-      const identities = payload.identityOptions ?? [];
-      if (identities.length === 1) {
-        setIdentityKey(identities[0].key);
-        if (identities[0].villages.length === 1) {
-          setVillageFilter(identities[0].villages[0]);
-          setNewCase((current) => ({ ...current, village: identities[0].villages[0] }));
+      setMetaLoading(true);
+      try {
+        const response = await fetch("/api/manager/care-forms/options");
+        const json = (await response.json()) as {
+          data?: OptionsPayload;
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          setMessage(json.error?.message ?? "無法載入身份與訪查員");
+          return;
         }
-      } else if (payload.scope?.mode === "all") {
-        setIdentityKey("all");
-      }
+        const payload = json.data ?? { cases: [], visitors: [] };
+        setOptions(payload);
 
-      if (presetCaseId) {
-        const preset = payload.cases.find((item) => item.id === presetCaseId);
-        if (preset?.village) {
-          setVillageFilter(preset.village);
-          const match = identities.find(
-            (item) => item.key !== "all" && item.villages.includes(preset.village),
+        const identities = payload.identityOptions ?? [];
+        if (identities.length === 1) {
+          setIdentityKey(identities[0].key);
+          if (identities[0].villages.length === 1) {
+            setVillageFilter(identities[0].villages[0]);
+            setNewCase((current) => ({ ...current, village: identities[0].villages[0] }));
+          }
+        } else if (payload.scope?.mode === "all") {
+          setIdentityKey("all");
+        }
+
+        if (presetCaseId) {
+          const presetRes = await fetch(
+            `/api/manager/care-forms/options?caseId=${encodeURIComponent(presetCaseId)}`,
           );
-          if (match) setIdentityKey(match.key);
-          else if (payload.scope?.mode === "all") setIdentityKey("all");
+          const presetJson = (await presetRes.json()) as {
+            data?: { village?: string; cases?: DeskCaseOption[] };
+          };
+          const village = String(presetJson.data?.village ?? "");
+          const cases = presetJson.data?.cases ?? [];
+          if (village) {
+            setVillageFilter(village);
+            setVillageCases(cases);
+            setCaseId(presetCaseId);
+            setNewCase((current) => ({ ...current, village }));
+            const match = identities.find(
+              (item) => item.key !== "all" && item.villages.includes(village),
+            );
+            if (match) setIdentityKey(match.key);
+            else if (payload.scope?.mode === "all") setIdentityKey("all");
+          }
         }
+      } catch {
+        setMessage("目前無法連線，請稍後再試。");
+      } finally {
+        setMetaLoading(false);
       }
     })();
   }, [presetCaseId]);
+
+  useEffect(() => {
+    if (!villageFilter) {
+      setVillageCases([]);
+      setCasesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setCasesLoading(true);
+      try {
+        const response = await fetch(
+          `/api/manager/care-forms/options?village=${encodeURIComponent(villageFilter)}`,
+        );
+        const json = (await response.json()) as {
+          data?: { cases?: DeskCaseOption[] };
+          error?: { message?: string };
+        };
+        if (cancelled) return;
+        if (!response.ok) {
+          setMessage(json.error?.message ?? "無法載入該里個案");
+          setVillageCases([]);
+          return;
+        }
+        setVillageCases(json.data?.cases ?? []);
+      } catch {
+        if (!cancelled) {
+          setMessage("目前無法連線，請稍後再試。");
+          setVillageCases([]);
+        }
+      } finally {
+        if (!cancelled) setCasesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [villageFilter]);
 
   const identityOptions = options?.identityOptions ?? [];
   const selectedIdentity = identityOptions.find((item) => item.key === identityKey) ?? null;
@@ -92,7 +153,7 @@ export function CareFormDeskPanel({
 
   const filteredCases = useMemo(() => {
     if (!villageFilter) return [];
-    const rows = (options?.cases ?? []).filter((item) => item.village === villageFilter);
+    const rows = villageCases.filter((item) => item.village === villageFilter);
     const needle = query.trim();
     if (!needle) return rows.slice(0, 60);
     return rows
@@ -100,7 +161,7 @@ export function CareFormDeskPanel({
         [item.name, item.caseCode, item.village, item.address].some((value) => value.includes(needle)),
       )
       .slice(0, 60);
-  }, [options?.cases, query, villageFilter]);
+  }, [villageCases, query, villageFilter]);
 
   const filteredVisitors = useMemo(() => {
     const rows = options?.visitors ?? [];
@@ -111,10 +172,10 @@ export function CareFormDeskPanel({
       .slice(0, 30);
   }, [options?.visitors, visitorQuery]);
 
-  const selectedCase = options?.cases.find((item) => item.id === caseId);
+  const selectedCase = villageCases.find((item) => item.id === caseId);
   const selectedVisitor = options?.visitors.find((item) => item.id === visitorId);
   const scope = options?.scope;
-  const scopeBlocked = scope?.mode === "none";
+  const scopeBlocked = Boolean(options) && scope?.mode === "none";
   const canBrowseCases = Boolean(identityKey && villageFilter);
 
   function onIdentityChange(nextKey: string) {
@@ -230,10 +291,12 @@ export function CareFormDeskPanel({
             <select
               className="h-11 w-full rounded-md border px-3 text-sm"
               value={identityKey}
-              disabled={scopeBlocked || identityOptions.length === 0}
+              disabled={scopeBlocked || metaLoading || identityOptions.length === 0}
               onChange={(event) => onIdentityChange(event.target.value)}
             >
-              <option value="">{identityOptions.length ? "請選擇身份" : "載入中…"}</option>
+              <option value="">
+                {metaLoading ? "載入中…" : identityOptions.length ? "請選擇身份" : "尚無可選身份"}
+              </option>
               {identityOptions.map((item) => (
                 <option key={item.key} value={item.key}>
                   {item.label}
@@ -375,7 +438,11 @@ export function CareFormDeskPanel({
                   </p>
                 </button>
               ))}
-              {filteredCases.length === 0 ? (
+              {casesLoading ? (
+                <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
+                  正在載入 {villageFilter} 個案…
+                </p>
+              ) : filteredCases.length === 0 ? (
                 <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
                   {villageFilter} 找不到個案。可改按「自己新增」，或確認個案已匯入。
                 </p>

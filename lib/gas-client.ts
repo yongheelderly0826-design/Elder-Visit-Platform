@@ -168,8 +168,8 @@ export const gasClient = {
     list: (params?: { status?: string }) =>
       gasFetch<unknown[]>("visitors.list", {
         params: params as Record<string, string>,
-        revalidateSeconds: 20,
-        tags: ["gas-assignment-dashboard"],
+        revalidateSeconds: 120,
+        tags: ["gas-assignment-dashboard", "gas-desk-care-form-options"],
       }),
     get: (id: string) => gasFetch<unknown>("visitors.get", { params: { id } }),
     getByIdNumber: (idNumber: string) =>
@@ -295,11 +295,18 @@ export const gasClient = {
       }>("accounts.sendLoginCredentials", { method: "POST", body }),
   },
   cases: {
-    list: (params?: { district?: string; case_type?: string; visit_status?: string }) =>
+    list: (params?: {
+      district?: string;
+      case_type?: string;
+      visit_status?: string;
+      visit_village?: string;
+      village?: string;
+    }) =>
       gasFetch<unknown[]>("cases.list", {
         params: params as Record<string, string>,
-        revalidateSeconds: 20,
-        tags: ["gas-assignment-dashboard"],
+        // 全區清單過大常無法進 Next data cache；依里請求較小可快取。
+        revalidateSeconds: params?.visit_village || params?.village ? 120 : 20,
+        tags: ["gas-assignment-dashboard", "gas-desk-care-form-options"],
       }),
     get: (id: string) => gasFetch<unknown>("cases.get", { params: { id } }),
     getEncoded: (code: string) => gasFetch<unknown>("cases.getEncoded", { params: { code } }),
@@ -324,8 +331,8 @@ export const gasClient = {
     list: (params?: { status?: string; village_name?: string }) =>
       gasFetch<Record<string, unknown>[]>("villageAdmins.list", {
         params: params as Record<string, string> | undefined,
-        revalidateSeconds: 20,
-        tags: ["gas-village-admins"],
+        revalidateSeconds: 120,
+        tags: ["gas-village-admins", "gas-desk-care-form-options"],
       }),
     replaceAll: (body: {
       rows: Array<Record<string, unknown>>;

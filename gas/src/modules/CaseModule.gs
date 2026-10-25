@@ -3,13 +3,16 @@ var CaseModule = (function () {
 
   function list(params) {
     params = params || {};
+    var village = String(params.visit_village || params.village || '').trim();
     var cacheKey = ReadCache.key(
       'caseL:' +
         String(params.district || '') +
         ':' +
         String(params.case_type || '') +
         ':' +
-        String(params.visit_status || '')
+        String(params.visit_status || '') +
+        ':' +
+        village
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
@@ -20,12 +23,18 @@ var CaseModule = (function () {
         return r.visit_district === params.district;
       });
     }
+    if (village) {
+      rows = rows.filter(function (r) {
+        return String(r.visit_village || '') === village;
+      });
+    }
     if (params.case_type) {
       rows = rows.filter(function (r) { return r.case_type === params.case_type; });
     }
     if (params.visit_status) {
       rows = rows.filter(function (r) { return r.visit_status === params.visit_status; });
     }
+    // 全區清單過大無法進 CacheService；依里過濾後可快取加速紙本建檔。
     ReadCache.putJson(cacheKey, rows);
     return rows;
   }

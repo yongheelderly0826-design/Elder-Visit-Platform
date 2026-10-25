@@ -22,7 +22,12 @@ export const GAS_READ_TAGS = {
   highCare: "gas-high-care",
   visitorHours: "gas-visitor-hours",
   visitorBadge: "gas-visitor-badge",
+  villageAdmins: "gas-village-admins",
+  deskCareFormOptions: "gas-desk-care-form-options",
 } as const;
+
+/** 里責任／身份下拉變動慢，紙本建檔可多快取一會兒。 */
+export const GAS_READ_CACHE_SECONDS_DESK = 120;
 
 export function invalidateGasReadCaches() {
   revalidateTag(GAS_READ_TAGS.dailyVisits);
@@ -33,6 +38,8 @@ export function invalidateGasReadCaches() {
   revalidateTag(GAS_READ_TAGS.highCare);
   revalidateTag(GAS_READ_TAGS.visitorHours);
   revalidateTag(GAS_READ_TAGS.visitorBadge);
+  revalidateTag(GAS_READ_TAGS.villageAdmins);
+  revalidateTag(GAS_READ_TAGS.deskCareFormOptions);
 }
 
 /** After check-in / check-out: refresh hours + tasks; leave badge / payments alone. */
