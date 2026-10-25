@@ -131,8 +131,12 @@ export function resolveDeskScope(input: {
 }): DeskScope {
   const email = input.identity.email.trim().toLowerCase();
   const roleKey = input.identity.roleKey || "";
-  if (roleKey === "workspace_owner") {
-    return { mode: "all", label: "總承辦（全部里）" };
+  // 承辦後台／紙本 KEY：總承辦與工作空間管理員都可代選各里身份（里責資料本來就在表上）。
+  if (roleKey === "workspace_owner" || roleKey === "workspace_manager") {
+    return {
+      mode: "all",
+      label: roleKey === "workspace_owner" ? "總承辦（全部里）" : "承辦（全部里）",
+    };
   }
 
   const active = input.admins.filter((row) => row.status !== "inactive");

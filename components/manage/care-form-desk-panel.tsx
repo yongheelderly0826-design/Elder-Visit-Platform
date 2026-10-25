@@ -328,7 +328,13 @@ export function CareFormDeskPanel({
               onChange={(event) => onIdentityChange(event.target.value)}
             >
               <option value="">
-                {metaLoading ? "載入中…" : identityOptions.length ? "請選擇身份" : "尚無可選身份"}
+                {metaLoading
+                  ? "載入中…"
+                  : identityOptions.length
+                    ? "請選擇身份"
+                    : scopeBlocked
+                      ? "登入身分尚未對到負責里"
+                      : "尚無可選身份（請重新整理）"}
               </option>
               {identityOptions.map((item) => (
                 <option key={item.key} value={item.key}>
