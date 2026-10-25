@@ -72,18 +72,91 @@ var CaseModule = (function () {
     return caseId ? get(caseId) : row;
   }
 
+  function normalizeId_(value) {
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
   function importBatch(data) {
     var rows = data.rows || data;
     if (!Array.isArray(rows)) {
       throw new Error('rows must be an array');
     }
-    var existing = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var sheet = SheetHelper.getSheet(SHEET);
+    var grid = sheet.getDataRange().getValues();
+    if (!grid.length) throw new Error('個案名冊空白');
+    var headers = grid[0];
+    var idIdx = headers.indexOf('id_number');
+    var caseIdIdx = headers.indexOf('case_id');
+    var byIdNumber = {};
+    var rowIndexByCaseId = {};
+    for (var r = 1; r < grid.length; r++) {
+      if (!grid[r][0]) continue;
+      var obj = {};
+      headers.forEach(function (h, i) {
+        obj[h] = grid[r][i];
+      });
+      var key = normalizeId_(obj.id_number);
+      if (key && !byIdNumber[key]) byIdNumber[key] = obj;
+      if (obj.case_id) rowIndexByCaseId[String(obj.case_id)] = r;
+    }
+    var existing = [];
+    for (var er = 1; er < grid.length; er++) {
+      if (!grid[er][0]) continue;
+      var eobj = {};
+      headers.forEach(function (h, i) {
+        eobj[h] = grid[er][i];
+      });
+      existing.push(eobj);
+    }
     var allocator = IdEncoder.createAllocator(existing);
     var imported = [];
+    var updated = [];
+    var toAppend = [];
+    var dirtyRowIndexes = {};
+    var now = new Date().toISOString();
     rows.forEach(function (row) {
-      if (row.id_number && !Validation.validateTaiwanId(row.id_number)) {
+      var idNumber = normalizeId_(row.id_number);
+      row.id_number = idNumber;
+      if (idNumber && !Validation.validateTaiwanId(idNumber)) {
         row.data_quality_tag = (row.data_quality_tag || '') + ';invalid_id';
       }
+
+      var prev = idNumber ? byIdNumber[idNumber] : null;
+      if (prev) {
+        var patch = {
+          name: row.name != null ? row.name : prev.name,
+          gender: row.gender != null ? row.gender : prev.gender,
+          birth_date: row.birth_date != null ? row.birth_date : prev.birth_date,
+          case_type: row.case_type || prev.case_type || '獨老',
+          household_district: row.household_district || prev.household_district || '永和區',
+          household_village: row.household_village != null ? row.household_village : prev.household_village,
+          visit_district: row.visit_district || prev.visit_district || '永和區',
+          visit_village: row.visit_village != null ? row.visit_village : prev.visit_village,
+          address: row.address != null ? row.address : prev.address,
+          primary_phone: row.primary_phone != null ? row.primary_phone : prev.primary_phone,
+          secondary_phone: row.secondary_phone != null ? row.secondary_phone : prev.secondary_phone,
+          contact_note: row.contact_note != null ? row.contact_note : prev.contact_note,
+          visit_status: row.visit_status || prev.visit_status || '待訪',
+          dispatch_priority: row.dispatch_priority || prev.dispatch_priority || '中',
+          data_quality_tag: row.data_quality_tag || prev.data_quality_tag || '',
+          updated_at: now,
+        };
+        Object.keys(patch).forEach(function (k) {
+          prev[k] = patch[k];
+        });
+        var rowIdx = rowIndexByCaseId[String(prev.case_id)];
+        if (rowIdx != null) {
+          headers.forEach(function (h, i) {
+            if (Object.prototype.hasOwnProperty.call(patch, h)) {
+              grid[rowIdx][i] = patch[h];
+            }
+          });
+          dirtyRowIndexes[rowIdx] = true;
+        }
+        updated.push(prev.case_id);
+        return;
+      }
+
       row.case_id = row.case_id || 'CASE-YH-' + Utilities.getUuid().slice(0, 8);
       var requested = String(row.encoded_id || '').trim();
       // 匯入若帶了重複編碼（例如全部 YH-115-A001），改發新號
@@ -93,13 +166,24 @@ var CaseModule = (function () {
         row.encoded_id = allocator.next();
       }
       row.visit_status = row.visit_status || '待訪';
-      row.imported_at = new Date().toISOString();
-      row.updated_at = row.imported_at;
-      SheetHelper.appendRow(SHEET, row);
+      row.imported_at = now;
+      row.updated_at = now;
+      toAppend.push(row);
       imported.push(row.case_id);
+      if (idNumber) byIdNumber[idNumber] = row;
     });
+    Object.keys(dirtyRowIndexes).forEach(function (idxStr) {
+      var idx = Number(idxStr);
+      // getRange(row, column, numRows, numColumns) — sheet rows are 1-based
+      sheet.getRange(idx + 1, 1, 1, headers.length).setValues([grid[idx]]);
+    });
+    if (toAppend.length) SheetHelper.appendRows(SHEET, toAppend);
     ReadCache.bump();
-    return { imported: imported.length, case_ids: imported };
+    return {
+      imported: imported.length,
+      updated: updated.length,
+      case_ids: imported.concat(updated),
+    };
   }
 
   function patchEncodedOnSheet_(sheetName, keyField, keyToEncoded) {

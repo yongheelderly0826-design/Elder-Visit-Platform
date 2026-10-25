@@ -10,6 +10,8 @@ export type DeskVisitorOption = {
   name: string;
   badgeNo: string;
   status: string;
+  nationalId: string;
+  phone: string;
 };
 
 export type DeskCaseOption = {
@@ -84,6 +86,8 @@ export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption 
     name: String(row.name ?? row.full_name ?? ""),
     badgeNo: String(row.badge_no ?? row.visitor_code ?? ""),
     status: String(row.status ?? ""),
+    nationalId: String(row.id_number ?? "").trim().toUpperCase(),
+    phone: String(row.phone ?? row.primary_phone ?? row.mobile ?? "").trim(),
   };
 }
 
@@ -141,7 +145,7 @@ export function toDeskSchedule(
     visitorId: String(assignment.visitor_id ?? ""),
     coVisitorId: null,
     visitDate,
-    visitAttempt: 1,
+    visitAttempt: Number(assignment.visit_attempt ?? 1) || 1,
     status: "in_progress",
     assignmentReason: String(assignment.notes ?? MANAGER_DESK_NOTE),
     requiredFormTemplateIds: ["mohw_life_care_v1"],

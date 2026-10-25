@@ -49,7 +49,12 @@ var AssignmentModule = (function () {
     var existingActive = list({}).filter(function (r) {
       return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
     });
-    if (existingActive.length > 0) {
+    // 紙本建檔／代填可一案多人分次 KEY（allow_multi_active）；外勤唯一派案仍擋重複。
+    var allowMulti =
+      data.allow_multi_active === true ||
+      data.allow_multi_active === 'true' ||
+      String(data.notes || '').indexOf('公所代填') !== -1;
+    if (existingActive.length > 0 && !allowMulti) {
       var err = new Error(
         '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
       );

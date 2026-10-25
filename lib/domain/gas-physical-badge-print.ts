@@ -1,5 +1,3 @@
-import { gasClient, isGasConfigured } from "@/lib/gas-client";
-
 /** 官方證件套裁切比例（單張含完整黑框） */
 export const GAS_BADGE_ASPECT = "781 / 1076";
 
@@ -24,13 +22,65 @@ export const GAS_BADGES_PER_A4_PAGE = 4;
 
 export type GasBadgePrintVisitor = {
   visitorId: string;
+  visitorCode: string;
   name: string;
   email: string;
   status: string;
   hasPhoto: boolean;
 };
 
+export const GAS_BADGE_PRINT_TRAY_KEY = "elder-visit:gas-badge-print-tray";
+
 export type GasBadgePrintMode = "front" | "back" | "duplex" | "check";
+
+function normalizeVisitorKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function uniqueVisitorIds(ids: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of ids) {
+    const id = String(raw ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result;
+}
+
+export function visitorMatchesPrintQuery(visitor: GasBadgePrintVisitor, query: string) {
+  const needle = normalizeVisitorKey(query);
+  if (!needle) return false;
+  return [visitor.name, visitor.visitorId, visitor.visitorCode, visitor.email].some((value) =>
+    normalizeVisitorKey(value).includes(needle),
+  );
+}
+
+export function visitorMatchesWanted(visitor: GasBadgePrintVisitor, wanted: Set<string>) {
+  if (wanted.size === 0) return true;
+  const normalizedWanted = new Set([...wanted].map(normalizeVisitorKey).filter(Boolean));
+  return [visitor.visitorId, visitor.visitorCode, visitor.email]
+    .map(normalizeVisitorKey)
+    .some((key) => key && normalizedWanted.has(key));
+}
+
+export function resolveGasBadgeVisitorIds(
+  catalog: GasBadgePrintVisitor[],
+  requestedKeys: Array<string | null | undefined>,
+) {
+  const visitorIdByKey = new Map<string, string>();
+  for (const visitor of catalog) {
+    for (const key of [visitor.visitorId, visitor.visitorCode, visitor.email]) {
+      const normalized = normalizeVisitorKey(key);
+      if (normalized) visitorIdByKey.set(normalized, visitor.visitorId);
+    }
+  }
+
+  return uniqueVisitorIds(
+    requestedKeys.map((key) => visitorIdByKey.get(normalizeVisitorKey(String(key ?? "")))),
+  );
+}
 
 /** 直式 A4、長邊翻面：左右對調。0↔1、2↔3 */
 export function duplexLongEdgeSlot(frontIndex: number): number {
@@ -45,80 +95,6 @@ export function placeBackSlots<T>(frontChunk: T[], size = GAS_BADGES_PER_A4_PAGE
     slots[duplexLongEdgeSlot(frontIndex)] = item;
   });
   return slots;
-}
-
-function asVisitorRows(data: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(data)) return data as Array<Record<string, unknown>>;
-  if (data && typeof data === "object") {
-    const obj = data as { items?: unknown; rows?: unknown };
-    if (Array.isArray(obj.items)) return obj.items as Array<Record<string, unknown>>;
-    if (Array.isArray(obj.rows)) return obj.rows as Array<Record<string, unknown>>;
-  }
-  return [];
-}
-
-function isApprovedStatus(status: string) {
-  if (!status) return true;
-  return /已核准|核准|approved|active/i.test(status);
-}
-
-export async function listGasBadgePrintVisitors(input?: {
-  visitorIds?: string[];
-}): Promise<GasBadgePrintVisitor[]> {
-  if (!isGasConfigured()) {
-    throw new Error("GAS 尚未設定，無法讀取訪員名冊。");
-  }
-
-  const wanted = new Set(
-    (input?.visitorIds ?? []).map((id) => id.trim()).filter(Boolean),
-  );
-
-  const [visitors, registrations] = await Promise.all([
-    gasClient.visitors.list(),
-    gasClient.registrations.list({ status: "approved" }),
-  ]);
-
-  const byId = new Map<string, GasBadgePrintVisitor>();
-
-  for (const row of asVisitorRows(visitors)) {
-    const visitorId = String(row.visitor_id || row.id || "").trim();
-    const email = String(row.email || "")
-      .trim()
-      .toLowerCase();
-    const name = String(row.name || row.full_name || "").trim();
-    const status = String(row.status || "");
-    if (!visitorId) continue;
-    if (!isApprovedStatus(status)) continue;
-    if (wanted.size > 0 && !wanted.has(visitorId)) continue;
-    byId.set(visitorId, {
-      visitorId,
-      name: name || "訪員",
-      email,
-      status: status || "已核准",
-      hasPhoto: Boolean(String(row.photo_url || "").trim()),
-    });
-  }
-
-  for (const reg of registrations) {
-    if (String(reg.status) !== "approved") continue;
-    const visitorId = String(reg.visitor_id || "").trim();
-    if (!visitorId) continue;
-    if (wanted.size > 0 && !wanted.has(visitorId)) continue;
-    const prev = byId.get(visitorId);
-    byId.set(visitorId, {
-      visitorId,
-      name: String(reg.full_name || prev?.name || "訪員").trim() || "訪員",
-      email: String(reg.email || prev?.email || "")
-        .trim()
-        .toLowerCase(),
-      status: prev?.status || "已核准",
-      hasPhoto: prev?.hasPhoto || Boolean(reg.profile?.headshotProcessedUrl),
-    });
-  }
-
-  return [...byId.values()].sort((a, b) =>
-    a.name.localeCompare(b.name, "zh-Hant") || a.visitorId.localeCompare(b.visitorId),
-  );
 }
 
 export function chunkForA4Pages<T>(items: T[], size = GAS_BADGES_PER_A4_PAGE): T[][] {

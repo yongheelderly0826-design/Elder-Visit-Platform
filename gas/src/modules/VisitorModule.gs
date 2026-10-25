@@ -40,20 +40,32 @@ var VisitorModule = (function () {
 
   function create(data) {
     SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
-    Validation.requireFields(data, ['name', 'id_number', 'phone']);
+    var deskMinimal = Boolean(data && data.desk_minimal);
+    Validation.requireFields(data, deskMinimal ? ['name', 'phone'] : ['name', 'id_number', 'phone']);
     data.id_number = extractTaiwanId_(data.id_number);
-    if (!Validation.validateTaiwanId(data.id_number)) {
-      throw new Error('Invalid Taiwan ID');
-    }
-    if (getByIdNumber(data.id_number)) {
-      var dup = new Error('此身分證已有志工資料');
-      dup.code = 'VALIDATION_ERROR';
-      throw dup;
+    if (deskMinimal && !data.id_number) {
+      data.id_number = '';
+      data.data_quality_tag = String(data.data_quality_tag || '') + ';desk_no_id';
+    } else {
+      if (!Validation.validateTaiwanId(data.id_number)) {
+        throw new Error('Invalid Taiwan ID');
+      }
+      if (getByIdNumber(data.id_number)) {
+        var dup = new Error('此身分證已有志工資料');
+        dup.code = 'VALIDATION_ERROR';
+        throw dup;
+      }
     }
     data.visitor_id = data.visitor_id || 'V-YH-' + String(Date.now()).slice(-6);
-    data.status = data.status || '待審';
+    data.status = data.status || (deskMinimal ? '已核准' : '待審');
+    if (deskMinimal && data.status === '已核准') {
+      data.approved_at = new Date().toISOString();
+      data.badge_no = data.badge_no || 'BADGE-' + data.visitor_id;
+    }
+    data.email = String(data.email || '').trim().toLowerCase();
     data.registered_at = new Date().toISOString();
     data.updated_at = data.registered_at;
+    delete data.desk_minimal;
     return SheetHelper.appendRow(SHEET, data);
   }
 

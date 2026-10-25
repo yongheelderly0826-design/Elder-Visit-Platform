@@ -38,6 +38,11 @@ var ApiRouter = (function () {
     'cases.create': function (p, b) { return CaseModule.create(b || p); },
     'cases.reencode': function () { return CaseModule.reencodeAll(); },
 
+    'villageAdmins.list': function (p) { return VillageAdminModule.list(p); },
+    'villageAdmins.replaceAll': function (p, b) { return VillageAdminModule.replaceAll(b || p); },
+    'villageAdmins.upsert': function (p, b) { return VillageAdminModule.upsert(b || p); },
+    'villageAdmins.setStatus': function (p, b) { return VillageAdminModule.setStatus(b || p); },
+
     'assignments.list': function (p) { return AssignmentModule.list(p); },
     'assignments.get': function (p) { return AssignmentModule.get(p.assignment_id || p.id); },
     'assignments.dispatch': function (p, b) { return AssignmentModule.dispatch(b); },
@@ -100,6 +105,10 @@ var ApiRouter = (function () {
     'payments.lock': function (p, b) { return PaymentModule.lock(b); },
     'payments.visitBatchPreview': function () { return PaymentModule.visitBatchPreview(); },
     'payments.createVisitBatch': function (p, b) { return PaymentModule.createVisitBatch(b); },
+
+    'ops.clearVisitTestData': function (p, b) {
+      return OpsModule.clearVisitTestData(b || p);
+    },
   };
 
   function dispatch(action, params, body) {

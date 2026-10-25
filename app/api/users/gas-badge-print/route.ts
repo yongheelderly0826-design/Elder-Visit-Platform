@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
-import { listGasBadgePrintVisitors } from "@/lib/domain/gas-physical-badge-print";
+import { listGasBadgePrintVisitors } from "@/lib/domain/list-gas-badge-print-visitors";
 
 export async function GET(request: NextRequest) {
   const forbidden = requireCapability(request, "users.review");

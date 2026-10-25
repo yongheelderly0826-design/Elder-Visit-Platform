@@ -119,11 +119,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (isMissedVisit && countMissedVisitPhotoSlots(submission.photoNames) < missedVisitMinSlots) {
+    // 承辦紙本建檔：允許以「三次未遇補錄」時段勾選產生的 photoNames 過關；
+    // 若仍不足則擋下。
     return NextResponse.json(
       {
         error: {
           code: "MISSED_VISIT_SLOTS_REQUIRED",
-          message: `未遇需至少 ${missedVisitMinSlots} 個不同時段的佐證照片`,
+          message: body.deskEntry
+            ? `未遇紙本請勾選至少 ${missedVisitMinSlots} 個不同時段（一張紙＝一次訪視）`
+            : `未遇需至少 ${missedVisitMinSlots} 個不同時段的佐證照片`,
         },
       },
       { status: 400 },

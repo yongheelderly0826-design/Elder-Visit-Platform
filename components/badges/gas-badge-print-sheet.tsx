@@ -4,9 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { GasSleeveBadgeTile } from "@/components/badges/gas-sleeve-badge-tile";
 import { PrintButton } from "@/components/badges/print-button";
+import { useGasBadgePrintTray } from "@/components/badges/use-gas-badge-print-data";
 import {
   chunkForA4Pages,
+  GAS_BADGES_PER_A4_PAGE,
   placeBackSlots,
+  visitorMatchesPrintQuery,
   type GasBadgePrintMode,
   type GasBadgePrintVisitor,
 } from "@/lib/domain/gas-physical-badge-print";
@@ -26,56 +29,61 @@ export function GasBadgePrintSheet({
   initialVisitorIds?: string[];
   initialMode?: GasBadgePrintMode;
 }) {
+  const [catalog, setCatalog] = useState<GasBadgePrintVisitor[]>([]);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [mode, setMode] = useState<GasBadgePrintMode>(initialMode);
-  const [visitors, setVisitors] = useState<GasBadgePrintVisitor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const { visitors, stagedIds, stageVisitor, unstageVisitor, clearTray } = useGasBadgePrintTray(
+    catalog,
+    initialVisitorIds,
+  );
   const [portraitMap, setPortraitMap] = useState<Record<string, string>>({});
   const [portraitsLoading, setPortraitsLoading] = useState(false);
   const [portraitProgress, setPortraitProgress] = useState({ done: 0, total: 0, ok: 0 });
+  const [loadedPortraitKey, setLoadedPortraitKey] = useState("");
   const objectUrlsRef = useRef<string[]>([]);
 
+  // 名冊改由客戶端載入，避免伺服器等 GAS 時整頁白屏
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
+    async function loadCatalog() {
+      setCatalogState("loading");
+      setCatalogError(null);
       try {
-        const params = new URLSearchParams();
-        if (initialVisitorIds && initialVisitorIds.length > 0) {
-          params.set("visitorIds", initialVisitorIds.join(","));
-        }
-        const response = await fetch(`/api/users/gas-badge-print?${params.toString()}`, {
-          cache: "no-store",
-        });
+        const response = await fetch("/api/users/gas-badge-print", { cache: "no-store" });
         const json = (await response.json()) as {
-          data?: { visitors: GasBadgePrintVisitor[] };
+          data?: { visitors?: GasBadgePrintVisitor[] };
           error?: { message?: string };
         };
-        if (!response.ok || !json.data) {
-          throw new Error(json.error?.message ?? "無法載入訪員名冊。");
+        if (!response.ok || !Array.isArray(json.data?.visitors)) {
+          throw new Error(json.error?.message ?? "無法載入訪查員名冊。");
         }
-        if (!cancelled) setVisitors(json.data.visitors);
+        if (!cancelled) {
+          setCatalog(json.data.visitors);
+          setCatalogState("ready");
+        }
       } catch (cause) {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "無法載入訪員名冊。");
-          setVisitors([]);
+          setCatalog([]);
+          setCatalogState("error");
+          setCatalogError(cause instanceof Error ? cause.message : "無法載入訪查員名冊。");
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     }
-    void load();
+    void loadCatalog();
     return () => {
       cancelled = true;
     };
-  }, [initialVisitorIds]);
+  }, []);
 
   // 限流載入證件照，避免一次打爆 GAS
   useEffect(() => {
     let cancelled = false;
 
     async function loadPortraits() {
+      const batchKey = visitors.map((visitor) => visitor.visitorId).join("\u0000");
+      setLoadedPortraitKey("");
       for (const url of objectUrlsRef.current) URL.revokeObjectURL(url);
       objectUrlsRef.current = [];
       setPortraitMap({});
@@ -83,6 +91,7 @@ export function GasBadgePrintSheet({
       if (visitors.length === 0) {
         setPortraitsLoading(false);
         setPortraitProgress({ done: 0, total: 0, ok: 0 });
+        setLoadedPortraitKey("");
         return;
       }
 
@@ -132,6 +141,7 @@ export function GasBadgePrintSheet({
       if (!cancelled) {
         setPortraitMap({ ...nextMap });
         setPortraitsLoading(false);
+        setLoadedPortraitKey(batchKey);
       }
     }
 
@@ -143,78 +153,205 @@ export function GasBadgePrintSheet({
     };
   }, [visitors]);
 
+  const searchHits = useMemo(() => {
+    if (!query.trim()) return [];
+    return catalog
+      .filter((visitor) => visitorMatchesPrintQuery(visitor, query))
+      .filter((visitor) => !stagedIds.includes(visitor.visitorId))
+      .slice(0, 8);
+  }, [catalog, query, stagedIds]);
   const pages = useMemo(() => buildPages(visitors, mode), [visitors, mode]);
   const withPhoto = visitors.filter((row) => row.hasPhoto).length;
+  const physicalSheets =
+    mode === "check" ? 1 : Math.ceil(visitors.length / GAS_BADGES_PER_A4_PAGE);
+  const remainder = visitors.length % GAS_BADGES_PER_A4_PAGE;
+  const remainingForFullSheet =
+    remainder === 0 ? 0 : GAS_BADGES_PER_A4_PAGE - remainder;
+  const visitorKey = visitors.map((visitor) => visitor.visitorId).join("\u0000");
   const imagesReady =
-    mode === "check"
-      ? !loading
-      : !loading && !portraitsLoading && visitors.length > 0;
+    mode === "check" ||
+    (!portraitsLoading && visitors.length > 0 && loadedPortraitKey === visitorKey);
+  const actualMissingPhotos = Math.max(0, portraitProgress.total - portraitProgress.ok);
+  const printConfirmMessage =
+    mode === "duplex"
+      ? `請確認印表機使用 A4、100% 比例、雙面長邊翻面。${
+          actualMissingPhotos > 0
+            ? `\n\n目前有 ${actualMissingPhotos} 位未載入證件照，將以「無證件照」列印。`
+            : ""
+        }`
+      : actualMissingPhotos > 0
+        ? `目前有 ${actualMissingPhotos} 位未載入證件照，將以「無證件照」列印。確定繼續嗎？`
+        : undefined;
+
+  function addVisitor(visitorId: string) {
+    stageVisitor(visitorId);
+    setQuery("");
+  }
 
   return (
     <div className="gas-print-root min-h-screen bg-slate-100 text-slate-950 print:bg-white">
       <style>{printStyles}</style>
 
-      <div className="print-toolbar mx-auto mb-4 flex max-w-5xl flex-col gap-3 rounded-lg border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">GAS 紙本訪員證（證件套）列印</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            A4 每頁 2×2 張，可裁切。只印一張時背面會左右對調，長邊翻面後才會對準正面。請先用「對位檢查」印一組數字確認，再雙面列印。
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            {loading
-              ? "載入名冊中…"
-              : `共 ${visitors.length} 人（名冊標示有照 ${withPhoto}）· 列印頁 ${pages.length} 面`}
-          </p>
-          {!loading && visitors.length > 0 && (
-            <p className="mt-1 text-sm text-slate-500">
-              {portraitsLoading
-                ? `證件照載入中 ${portraitProgress.done}/${portraitProgress.total}（成功 ${portraitProgress.ok}）…`
-                : `證件照已載入：成功 ${portraitProgress.ok}／共 ${portraitProgress.total}`}
+      <div className="print-toolbar mx-auto mb-4 max-w-5xl rounded-lg border bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">紙本訪查員證（證件套）列印</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              搜尋一位加入待列印清單，再繼續找下一位。每 4 位排成一張 A4（2×2），超過 4 位會自動接下一張。
+            </p>
+            <p className="mt-2 text-sm text-slate-500" aria-live="polite">
+              {catalogState === "loading"
+                ? "正在載入已核准訪查員名冊…"
+                : catalogState === "error"
+                  ? catalogError || "目前讀不到已核准訪查員名冊。"
+                  : `待列印 ${visitors.length} 位 · A4 ${physicalSheets} 張 · 列印 ${pages.length} 面 · 缺照片 ${visitors.length - withPhoto} 位 · 名冊 ${catalog.length} 人`}
+            </p>
+            {visitors.length > 0 && (
+              <p className="mt-1 text-sm text-slate-500">
+                {portraitsLoading
+                  ? `證件照載入中 ${portraitProgress.done}/${portraitProgress.total}（成功 ${portraitProgress.ok}）…`
+                  : `證件照已載入：成功 ${portraitProgress.ok}／共 ${portraitProgress.total}`}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["front", "只印正面"],
+                  ["back", "只印背面"],
+                  ["duplex", "雙面列印"],
+                  ["check", "對位檢查"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`min-h-11 rounded-md px-3 py-1.5 text-sm font-medium ${
+                    mode === value
+                      ? "bg-emerald-700 text-white"
+                      : "border bg-white text-slate-700"
+                  }`}
+                  onClick={() => setMode(value)}
+                  aria-pressed={mode === value}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <PrintButton disabled={!imagesReady} confirmMessage={printConfirmMessage} />
+            {mode !== "check" && visitors.length > 0 && remainingForFullSheet > 0 ? (
+              <p className="text-xs text-amber-800">
+                尚未滿版，再加入 {remainingForFullSheet} 位可填滿最後一張；現在仍可列印。
+              </p>
+            ) : mode !== "check" && visitors.length > 0 ? (
+              <p className="text-xs font-medium text-emerald-700">
+                最後一張已滿版，可直接列印。
+              </p>
+            ) : null}
+            {mode === "duplex" ? (
+              <p className="max-w-sm text-xs leading-5 text-slate-600">
+                雙面列印請選 A4、100% 比例、關閉頁首頁尾，並使用長邊翻面；第一次列印建議先做對位檢查。
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 border-t pt-4">
+          <label className="grid gap-1 text-sm font-medium">
+            搜尋一位加入待列印清單
+            <input
+              className="h-11 w-full rounded-md border px-3 text-sm"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="姓名、訪查員編碼或 Email"
+            />
+          </label>
+
+          {query.trim() ? (
+            <div className="grid gap-2" aria-live="polite">
+              {searchHits.map((visitor) => (
+                <button
+                  key={visitor.visitorId}
+                  type="button"
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  onClick={() => addVisitor(visitor.visitorId)}
+                >
+                  <span>
+                    <span className="font-semibold">{visitor.name}</span>
+                    <span className="mt-0.5 block text-slate-500">
+                      {visitor.visitorCode}
+                      {visitor.hasPhoto ? " · 有證件照" : " · 尚無證件照"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-medium text-emerald-700">加入暫存</span>
+                </button>
+              ))}
+              {searchHits.length === 0 ? (
+                <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                  找不到尚未加入的已核准訪查員。
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              搜到一位就加入；改搜下一位時，前面的人會繼續保留。
             </p>
           )}
-        </div>
-        <div className="flex flex-col gap-2 sm:items-end">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["front", "只印正面"],
-                ["back", "只印背面"],
-                ["duplex", "雙面列印"],
-                ["check", "對位檢查"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                  mode === value
-                    ? "bg-emerald-700 text-white"
-                    : "border bg-white text-slate-700"
-                }`}
-                onClick={() => setMode(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <PrintButton disabled={!imagesReady} />
+
+          {visitors.length > 0 ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">待列印清單 {visitors.length} 位</p>
+                <button
+                  type="button"
+                  className="text-sm font-medium text-slate-600 underline-offset-2 hover:underline"
+                  onClick={clearTray}
+                >
+                  全部清空
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {visitors.map((visitor) => (
+                  <span
+                    key={visitor.visitorId}
+                    className="inline-flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-1 text-sm"
+                  >
+                    {visitor.name}
+                    <button
+                      type="button"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-full text-lg text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+                      onClick={() => unstageVisitor(visitor.visitorId)}
+                      aria-label={`移除 ${visitor.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {error && (
-        <div className="mx-auto mb-4 max-w-5xl rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          {error}
+      {catalogState === "loading" ? (
+        <div className="mx-auto mb-4 flex max-w-5xl items-center justify-center gap-2 rounded-lg border bg-white p-6 text-sm text-slate-600">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在讀取 GAS 訪查員名冊，畫面可先操作搜尋列，名冊就緒後即可加入。
         </div>
-      )}
+      ) : null}
 
-      {loading && mode !== "check" ? (
-        <div className="flex items-center justify-center gap-2 py-20 text-slate-500">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          正在讀取 GAS 訪員名冊…
+      {catalogState === "error" ? (
+        <div className="mx-auto mb-4 max-w-5xl rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {catalogError || "目前讀不到已核准訪查員名冊，請稍後重新整理。"}
         </div>
-      ) : visitors.length === 0 && mode !== "check" ? (
+      ) : null}
+
+      {visitors.length === 0 && mode !== "check" ? (
         <div className="mx-auto max-w-5xl rounded-lg border border-dashed bg-white p-8 text-center text-slate-500">
-          沒有可列印的已核准訪員。請確認 GAS 名冊後再試。
+          {catalogState === "loading"
+            ? "名冊載入中，載入完成後即可搜尋並加入待列印清單。"
+            : "先在上方搜尋一位並加入待列印清單；加入後可繼續搜尋其他人。"}
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-full flex-col items-center gap-6 print:max-w-none print:gap-0">

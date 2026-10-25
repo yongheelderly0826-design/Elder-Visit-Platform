@@ -23,6 +23,7 @@
 | `_設定` | `key` | 工作區參數 |
 | `訪查員主檔` | `visitor_id` | 訪查員基本資料 |
 | `個案名冊` | `case_id` | 獨老/中老個案 |
+| `里責任分配` | `assignment_row_id` | 里↔管理員（人／組織／skip；可一里多列） |
 | `派案紀錄` | `assignment_id` | 派案與狀態 |
 | `簽到退紀錄` | `attendance_id` | 簽到/簽退 |
 | `關懷表登打` | `careform_id` | 去識別化表單答案 |

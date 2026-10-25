@@ -50,6 +50,24 @@ var SheetHelper = (function () {
     return obj;
   }
 
+  /** 一次寫入多列，避免大批匯入逐列 appendRow 過慢。 */
+  function appendRows(sheetName, objs) {
+    objs = objs || [];
+    if (!objs.length) return 0;
+    var sheet = getSheet(sheetName);
+    var headers = getHeaders(sheet);
+    var values = objs.map(function (obj) {
+      return headers.map(function (h) {
+        return obj[h] !== undefined ? obj[h] : '';
+      });
+    });
+    var startRow = Math.max(sheet.getLastRow() + 1, 2);
+    // Sheet#getRange(row, column, numRows, numColumns)
+    sheet.getRange(startRow, 1, values.length, headers.length).setValues(values);
+    logOperation_('append_batch', sheetName, { count: objs.length });
+    return objs.length;
+  }
+
   function findByKey(sheetName, keyField, keyValue) {
     var rows = rowsToObjects(getSheet(sheetName));
     return rows.filter(function (r) {
@@ -95,6 +113,7 @@ var SheetHelper = (function () {
       '訪員註冊申請': ['request_id', 'account_id', 'email', 'full_name', 'requested_unit_name', 'requested_workspace_id', 'requested_workspace_name', 'requested_role_key', 'status', 'review_note', 'submitted_at', 'reviewed_at', 'visitor_id', 'profile_json', 'created_at', 'updated_at'],
       '訪員帳號': ['account_id', 'email', 'visitor_id', 'full_name', 'role_key', 'status', 'password_hash', 'password_salt', 'password_params', 'invite_token_hash', 'invite_expires_at', 'reset_token_hash', 'reset_expires_at', 'password_updated_at', 'last_login_at', 'created_at', 'updated_at'],
       '個案名冊': ['case_id', 'external_id', 'case_type', 'name', 'id_number', 'gender', 'birth_date', 'age', 'household_district', 'household_village', 'visit_district', 'visit_village', 'address', 'primary_phone', 'secondary_phone', 'contact_note', 'visit_status', 'dispatch_priority', 'encoded_id', 'data_quality_tag', 'imported_at', 'updated_at'],
+      '里責任分配': ['assignment_row_id', 'village_code', 'village_name', 'admin_display_name', 'admin_kind', 'admin_account_key', 'matched_visitor_id', 'status', 'notes', 'updated_at', 'updated_by'],
       '派案紀錄': ['assignment_id', 'batch_id', 'case_id', 'encoded_id', 'visitor_id', 'visit_village', 'status', 'dispatched_at', 'confirmed_at', 'due_date', 'notes', 'updated_at'],
       '簽到退紀錄': ['attendance_id', 'visitor_id', 'assignment_id', 'session_date', 'checkin_at', 'checkout_at', 'checkin_lat', 'checkin_lng', 'checkout_lat', 'checkout_lng', 'session_type', 'duration_minutes', 'channel', 'site_id', 'site_name', 'group_id', 'group_name', 'worker_name', 'id_number', 'source', 'checkin_photo_url'],
       '出勤集合點': ['site_id', 'name', 'group_id', 'kind', 'note', 'status', 'created_at', 'created_by'],
@@ -206,14 +225,27 @@ var SheetHelper = (function () {
     }
   }
 
+  /** 保留第 1 列表頭，刪除其餘資料列。回傳刪除列數。 */
+  function clearDataRows(sheetName) {
+    var sheet = getSheet(sheetName);
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return 0;
+    var count = lastRow - 1;
+    sheet.deleteRows(2, count);
+    logOperation_('clear_data', sheetName, { deleted: count });
+    return count;
+  }
+
   return {
     getSpreadsheet: getSpreadsheet,
     getSheet: getSheet,
     getHeaders: getHeaders,
     rowsToObjects: rowsToObjects,
     appendRow: appendRow,
+    appendRows: appendRows,
     findByKey: findByKey,
     updateByKey: updateByKey,
+    clearDataRows: clearDataRows,
     ensureColumns: ensureColumns,
     ensureSheet: ensureSheet,
     initAllSheets: initAllSheets,

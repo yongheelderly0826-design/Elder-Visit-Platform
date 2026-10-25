@@ -313,9 +313,40 @@ export const gasClient = {
         missed: number;
       }>("cases.reencode", { method: "POST", body: {} }),
     import: (body: { rows: unknown[] }) =>
-      gasFetch<{ imported: number; case_ids: string[] }>("cases.import", { method: "POST", body }),
+      gasFetch<{ imported: number; updated?: number; case_ids: string[] }>("cases.import", {
+        method: "POST",
+        body,
+      }),
     create: (body: Record<string, string>) =>
       gasFetch<Record<string, unknown>>("cases.create", { method: "POST", body }),
+  },
+  villageAdmins: {
+    list: (params?: { status?: string; village_name?: string }) =>
+      gasFetch<Record<string, unknown>[]>("villageAdmins.list", {
+        params: params as Record<string, string> | undefined,
+        revalidateSeconds: 20,
+        tags: ["gas-village-admins"],
+      }),
+    replaceAll: (body: {
+      rows: Array<Record<string, unknown>>;
+      mode?: "replace" | "append";
+      replace?: boolean;
+      updated_by?: string;
+    }) =>
+      gasFetch<{ written: number; total: number }>("villageAdmins.replaceAll", {
+        method: "POST",
+        body,
+      }),
+    upsert: (body: Record<string, unknown>) =>
+      gasFetch<{ action: string; row: Record<string, unknown> }>("villageAdmins.upsert", {
+        method: "POST",
+        body,
+      }),
+    setStatus: (body: { assignment_row_id: string; status: string; updated_by?: string }) =>
+      gasFetch<Record<string, unknown>>("villageAdmins.setStatus", {
+        method: "POST",
+        body,
+      }),
   },
   assignments: {
     list: (params?: { visitor_id?: string; status?: string; active_only?: string }) =>

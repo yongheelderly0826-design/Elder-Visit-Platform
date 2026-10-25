@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
 import { SignaturePad } from "@/components/consent/signature-pad";
 import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
@@ -9,6 +17,8 @@ import type { ElderCase, VisitSchedule, VisitSubmission } from "@/lib/domain/typ
 import { visitQuestions } from "@/lib/domain/mock-data";
 import { createVisitDraft, getVisitDraftKey, type VisitDraft } from "@/lib/domain/offline-drafts";
 import { getVisitRequiredForms } from "@/lib/domain/visit-form-flow";
+import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
+import { createMohwDeskInitialAnswers } from "@/lib/domain/mohw-desk-form-defaults";
 import {
   calculateMohwCareFormCompletion,
   createInitialMohwAnswers,
@@ -42,12 +52,14 @@ import {
   countMissedVisitPhotoSlots,
   getMissedVisitPolicy,
   getPaymentEligibility,
+  missedVisitClosureAttempt,
   missedVisitMaxSlots,
   missedVisitMinSlots,
   missedVisitTimeSlots,
   type MissedVisitTimeSlot,
   validateVisitSubmission,
 } from "@/lib/domain/visits";
+import { toggleMissedVisitSlot } from "@/lib/domain/missed-visit-supplement";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
 import { MANAGER_DESK_NOTE } from "@/lib/domain/manager-care-form-desk";
 
@@ -116,6 +128,8 @@ export function VisitDialogueForm({
   variant = "visitor",
   readonly = false,
   visitorName,
+  visitorDirectory,
+  selectedVisitor,
   initialTimes,
   initialAnswers,
 }: {
@@ -124,6 +138,8 @@ export function VisitDialogueForm({
   variant?: "visitor" | "manager_desk";
   readonly?: boolean;
   visitorName?: string;
+  visitorDirectory?: DeskVisitorOption[];
+  selectedVisitor?: DeskVisitorOption;
   initialTimes?: { visitDate?: string; visitStartTime?: string; visitEndTime?: string };
   initialAnswers?: MohwLifeCareAnswers;
 }) {
@@ -139,15 +155,27 @@ export function VisitDialogueForm({
   );
   const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
   const isDeskEntry = variant === "manager_desk";
+  /** 紙本未遇：本張紙＝本次第 N 次訪視，只勾本趟時段佐證 */
+  const [deskPaperSlots, setDeskPaperSlots] = useState<MissedVisitTimeSlot[]>([]);
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() => {
-    const initial = createInitialMohwAnswers(elderCase, schedule);
-    return {
+    const initial = isDeskEntry
+      ? createMohwDeskInitialAnswers(elderCase, schedule)
+      : createInitialMohwAnswers(elderCase, schedule);
+    const withTimes: MohwLifeCareAnswers = {
       ...initial,
       ...initialAnswers,
       ...(initialTimes?.visitDate ? { visit_date: initialTimes.visitDate } : {}),
       ...(initialTimes?.visitStartTime ? { visit_start_time: initialTimes.visitStartTime } : {}),
       ...(initialTimes?.visitEndTime ? { visit_end_time: initialTimes.visitEndTime } : {}),
     };
+    const seeded =
+      isDeskEntry &&
+      selectedVisitor &&
+      !withTimes.social_worker_name &&
+      !withTimes.civil_worker_name
+        ? applyVisitorToWorkerAnswers(withTimes, selectedVisitor, "social")
+        : {};
+    return { ...withTimes, ...seeded };
   });
   const [openSectionTitles, setOpenSectionTitles] = useState<string[]>(() =>
     mohwLifeCareSections
@@ -156,13 +184,25 @@ export function VisitDialogueForm({
   );
   const draftKey = getVisitDraftKey(schedule.id);
   const careFormDraftKey = `${draftKey}:mohw_life_care_form`;
+  const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
+  const deskPaperSlotsOk =
+    !deskPaperMissed || new Set(deskPaperSlots).size >= missedVisitMinSlots;
+  const effectivePhotoNames = useMemo(
+    () =>
+      deskPaperMissed
+        ? deskPaperSlots.map(
+            (slot) => `${slot}：紙本·第${schedule.visitAttempt}次`,
+          )
+        : submission.photoNames,
+    [deskPaperMissed, deskPaperSlots, schedule.visitAttempt, submission.photoNames],
+  );
   const validation = useMemo(
     () =>
       validateVisitSubmission(
-        { scheduleId: schedule.id, ...submission },
+        { scheduleId: schedule.id, ...submission, photoNames: effectivePhotoNames },
         { requireMissedGps: !isDeskEntry },
       ),
-    [isDeskEntry, schedule.id, submission],
+    [effectivePhotoNames, isDeskEntry, schedule.id, submission],
   );
   const paymentEligibility = useMemo(
     () => getPaymentEligibility({ scheduleId: schedule.id, ...submission }),
@@ -209,14 +249,16 @@ export function VisitDialogueForm({
   const isMissedVisit = submission.visitResult === "未遇";
   const activePhotoCategories = optionalPhotoCategories;
   const hasVisitGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
-  const missedSlotCount = countMissedVisitPhotoSlots(submission.photoNames);
+  const missedSlotCount = countMissedVisitPhotoSlots(effectivePhotoNames);
   const needsMissedVisitEvidence =
     isMissedVisit &&
+    !deskPaperMissed &&
     (missedSlotCount < missedVisitMinSlots || (!isDeskEntry && !hasVisitGps));
   const canSubmitVisit =
     !readonly &&
     validation.ok &&
     !isSubmitting &&
+    deskPaperSlotsOk &&
     (isMissedVisit || (careFormCompletion.percent >= 100 && mohwValidation.ok));
   const locationLabel =
     typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number"
@@ -297,9 +339,15 @@ export function VisitDialogueForm({
       }
     }
 
-    const missedPhotos = missedVisitTimeSlots
-      .map((slot) => missedSlotPhotos[slot])
-      .filter((item): item is MissedSlotPhoto => Boolean(item));
+    const missedPhotos = deskPaperMissed
+      ? []
+      : missedVisitTimeSlots
+          .map((slot) => missedSlotPhotos[slot])
+          .filter((item): item is MissedSlotPhoto => Boolean(item));
+
+    const deskAttemptNote = deskPaperMissed
+      ? `第${schedule.visitAttempt}次未遇紙本 時段(${deskPaperSlots.join("、") || "—"})`
+      : "";
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
@@ -313,14 +361,17 @@ export function VisitDialogueForm({
         careFormAnswers: mohwAnswers,
         registryNationalId: elderCase.nationalId ?? "",
         deskEntry: isDeskEntry,
+        closeAsMissedTriple:
+          deskPaperMissed && schedule.visitAttempt >= missedVisitClosureAttempt,
         missedVisitPhotos: missedPhotos.map((item) => ({
           slot: item.slot,
           fileName: item.fileName,
           dataUrl: item.dataUrl,
         })),
         ...submission,
+        photoNames: effectivePhotoNames,
         notes: isDeskEntry
-          ? [MANAGER_DESK_NOTE, submission.notes].filter(Boolean).join("；")
+          ? [MANAGER_DESK_NOTE, deskAttemptNote, submission.notes].filter(Boolean).join("；")
           : submission.notes,
       }),
     });
@@ -485,7 +536,7 @@ export function VisitDialogueForm({
     <section className="rounded-lg border bg-card p-4 pb-28 sm:pb-4">
       <div>
         <p className="text-sm font-medium text-primary">
-          {isDeskEntry ? "公所代填・紙本" : "對話式填報流程"}
+          {isDeskEntry ? "公所代填・紙本（一張＝一次訪視）" : "對話式填報流程"}
         </p>
         <h1 className="mt-2 text-2xl font-semibold">{elderCase.name || "未填姓名"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -493,6 +544,11 @@ export function VisitDialogueForm({
           {schedule.visitAttempt} 次訪視
           {isDeskEntry && visitorName ? ` · 指定訪員 ${visitorName}` : ""}
         </p>
+        {isDeskEntry ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            未遇需陸續 KEY 滿 {missedVisitClosureAttempt} 張紙本才算完整；本次只填這一張。
+          </p>
+        ) : null}
         {readonly ? (
           <p className="mt-3 rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
             此筆已送出，訪員只能查看。如需修改請由承辦在「關懷表建檔」處理。
@@ -702,8 +758,12 @@ export function VisitDialogueForm({
                         field={field}
                         value={careFormAnswers[field.key]}
                         error={mohwErrorByField.get(field.key)}
+                        visitorDirectory={visitorDirectory}
                         onChange={(value) =>
                           setCareFormAnswers((current) => ({ ...current, [field.key]: value }))
+                        }
+                        onPatchAnswers={(patch) =>
+                          setCareFormAnswers((current) => ({ ...current, ...patch }))
                         }
                       />
                     ))}
@@ -813,19 +873,69 @@ export function VisitDialogueForm({
           </div>
         </div>
 
+        {deskPaperMissed ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+            <h2 className="text-sm font-semibold text-amber-950">
+              本張紙本・第 {schedule.visitAttempt} 次未遇時段
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-amber-900/90">
+              依紙本勾選本次訪視已備之不同時段（至少 {missedVisitMinSlots} 個）。
+              {schedule.visitAttempt < missedVisitClosureAttempt
+                ? ` 送出後再 KEY 下一張，直到滿 ${missedVisitClosureAttempt} 次。`
+                : ` 已達第 ${missedVisitClosureAttempt} 次，可送出後由督導結案。`}
+            </p>
+            <p
+              className={`mt-3 rounded-md border px-3 py-2 text-sm ${
+                deskPaperSlotsOk
+                  ? "border-primary/30 bg-card text-primary"
+                  : "border-amber-300 bg-card text-amber-950"
+              }`}
+            >
+              已勾 {new Set(deskPaperSlots).size}／至少 {missedVisitMinSlots}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {missedVisitTimeSlots.map((slot) => {
+                const selected = deskPaperSlots.includes(slot);
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    className={`rounded-md border px-3 py-2 text-sm font-medium ${
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-amber-300 bg-card text-amber-950"
+                    }`}
+                    onClick={() =>
+                      setDeskPaperSlots((current) => toggleMissedVisitSlot(current, slot))
+                    }
+                  >
+                    {slot}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-lg border bg-background p-3">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold">
-              {isMissedVisit ? "未遇時段佐證（3–5 時段拍照）" : "拍照上傳（選填）"}
+              {deskPaperMissed
+                ? "現場照片（紙本建檔可略過）"
+                : isMissedVisit
+                  ? "未遇時段佐證（3–5 時段拍照）"
+                  : "拍照上傳（選填）"}
             </h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {isMissedVisit
+            {deskPaperMissed
+              ? "紙本已有時段勾選即可；若有電子檔可選填上傳。"
+              : isMissedVisit
               ? `訪視未遇時，請在不同時段各拍一張門口／現場照片作為空訪紀錄（至少 ${missedVisitMinSlots} 個時段，最多 ${missedVisitMaxSlots} 個）。選照片時會自動取得定位並上傳存檔。`
               : "一般訪視照片為選填；若結果改為「未遇」，需改填下方 3–5 個時段佐證。"}
           </p>
-          {isMissedVisit && (
+          {isMissedVisit && !deskPaperMissed && (
             <>
               <p
                 className={`mt-3 rounded-md border p-2 text-xs ${
@@ -1147,16 +1257,162 @@ function openAndJumpToCareField(
   });
 }
 
+function WorkerNamePicker({
+  field,
+  value,
+  error,
+  errorText,
+  directory,
+  kind,
+  onChange,
+  onPick,
+}: {
+  field: MohwFormField;
+  value: string;
+  error?: MohwValidationError;
+  errorText: ReactNode;
+  directory: DeskVisitorOption[];
+  kind: "social" | "civil";
+  onChange: (value: MohwLifeCareAnswers[string]) => void;
+  onPick: (visitor: DeskVisitorOption) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const fieldId = careFieldDomId(field.key);
+  const errorId = `${fieldId}-error`;
+  const controlClass = `h-10 w-full rounded-md bg-card px-3 text-sm ${
+    error
+      ? "border border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+      : "border"
+  }`;
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  const matches = useMemo(() => {
+    const needle = query.trim();
+    const rows = directory.filter((item) => item.name);
+    if (!needle) return rows.slice(0, 12);
+    return rows
+      .filter((item) =>
+        [item.name, item.badgeNo, item.phone, item.nationalId].some((part) =>
+          part.toLowerCase().includes(needle.toLowerCase()),
+        ),
+      )
+      .slice(0, 12);
+  }, [directory, query]);
+
+  return (
+    <div id={fieldId} className="relative grid scroll-mt-28 gap-1 text-sm font-medium">
+      <span>
+        {field.label}
+        {field.required ? <span className="text-destructive"> *</span> : null}
+      </span>
+      <input
+        className={controlClass}
+        type="text"
+        placeholder="輸入姓名搜尋訪查員，點選後帶入身分證／電話"
+        value={query}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setQuery(next);
+          onChange(next);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 150);
+        }}
+      />
+      <p className="text-xs font-normal leading-5 text-muted-foreground">
+        可搜尋已建檔訪查員；點選後自動帶入
+        {kind === "social" ? "社政" : "民政"}
+        身分證與電話（並清空另一邊訪查人欄位）。
+      </p>
+      {open ? (
+        <div className="absolute left-0 right-0 top-[4.75rem] z-20 max-h-56 overflow-auto rounded-md border bg-card shadow-md">
+          {matches.map((visitor) => (
+            <button
+              key={visitor.id}
+              type="button"
+              className="grid w-full gap-0.5 border-b px-3 py-2 text-left last:border-0 hover:bg-secondary"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setQuery(visitor.name);
+                onPick(visitor);
+                setOpen(false);
+              }}
+            >
+              <span className="font-medium">{visitor.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {[visitor.badgeNo, visitor.phone, visitor.nationalId ? `證${visitor.nationalId.slice(-4)}` : ""]
+                  .filter(Boolean)
+                  .join(" · ") || visitor.id}
+              </span>
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">找不到訪查員，可直接手打姓名。</p>
+          ) : null}
+        </div>
+      ) : null}
+      {errorText}
+    </div>
+  );
+}
+
+function applyVisitorToWorkerAnswers(
+  current: MohwLifeCareAnswers,
+  visitor: DeskVisitorOption,
+  kind: "social" | "civil",
+): MohwLifeCareAnswers {
+  const visitDate = String(current.visit_date ?? "").trim();
+  if (kind === "civil") {
+    return {
+      social_worker_role: "",
+      social_worker_role_other: "",
+      social_worker_name: "",
+      social_worker_national_id: "",
+      social_worker_phone: "",
+      social_worker_date: "",
+      civil_worker_role: String(current.civil_worker_role || "公所人員"),
+      civil_worker_name: visitor.name,
+      civil_worker_national_id: visitor.nationalId || "",
+      civil_worker_phone: visitor.phone || "",
+      civil_worker_date: String(current.civil_worker_date || visitDate),
+    };
+  }
+  return {
+    civil_worker_role: "",
+    civil_worker_name: "",
+    civil_worker_national_id: "",
+    civil_worker_phone: "",
+    civil_worker_date: "",
+    social_worker_role: String(current.social_worker_role || "志工"),
+    social_worker_name: visitor.name,
+    social_worker_national_id: visitor.nationalId || "",
+    social_worker_phone: visitor.phone || "",
+    social_worker_date: String(current.social_worker_date || visitDate),
+  };
+}
+
 function CareFormInput({
   field,
   value,
   error,
+  visitorDirectory,
   onChange,
+  onPatchAnswers,
 }: {
   field: MohwFormField;
   value: MohwLifeCareAnswers[string];
   error?: MohwValidationError;
+  visitorDirectory?: DeskVisitorOption[];
   onChange: (value: MohwLifeCareAnswers[string]) => void;
+  onPatchAnswers?: (patch: MohwLifeCareAnswers) => void;
 }) {
   const requiredMark = field.required ? <span className="text-destructive"> *</span> : null;
   const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
@@ -1182,12 +1438,33 @@ function CareFormInput({
   ].includes(field.mohwKey);
   const isIdField = field.mohwKey.endsWith("national_id");
   const isDecimalNumber = field.mohwKey === "height_cm" || field.mohwKey === "weight_kg";
+  const workerKind =
+    field.mohwKey === "social_worker_name"
+      ? "social"
+      : field.mohwKey === "civil_worker_name"
+        ? "civil"
+        : null;
 
   const errorText = error ? (
     <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
       {visitorFacingMohwError(error)}
     </p>
   ) : null;
+
+  if (workerKind && visitorDirectory?.length && onPatchAnswers) {
+    return (
+      <WorkerNamePicker
+        field={field}
+        value={rawText}
+        error={error}
+        errorText={errorText}
+        directory={visitorDirectory}
+        kind={workerKind}
+        onChange={onChange}
+        onPick={(visitor) => onPatchAnswers(applyVisitorToWorkerAnswers({}, visitor, workerKind))}
+      />
+    );
+  }
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];

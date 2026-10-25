@@ -415,8 +415,15 @@ export const gasRepository: AppRepository = {
       const allForCase = ((await gasClient.assignments.list()) as GasAssignmentRow[]).filter(
         (item) => String(item.case_id) === String(row.case_id),
       );
+      const ordered = allForCase.slice().sort((a, b) => {
+        const left = String(a.dispatched_at ?? a.updated_at ?? a.assignment_id ?? "");
+        const right = String(b.dispatched_at ?? b.updated_at ?? b.assignment_id ?? "");
+        return left.localeCompare(right);
+      });
+      const ordinal =
+        ordered.findIndex((item) => String(item.assignment_id) === String(row.assignment_id)) + 1;
       return {
-        schedule: toVisitSchedule(row, allForCase.length || 1, workspaceId),
+        schedule: toVisitSchedule(row, ordinal > 0 ? ordinal : ordered.length || 1, workspaceId),
         elderCase: toElderCase(caseRow),
       } satisfies VisitorTask;
     } catch {

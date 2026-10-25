@@ -1058,8 +1058,13 @@ function ApprovedVisitorRegistry({
     () => filteredRequests.filter((request) => selectedIds.includes(request.id)),
     [filteredRequests, selectedIds],
   );
+  const retainedSelectedRequests = useMemo(
+    () => requests.filter((request) => selectedIds.includes(request.id)),
+    [requests, selectedIds],
+  );
   const exportRequests = selectedRequests.length > 0 ? selectedRequests : filteredRequests;
   const visibleRequestIds = useMemo(() => filteredRequests.map((request) => request.id), [filteredRequests]);
+  const allRequestIds = useMemo(() => new Set(requests.map((request) => request.id)), [requests]);
   const allVisibleSelected =
     visibleRequestIds.length > 0 && visibleRequestIds.every((requestId) => selectedIds.includes(requestId));
   const photoReadyCount = filteredRequests.filter(
@@ -1090,8 +1095,8 @@ function ApprovedVisitorRegistry({
   ).length;
 
   useEffect(() => {
-    setSelectedIds((current) => current.filter((requestId) => visibleRequestIds.includes(requestId)));
-  }, [visibleRequestIds]);
+    setSelectedIds((current) => current.filter((requestId) => allRequestIds.has(requestId)));
+  }, [allRequestIds]);
 
   function toggleSelected(requestId: string) {
     setSelectedIds((current) =>
@@ -1430,17 +1435,17 @@ function ApprovedVisitorRegistry({
   }
 
   function openGasPhysicalBadgePrint() {
-    const codes = exportRequests
+    const codes = retainedSelectedRequests
       .map((request) => request.visitorRegistrationProfile?.visitorCode?.trim())
       .filter((code): code is string => Boolean(code));
     const uniqueCodes = Array.from(new Set(codes));
     const scopeLabel =
       uniqueCodes.length > 0
-        ? `目前清單／勾選共 ${uniqueCodes.length} 位`
-        : "GAS 全部已核准訪員";
+        ? `已跨搜尋勾選 ${uniqueCodes.length} 位`
+        : "空白待列印清單";
 
     const confirmed = window.confirm(
-      `將開啟紙本證件套列印頁（A4、2×2 裁切），範圍：${scopeLabel}。\n\n可先印「對位檢查」確認長邊翻面後數字重合，再選「雙面列印」。`,
+      `將開啟紙本證件套列印頁（A4、2×2 裁切），範圍：${scopeLabel}。\n\n可在列印頁逐位搜尋加入；每 4 位排滿一張 A4。`,
     );
     if (!confirmed) return;
 
@@ -1519,10 +1524,9 @@ function ApprovedVisitorRegistry({
             type="button"
             className="w-full sm:col-span-2"
             onClick={openGasPhysicalBadgePrint}
-            disabled={exportRequests.length === 0}
           >
             <IdCard className="h-4 w-4" />
-            列印證件套（A4 裁切）
+            列印訪查員證件套（A4 裁切）
           </Button>
         </div>
         )}
@@ -1577,7 +1581,7 @@ function ApprovedVisitorRegistry({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {mode === "supplement"
                 ? `已勾選 ${selectedRequests.length} 筆；可先勾選目前清單，再批次確認資料完成。`
-                : `已勾選 ${selectedRequests.length} 筆；若未勾選，批次按鈕會套用目前分頁與搜尋結果。`}
+                : `已跨搜尋勾選 ${retainedSelectedRequests.length} 筆；列印證件套會帶入這些人，未勾選時開啟空白待列印清單。`}
             </p>
           </div>
           <div className={`grid gap-2 ${mode === "supplement" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
@@ -1593,7 +1597,7 @@ function ApprovedVisitorRegistry({
             {mode === "approved" && (
             <Button type="button" variant="outline" onClick={openGasPhysicalBadgePrint}>
               <IdCard className="h-4 w-4" />
-              列印證件套
+              列印訪查員證件套
             </Button>
             )}
             <Button type="button" onClick={batchVerifyVisitors} disabled={batchAction !== null}>

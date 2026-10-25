@@ -45,6 +45,7 @@ var Config = (function () {
       REGISTRATIONS: '訪員註冊申請',
       VISITOR_ACCOUNTS: '訪員帳號',
       CASES: '個案名冊',
+      VILLAGE_ADMINS: '里責任分配',
       ASSIGNMENTS: '派案紀錄',
       ATTENDANCE: '簽到退紀錄',
       ATTENDANCE_SITES: '出勤集合點',

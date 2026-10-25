@@ -2,7 +2,6 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
 import {
-  isActiveAssignmentStatus,
   MANAGER_DESK_NOTE,
   toDeskElderCase,
   toDeskSchedule,
@@ -63,42 +62,15 @@ export async function POST(request: NextRequest) {
     }
 
     const caseId = String(caseRow.case_id);
-    const assignments = (await gasClient.assignments.list()) as Record<string, unknown>[];
-    const forCase = assignments.filter((row) => String(row.case_id ?? "") === caseId);
-    const active = forCase.filter((row) => isActiveAssignmentStatus(String(row.status ?? "")));
 
-    if (active.length > 0) {
-      const sameVisitor = active.find((row) => String(row.visitor_id ?? "") === visitorId);
-      if (!sameVisitor) {
-        return NextResponse.json(
-          {
-            error: {
-              code: "CONFLICT",
-              message: `此個案已有進行中的派案（${String(active[0].assignment_id)}），請改選原訪員或先結束該派案。`,
-            },
-          },
-          { status: 409 },
-        );
-      }
-      const elderCase = toDeskElderCase(caseRow);
-      return NextResponse.json({
-        data: {
-          reused: true,
-          assignmentId: String(sameVisitor.assignment_id),
-          elderCase,
-          schedule: toDeskSchedule(sameVisitor, visitDate),
-          visitStartTime: body.visitStartTime ?? "",
-          visitEndTime: body.visitEndTime ?? "",
-        },
-      });
-    }
-
+    // 紙本建檔：一張紙＝一次訪視。每次「下一步」都新開派案（可換訪查員），visit_attempt 由 GAS 依派案序累計。
     const saved = (await gasClient.assignments.dispatch({
       case_id: caseId,
       visitor_id: visitorId,
       due_date: visitDate,
       notes: MANAGER_DESK_NOTE,
       auto_confirm: true,
+      allow_multi_active: true,
     })) as Record<string, unknown>;
     invalidateGasReadCaches();
 
@@ -107,6 +79,7 @@ export async function POST(request: NextRequest) {
       data: {
         reused: false,
         assignmentId: String(saved.assignment_id ?? ""),
+        visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
         elderCase: toDeskElderCase(latestCase),
         schedule: toDeskSchedule(saved, visitDate),
         visitStartTime: body.visitStartTime ?? "",

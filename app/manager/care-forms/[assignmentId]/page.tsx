@@ -21,8 +21,10 @@ export default async function ManagerCareFormFillPage({
   const task = await getRepository().getVisitTask(assignmentId);
   if (!task) notFound();
 
-  const visitors = (await gasClient.visitors.list().catch(() => [])) as Record<string, unknown>[];
-  const visitor = visitors.map(mapDeskVisitor).find((item) => item.id === task.schedule.visitorId);
+  const visitors = ((await gasClient.visitors.list().catch(() => [])) as Record<string, unknown>[])
+    .map(mapDeskVisitor)
+    .filter((item) => item.id && item.name);
+  const visitor = visitors.find((item) => item.id === task.schedule.visitorId);
 
   return (
     <AppShell active="careForms">
@@ -34,6 +36,8 @@ export default async function ManagerCareFormFillPage({
         }}
         variant="manager_desk"
         visitorName={visitor?.name}
+        visitorDirectory={visitors}
+        selectedVisitor={visitor}
         initialTimes={{
           visitDate: query.date || task.schedule.visitDate,
           visitStartTime: query.start,

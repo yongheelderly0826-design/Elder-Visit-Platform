@@ -1,3 +1,27 @@
+## Lesson: Village admin management is owner-facing, desk is assignee-facing
+
+- **Trigger:** P2 needed UI to change village↔admin rows without re-importing Excel.
+- **Cause:** Desk scope only reads `里責任分配`; without upsert/setStatus, Excel was the only write path.
+- **Rule:** Manage at `/manager/village-admins` (assignment.manage). Use `villageAdmins.upsert` / `setStatus` for single-row edits; keep `replaceAll` for bulk import. Desk entry stays `/desk/care-forms`.
+- **Evidence:** `components/manage/village-admins-panel.tsx`, `gas/src/modules/VillageAdminModule.gs`, `app/api/manager/village-admins/route.ts`.
+- **Added on:** 2026-10-25
+
+## Lesson: Village desk scope matches visitor roster first
+
+- **Trigger:** 里責紙本 KEY needs personal/org login mapped to villages without a full admin UI.
+- **Cause:** Excel names may not yet exist as visitors; org emails are shared.
+- **Rule:** Resolve desk scope by (1) workspace_owner → all, (2) `DESK_ORG_EMAILS` email→org slug, (3) login email/name against 訪查員主檔 then `里責任分配.admin_display_name`. Unmatched persons keep village rows by display name; create visitors later via desk minimal create. Bulk case import must batch `appendRows`, not per-row `appendRow`.
+- **Evidence:** `lib/domain/village-admins.ts`, `scripts/import-village-desk-p0.mjs`, `gas/src/modules/VillageAdminModule.gs`, `app/desk/care-forms/`.
+- **Added on:** 2026-10-25
+
+## Lesson: Badge printing uses an explicit cross-search tray
+
+- **Trigger:** Office staff need to find approved visitors one at a time, then combine several badges into A4 sheets.
+- **Cause:** Filtering the roster replaced the visible selection, and an empty selection could accidentally fall back to printing the current result set or the whole roster.
+- **Rule:** Keep search results separate from the print tray. Store canonical visitor IDs in session storage, merge explicitly selected URL entries, deduplicate visitor ID/code/email aliases, and never interpret an empty tray as “print everyone.” Four badges fill one 2×2 sheet; underfilled sheets remain printable with a warning.
+- **Evidence:** `components/badges/use-gas-badge-print-data.ts`, `components/badges/gas-badge-print-sheet.tsx`, `components/workspace/users-panel.tsx`.
+- **Added on:** 2026-10-24
+
 # Lessons
 
 ## 繁體中文說明
@@ -9,9 +33,9 @@
 
 - **Trigger:** Office staff key paper care forms and must attach them to a visitor without a new export pipeline.
 - **Cause:** Creating a separate desk table would drift from the 102-column gold export.
-- **Rule:** Desk flow creates or reuses a case, dispatches `公所代填・紙本` to the chosen visitor, then submits through `careform.submit`. After status is submitted, the visitor page is read-only. Do not skip audit or invent a second MOHW path. `cases.create` must be deployed with GAS before live desk-create works.
-- **Evidence:** `app/manager/care-forms/`, `app/api/manager/care-forms/prepare/route.ts`, `gas/src/modules/CaseModule.gs`.
-- **Added on:** 2026-10-24
+- **Rule:** Desk flow creates or reuses a case, dispatches `公所代填・紙本` to the chosen visitor, then submits through `careform.submit`. After status is submitted, the visitor page is read-only. Do not skip audit or invent a second MOHW path. `cases.create` must be deployed with GAS before live desk-create works. Current phase: **one paper = one visit**; each desk「下一步」always creates a new assignment (`allow_multi_active`). Three 未遇 papers KEY’d in sequence = three visit attempts = complete—do **not** pack three attempts into one form. Field visitor self-KEY still keeps unique active assignment.
+- **Evidence:** `app/manager/care-forms/`, `app/api/manager/care-forms/prepare/route.ts`, `gas/src/modules/AssignmentModule.gs`, `gas/src/modules/CaseModule.gs`.
+- **Added on:** 2026-10-24（紙本一張一次／2026-10-25）
 
 ## Lesson: Elder phone sentinels are 10 zeros or 10 nines
 
