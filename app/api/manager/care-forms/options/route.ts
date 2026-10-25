@@ -10,6 +10,7 @@ import {
   resolveDeskScope,
   villagesAllowedForDesk,
   YONGHE_VILLAGE_NAMES,
+  type DeskScope,
 } from "@/lib/domain/village-admins";
 import { gasClient } from "@/lib/gas-client";
 import {
@@ -21,9 +22,10 @@ import {
 const UNASSIGNED_VILLAGES = ["中溪里", "中興里", "光明里", "協和里", "忠義里", "前溪里", "勵行里"];
 
 /**
- * 紙本建檔 options：
- * - 預設：身份／里別／訪查員（不快取全區 6900 個案）
- * - ?village=XX：只回該里個案（可快取）
+ * 紙本建檔 options（拆段加速）：
+ * - 預設／part=identities：只載里責任 → 身份／里別（最快）
+ * - part=visitors：訪查員精簡清單（背景載）
+ * - ?village=XX：該里個案
  */
 export async function GET(request: NextRequest) {
   const forbidden = requireManagerCapability(request, "visits.submit");
@@ -31,6 +33,7 @@ export async function GET(request: NextRequest) {
 
   const villageParam = String(request.nextUrl.searchParams.get("village") ?? "").trim();
   const caseIdParam = String(request.nextUrl.searchParams.get("caseId") ?? "").trim();
+  const part = String(request.nextUrl.searchParams.get("part") ?? "identities").trim();
 
   try {
     const manager = decodeManagerSession(request.cookies.get(SESSION_COOKIE)?.value);
@@ -45,23 +48,24 @@ export async function GET(request: NextRequest) {
     }
 
     if (village) {
-      const cases = await loadVillageCases(village, {
-        email,
-        name,
-        roleKey,
-      });
-      return NextResponse.json({
-        data: {
-          village,
-          cases,
-        },
-      });
+      const cases = await loadVillageCases(village, { email, name, roleKey });
+      return NextResponse.json({ data: { village, cases } });
+    }
+
+    if (part === "visitors") {
+      const visitors = await cachedRead(
+        ["desk-care-form-visitors-slim"],
+        [GAS_READ_TAGS.deskCareFormOptions],
+        () => loadDeskVisitors(),
+        GAS_READ_CACHE_SECONDS_DESK,
+      );
+      return NextResponse.json({ data: { visitors } });
     }
 
     const payload = await cachedRead(
-      ["desk-care-form-options-meta", email || "anon", roleKey],
+      ["desk-care-form-identities", email || "anon", roleKey],
       [GAS_READ_TAGS.deskCareFormOptions, GAS_READ_TAGS.villageAdmins],
-      () => loadDeskOptionsMeta({ email, name, roleKey }),
+      () => loadDeskIdentities({ email, name, roleKey }),
       GAS_READ_CACHE_SECONDS_DESK,
     );
 
@@ -72,22 +76,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function loadDeskOptionsMeta(identity: {
+async function loadDeskIdentities(identity: {
   email: string;
   name: string;
   roleKey: string;
 }) {
-  const [visitorRows, adminRows] = await Promise.all([
-    gasClient.visitors.list() as Promise<Record<string, unknown>[]>,
-    gasClient.villageAdmins.list().catch(() => [] as Record<string, unknown>[]),
-  ]);
-
-  const visitors = visitorRows
-    .map(mapDeskVisitor)
-    .filter((item) => item.id)
-    .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
-
+  const adminRows = await gasClient.villageAdmins
+    .list()
+    .catch(() => [] as Record<string, unknown>[]);
   const admins = adminRows.map(mapVillageAdminRow);
+
+  // 身份下拉不阻塞訪查員主檔：先用姓名／組織 email 對里責任表。
   const scope = resolveDeskScope({
     identity: {
       email: identity.email,
@@ -96,11 +95,7 @@ async function loadDeskOptionsMeta(identity: {
       orgEmailMap: getDeskOrgEmailMap(),
     },
     admins,
-    visitors: visitorRows.map((row) => ({
-      visitorId: String(row.visitor_id || ""),
-      name: String(row.name || row.full_name || ""),
-      email: String(row.email || "").toLowerCase(),
-    })),
+    visitors: [],
     unassignedVillages: UNASSIGNED_VILLAGES,
   });
 
@@ -108,7 +103,6 @@ async function loadDeskOptionsMeta(identity: {
   const identityOptions = buildDeskIdentityOptions({
     scope,
     admins,
-    // 不依賴全區 cases.list（過大無法快取）；里名用模板＋里責任表即可。
     allVillages: [
       ...new Set([
         ...YONGHE_VILLAGE_NAMES,
@@ -119,41 +113,55 @@ async function loadDeskOptionsMeta(identity: {
 
   return {
     cases: [] as ReturnType<typeof mapDeskCase>[],
-    visitors,
+    visitors: [] as ReturnType<typeof mapDeskVisitor>[],
     scope,
     allowedVillages: allowed,
     identityOptions,
   };
 }
 
-async function loadVillageCases(
-  village: string,
-  identity: { email: string; name: string; roleKey: string },
-) {
-  const [caseRows, adminRows, visitorRows] = await Promise.all([
-    gasClient.cases.list({ district: "永和區", visit_village: village }) as Promise<
-      Record<string, unknown>[]
-    >,
-    gasClient.villageAdmins.list().catch(() => [] as Record<string, unknown>[]),
-    gasClient.visitors.list() as Promise<Record<string, unknown>[]>,
-  ]);
+async function loadDeskVisitors() {
+  const visitorRows = (await gasClient.visitors.list({ slim: true })) as Record<
+    string,
+    unknown
+  >[];
+  return visitorRows
+    .map(mapDeskVisitor)
+    .filter((item) => item.id)
+    .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
+}
 
-  const admins = adminRows.map(mapVillageAdminRow);
-  const scope = resolveDeskScope({
+async function resolveScopeOnly(identity: {
+  email: string;
+  name: string;
+  roleKey: string;
+}): Promise<DeskScope> {
+  const adminRows = await gasClient.villageAdmins
+    .list()
+    .catch(() => [] as Record<string, unknown>[]);
+  return resolveDeskScope({
     identity: {
       email: identity.email,
       name: identity.name,
       roleKey: identity.roleKey,
       orgEmailMap: getDeskOrgEmailMap(),
     },
-    admins,
-    visitors: visitorRows.map((row) => ({
-      visitorId: String(row.visitor_id || ""),
-      name: String(row.name || row.full_name || ""),
-      email: String(row.email || "").toLowerCase(),
-    })),
+    admins: adminRows.map(mapVillageAdminRow),
+    visitors: [],
     unassignedVillages: UNASSIGNED_VILLAGES,
   });
+}
+
+async function loadVillageCases(
+  village: string,
+  identity: { email: string; name: string; roleKey: string },
+) {
+  const [caseRows, scope] = await Promise.all([
+    gasClient.cases.list({ district: "永和區", visit_village: village }) as Promise<
+      Record<string, unknown>[]
+    >,
+    resolveScopeOnly(identity),
+  ]);
 
   const allowed = villagesAllowedForDesk(scope);
   if (allowed && !allowed.includes(village)) {

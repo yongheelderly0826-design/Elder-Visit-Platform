@@ -25,6 +25,12 @@ var VillageAdminModule = (function () {
   function list(params) {
     params = params || {};
     ensure_();
+    var cacheKey = ReadCache.key(
+      'vaL:' + String(params.status || '') + ':' + String(params.village_name || '')
+    );
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.status) {
       rows = rows.filter(function (r) {
@@ -36,6 +42,7 @@ var VillageAdminModule = (function () {
         return String(r.village_name || '') === String(params.village_name);
       });
     }
+    ReadCache.putJson(cacheKey, rows);
     return rows;
   }
 

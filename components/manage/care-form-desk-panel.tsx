@@ -52,22 +52,27 @@ export function CareFormDeskPanel({
   const [casesLoading, setCasesLoading] = useState(false);
   const [villageCases, setVillageCases] = useState<DeskCaseOption[]>([]);
   const [metaLoading, setMetaLoading] = useState(true);
+  const [visitorsLoading, setVisitorsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       setMetaLoading(true);
       try {
-        const response = await fetch("/api/manager/care-forms/options");
+        // 1) 身份／里別：只打里責任表，盡快可選
+        const response = await fetch("/api/manager/care-forms/options?part=identities");
         const json = (await response.json()) as {
           data?: OptionsPayload;
           error?: { message?: string };
         };
+        if (cancelled) return;
         if (!response.ok) {
-          setMessage(json.error?.message ?? "無法載入身份與訪查員");
+          setMessage(json.error?.message ?? "無法載入身份");
           return;
         }
         const payload = json.data ?? { cases: [], visitors: [] };
         setOptions(payload);
+        setMetaLoading(false);
 
         const identities = payload.identityOptions ?? [];
         if (identities.length === 1) {
@@ -80,6 +85,30 @@ export function CareFormDeskPanel({
           setIdentityKey("all");
         }
 
+        // 2) 訪查員背景載入（不擋身份下拉）
+        setVisitorsLoading(true);
+        void fetch("/api/manager/care-forms/options?part=visitors")
+          .then(async (visitorRes) => {
+            const visitorJson = (await visitorRes.json()) as {
+              data?: { visitors?: DeskVisitorOption[] };
+            };
+            if (cancelled || !visitorRes.ok) return;
+            setOptions((current) =>
+              current
+                ? { ...current, visitors: visitorJson.data?.visitors ?? [] }
+                : {
+                    cases: [],
+                    visitors: visitorJson.data?.visitors ?? [],
+                  },
+            );
+          })
+          .catch(() => {
+            /* 訪查員稍後再試即可 */
+          })
+          .finally(() => {
+            if (!cancelled) setVisitorsLoading(false);
+          });
+
         if (presetCaseId) {
           const presetRes = await fetch(
             `/api/manager/care-forms/options?caseId=${encodeURIComponent(presetCaseId)}`,
@@ -87,6 +116,7 @@ export function CareFormDeskPanel({
           const presetJson = (await presetRes.json()) as {
             data?: { village?: string; cases?: DeskCaseOption[] };
           };
+          if (cancelled) return;
           const village = String(presetJson.data?.village ?? "");
           const cases = presetJson.data?.cases ?? [];
           if (village) {
@@ -102,11 +132,14 @@ export function CareFormDeskPanel({
           }
         }
       } catch {
-        setMessage("目前無法連線，請稍後再試。");
+        if (!cancelled) setMessage("目前無法連線，請稍後再試。");
       } finally {
-        setMetaLoading(false);
+        if (!cancelled) setMetaLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [presetCaseId]);
 
   useEffect(() => {
@@ -540,7 +573,11 @@ export function CareFormDeskPanel({
                   </p>
                 </button>
               ))}
-              {filteredVisitors.length === 0 ? (
+              {visitorsLoading ? (
+                <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
+                  訪查員清單載入中…
+                </p>
+              ) : filteredVisitors.length === 0 ? (
                 <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
                   找不到訪查員。可按「新增訪查員」建立後再填。
                 </p>

@@ -3,7 +3,10 @@ var VisitorModule = (function () {
 
   function list(params) {
     params = params || {};
-    var cacheKey = ReadCache.key('visL:' + String(params.status || ''));
+    var slim = params.slim === true || params.slim === 'true';
+    var cacheKey = ReadCache.key(
+      'visL:' + String(params.status || '') + ':' + (slim ? 'slim' : 'full')
+    );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
 
@@ -11,6 +14,19 @@ var VisitorModule = (function () {
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.status) {
       rows = rows.filter(function (r) { return r.status === params.status; });
+    }
+    // 紙本建檔只需少數欄，縮小後才進得了 CacheService（約 90KB）。
+    if (slim) {
+      rows = rows.map(function (r) {
+        return {
+          visitor_id: r.visitor_id,
+          name: r.name || r.full_name || '',
+          email: r.email || '',
+          phone: r.phone || '',
+          status: r.status || '',
+          badge_no: r.badge_no || '',
+        };
+      });
     }
     ReadCache.putJson(cacheKey, rows);
     return rows;

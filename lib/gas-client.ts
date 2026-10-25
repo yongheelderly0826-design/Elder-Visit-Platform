@@ -165,9 +165,12 @@ async function gasFetch<T>(
 
 export const gasClient = {
   visitors: {
-    list: (params?: { status?: string }) =>
+    list: (params?: { status?: string; slim?: boolean | string }) =>
       gasFetch<unknown[]>("visitors.list", {
-        params: params as Record<string, string>,
+        params: {
+          ...(params?.status ? { status: params.status } : {}),
+          ...(params?.slim != null ? { slim: String(params.slim) } : {}),
+        },
         revalidateSeconds: 120,
         tags: ["gas-assignment-dashboard", "gas-desk-care-form-options"],
       }),
