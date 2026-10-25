@@ -216,14 +216,13 @@ export type DeskIdentityOption = {
   villages: string[];
 };
 
-/** 填表頁「身份」下拉：總承辦可代選各管理員；一般身份僅自己。 */
+/** 填表頁「身份」下拉：總承辦／承辦可代選各管理員；里責僅自己。 */
 export function buildDeskIdentityOptions(input: {
   scope: DeskScope;
   admins: VillageAdminRow[];
   allVillages: string[];
 }): DeskIdentityOption[] {
   const { scope, admins, allVillages } = input;
-  if (scope.mode === "none") return [];
 
   if (scope.mode === "villages") {
     return [
@@ -238,13 +237,16 @@ export function buildDeskIdentityOptions(input: {
     ];
   }
 
+  // mode=all，或尚未對到個人里責：承辦紙本 KEY 仍要能選里責任表上的身份。
   const skipVillages = new Set(
-    admins.filter((row) => row.status === "active" && row.adminKind === "skip").map((row) => row.villageName),
+    admins
+      .filter((row) => (row.status || "active") === "active" && row.adminKind === "skip")
+      .map((row) => row.villageName),
   );
   const options: DeskIdentityOption[] = [
     {
       key: "all",
-      label: "總承辦（全部里）",
+      label: scope.mode === "all" ? scope.label : "承辦（全部里）",
       kind: "all",
       villages: [...new Set(allVillages)]
         .filter((village) => village && !skipVillages.has(village))

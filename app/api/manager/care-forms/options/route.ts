@@ -62,14 +62,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: { visitors } });
     }
 
+    // v3：避免舊版「承辦→空身份」結果卡在 unstable_cache。
     const payload = await cachedRead(
-      ["desk-care-form-identities", email || "anon", roleKey],
+      ["desk-care-form-identities-v3", email || "anon", roleKey],
       [GAS_READ_TAGS.deskCareFormOptions, GAS_READ_TAGS.villageAdmins],
       () => loadDeskIdentities({ email, name, roleKey }),
       GAS_READ_CACHE_SECONDS_DESK,
     );
 
-    return NextResponse.json({ data: payload });
+    return NextResponse.json(
+      { data: payload },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=0, must-revalidate",
+        },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法載入個案與訪查員";
     return NextResponse.json({ error: { code: "GAS_READ_FAILED", message } }, { status: 502 });

@@ -310,9 +310,14 @@ export function CareFormDeskPanel({
         description="一張紙本＝一次訪視。先選身份與里別，再找個案與訪查員 KEY；未遇請陸續 KEY 滿三張才算完整。送出後掛到該訪查員紀錄，通過稽核才能匯出。"
       />
 
-      {scopeBlocked ? (
+      {scopeBlocked && identityOptions.length === 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           尚未對到負責里。請確認訪查員名冊姓名／Email，或請總承辦到「里責任分配」設定。
+        </div>
+      ) : null}
+      {scopeBlocked && identityOptions.length > 0 ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+          目前登入未對到個人負責里；已改以承辦視角列出里責任身份，可直接代 KEY。
         </div>
       ) : null}
 
