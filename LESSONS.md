@@ -1,3 +1,11 @@
+## Lesson: Desk case list follows Excel 里編號 (village_seq)
+
+- **Trigger:** Paper KEY staff need the on-screen case list to match the village booklet order.
+- **Cause:** Import stored global `編號` as `external_id`; per-village `里編號` was not persisted, so other villages would show wrong paper numbers if we displayed `external_id`.
+- **Rule:** Persist Excel `里編號` as `village_seq`. Desk step-3 sorts by `village_seq` and shows `#N` before the name. Keep `external_id` as the workbook-wide `編號`.
+- **Evidence:** `gas/src/modules/CaseModule.gs`, `lib/domain/manager-care-form-desk.ts`, `components/manage/care-form-desk-panel.tsx`, `scripts/import-village-desk-p0.mjs`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Village admin management is owner-facing, desk is assignee-facing
 
 - **Trigger:** P2 needed UI to change village↔admin rows without re-importing Excel.
