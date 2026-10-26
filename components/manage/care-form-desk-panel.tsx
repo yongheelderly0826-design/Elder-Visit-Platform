@@ -9,8 +9,10 @@ import {
   DESK_BATCH_SLOT_MINUTES,
   DESK_BATCH_TRAVEL_GAP_MINUTES,
   addMinutesToTime,
+  buildDeskCareFormPath,
   buildStaggeredVisitWindows,
   clearDeskBatchState,
+  findNextReadyDeskBatchItem,
   readDeskBatchState,
   writeDeskBatchState,
   type DeskBatchQueueItem,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/domain/desk-care-batch";
 import {
   compareDeskCasesByVillageSeq,
+  formatDeskCasePaperLabel,
   type DeskCaseOption,
   type DeskVisitorOption,
 } from "@/lib/domain/manager-care-form-desk";
@@ -38,6 +41,9 @@ type TimeDraft = {
   caseId: string;
   caseName: string;
   caseCode: string;
+  village?: string;
+  villageSeq?: number | null;
+  villageCode?: string;
   visitDate: string;
   visitStartTime: string;
   visitEndTime: string;
@@ -498,13 +504,19 @@ export function CareFormDeskPanel({
         primaryVisitorId,
         companionVisitorIds,
         visitorNames: visitorNameById,
-        items: json.data.items.map((item) => ({
-          caseId: item.caseId,
-          caseName: item.caseName,
-          caseCode: item.caseCode,
-          assignmentId: item.assignmentId,
-          status: "ready" as const,
-        })),
+        items: json.data.items.map((item) => {
+          const src = selectedCases.find((caseItem) => caseItem.id === item.caseId);
+          return {
+            caseId: item.caseId,
+            caseName: item.caseName,
+            caseCode: item.caseCode,
+            assignmentId: item.assignmentId,
+            status: "ready" as const,
+            village: src?.village || villageFilter,
+            villageSeq: src?.villageSeq ?? null,
+            villageCode: src?.villageCode || "",
+          };
+        }),
         updatedAt: new Date().toISOString(),
       };
       writeDeskBatchState(next);
@@ -516,7 +528,7 @@ export function CareFormDeskPanel({
       });
       setCreating(false);
       setMessage(
-        `已準備 ${next.items.length} 筆派案。請填第 1 筆時間後「套用整批時段」，再逐案進表 KEY。`,
+        `已準備 ${next.items.length} 筆派案。請填第 1 筆時間後「套用整批時段」，將立刻開始連續 KEY。`,
       );
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -544,6 +556,9 @@ export function CareFormDeskPanel({
       caseId: item.caseId,
       caseName: item.caseName,
       caseCode: item.caseCode,
+      village: item.village || batch?.village,
+      villageSeq: item.villageSeq ?? null,
+      villageCode: item.villageCode || "",
       visitDate: item.visitDate || batchTimeDraft.visitDate || today,
       visitStartTime: item.visitStartTime || batchTimeDraft.visitStartTime || "09:00",
       visitEndTime: item.visitEndTime || batchTimeDraft.visitEndTime || defaultEnd,
@@ -556,12 +571,14 @@ export function CareFormDeskPanel({
       openTimeConfirm(item);
       return;
     }
-    const params = new URLSearchParams();
-    params.set("date", item.visitDate);
-    params.set("start", item.visitStartTime);
-    params.set("end", item.visitEndTime);
-    params.set("return", returnPath);
-    router.push(`/manager/care-forms/${item.assignmentId}?${params.toString()}`);
+    router.push(
+      buildDeskCareFormPath(item.assignmentId, {
+        visitDate: item.visitDate,
+        visitStartTime: item.visitStartTime,
+        visitEndTime: item.visitEndTime,
+        returnPath,
+      }),
+    );
   }
 
   async function applyBatchTimes() {
@@ -590,7 +607,13 @@ export function CareFormDeskPanel({
           items: batch.items.map((item, index) => ({
             assignmentId: item.assignmentId,
             caseId: item.caseId,
-            caseLabel: `${item.caseName}（${item.caseCode}）`,
+            caseLabel: formatDeskCasePaperLabel({
+              villageCode: item.villageCode,
+              village: item.village || batch.village,
+              villageSeq: item.villageSeq,
+              name: item.caseName,
+              caseCode: item.caseCode,
+            }).full,
             visitDate: built.slots[index].visitDate,
             visitStartTime: built.slots[index].visitStartTime,
             visitEndTime: built.slots[index].visitEndTime,
@@ -616,8 +639,21 @@ export function CareFormDeskPanel({
       const nextBatch = { ...batch, items: nextItems, updatedAt: new Date().toISOString() };
       writeDeskBatchState(nextBatch);
       setBatch(nextBatch);
+      const firstReady = findNextReadyDeskBatchItem(nextBatch);
+      if (firstReady?.visitDate && firstReady.visitStartTime && firstReady.visitEndTime) {
+        setMessage("已套用並開始連續 KEY");
+        router.push(
+          buildDeskCareFormPath(firstReady.assignmentId, {
+            visitDate: firstReady.visitDate,
+            visitStartTime: firstReady.visitStartTime,
+            visitEndTime: firstReady.visitEndTime,
+            returnPath,
+          }),
+        );
+        return;
+      }
       setMessage(
-        `已套用整批時段（每案 ${built.durationMinutes} 分、移動間隔 ${built.travelGapMinutes} 分）。請留在清單逐案「進表 KEY」。`,
+        `已套用整批時段（每案 ${built.durationMinutes} 分、移動間隔 ${built.travelGapMinutes} 分）。請進表 KEY。`,
       );
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -626,7 +662,8 @@ export function CareFormDeskPanel({
     }
   }
 
-  async function confirmTimeAndEnter() {
+  /** 單筆時段稽核儲存（不進表；整批套用才會立刻進第一案）。 */
+  async function confirmTimeOnly() {
     if (!timeDraft || !batch) return;
     setBusy(true);
     setMessage(null);
@@ -642,7 +679,13 @@ export function CareFormDeskPanel({
         .map((item) => ({
           assignmentId: item.assignmentId,
           caseId: item.caseId,
-          label: `${item.caseName}（${item.caseCode}）`,
+          label: formatDeskCasePaperLabel({
+            villageCode: item.villageCode,
+            village: item.village || batch.village,
+            villageSeq: item.villageSeq,
+            name: item.caseName,
+            caseCode: item.caseCode,
+          }).full,
           visitDate: item.visitDate!,
           start: item.visitStartTime!,
           end: item.visitEndTime!,
@@ -655,7 +698,13 @@ export function CareFormDeskPanel({
         body: JSON.stringify({
           assignmentId: timeDraft.assignmentId,
           caseId: timeDraft.caseId,
-          caseLabel: `${timeDraft.caseName}（${timeDraft.caseCode}）`,
+          caseLabel: formatDeskCasePaperLabel({
+            villageCode: timeDraft.villageCode,
+            village: timeDraft.village || batch.village,
+            villageSeq: timeDraft.villageSeq,
+            name: timeDraft.caseName,
+            caseCode: timeDraft.caseCode,
+          }).full,
           primaryVisitorId: batch.primaryVisitorId,
           companionVisitorIds: batch.companionVisitorIds,
           visitDate: timeDraft.visitDate,
@@ -716,14 +765,19 @@ export function CareFormDeskPanel({
     setMessage("已清空待 KEY 清單。訪查組仍保留，可再勾個案準備。");
   }
 
-  // 從表單返回時：若 URL 有 done=assignmentId 可由外層處理；這裡在 mount 時把已有時間的 ready 維持即可
+  // 從表單返回：done= 標記已 KEY；batchDone=1 顯示連續 KEY 完成提示
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const doneId = params.get("done");
-    if (!doneId) return;
-    markKeyedAndStay(doneId);
+    const batchDone = params.get("batchDone");
+    if (doneId) markKeyedAndStay(doneId);
+    if (batchDone === "1") {
+      setMessage("本批待 KEY 已全部送出。");
+    }
+    if (!doneId && batchDone !== "1") return;
     params.delete("done");
+    params.delete("batchDone");
     const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
     window.history.replaceState({}, "", next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -742,7 +796,7 @@ export function CareFormDeskPanel({
         icon={ClipboardPen}
         eyebrow={entry === "desk" ? "里責填表入口" : "承辦後台"}
         title="關懷表建檔"
-        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；整批套用訪視時間（第 1 筆起迄，後案＝時長＋移動 5 分）後留在清單進表。同組時段不可衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
+        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；整批套用訪視時間（第 1 筆起迄，後案＝時長＋移動 5 分）後立刻進第一案連續 KEY。同組時段不可衝突。非未遇不必三次；未遇送出後會自動補 D-2 早／D-1 中兩張紙本。"
       />
 
       {batch ? (
@@ -1041,6 +1095,13 @@ export function CareFormDeskPanel({
             <div className="mt-3 grid max-h-80 gap-2 overflow-auto">
               {filteredCases.map((item) => {
                 const checked = selectedCaseIds.includes(item.id);
+                const paperLabel = formatDeskCasePaperLabel({
+                  villageCode: item.villageCode,
+                  village: item.village,
+                  villageSeq: item.villageSeq,
+                  name: item.name,
+                  caseCode: item.caseCode,
+                });
                 return (
                   <label
                     key={item.id}
@@ -1056,22 +1117,10 @@ export function CareFormDeskPanel({
                       onChange={() => toggleCase(item.id)}
                     />
                     <span>
-                      <span className="block font-semibold">
-                        {item.villageCode ? (
-                          <span className="mr-2 font-mono text-sm text-primary">
-                            {item.villageCode}
-                          </span>
-                        ) : null}
-                        {item.villageSeq != null ? (
-                          <span className="mr-2 inline-block min-w-[2rem] text-primary">
-                            #{item.villageSeq}
-                          </span>
-                        ) : null}
-                        {item.name}
-                      </span>
+                      <span className="block font-semibold">{paperLabel.primary}</span>
                       <span className="mt-1 block text-sm text-muted-foreground">
-                        {item.villageCode ? `${item.villageCode} · ` : ""}
-                        {item.caseCode} · 里民序 {item.villageSeq ?? "—"} · {item.visitStatus}
+                        {paperLabel.secondary ? `${paperLabel.secondary} · ` : ""}
+                        {item.visitStatus}
                       </span>
                     </span>
                   </label>
@@ -1189,9 +1238,16 @@ export function CareFormDeskPanel({
               <ul className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                 {batch.items.map((item, index) => {
                   const slot = staggerPreview.slots[index];
+                  const paperLabel = formatDeskCasePaperLabel({
+                    villageCode: item.villageCode,
+                    village: item.village || batch.village,
+                    villageSeq: item.villageSeq,
+                    name: item.caseName,
+                    caseCode: item.caseCode,
+                  });
                   return (
                     <li key={item.assignmentId}>
-                      {index + 1}. {item.caseName}：{slot.visitDate} {slot.visitStartTime}–
+                      {index + 1}. {paperLabel.primary}：{slot.visitDate} {slot.visitStartTime}–
                       {slot.visitEndTime}
                     </li>
                   );
@@ -1214,18 +1270,25 @@ export function CareFormDeskPanel({
           <div className="mt-4 grid gap-2">
             {batch.items.map((item) => {
               const hasTime = Boolean(item.visitDate && item.visitStartTime && item.visitEndTime);
+              const paperLabel = formatDeskCasePaperLabel({
+                villageCode: item.villageCode,
+                village: item.village || batch.village,
+                villageSeq: item.villageSeq,
+                name: item.caseName,
+                caseCode: item.caseCode,
+              });
               return (
                 <div
                   key={item.assignmentId}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
                 >
                   <div>
-                    <p className="font-semibold">{item.caseName}</p>
+                    <p className="font-semibold">{paperLabel.primary}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {item.caseCode}
+                      {paperLabel.secondary ? `${paperLabel.secondary} · ` : ""}
                       {hasTime
-                        ? ` · ${item.visitDate} ${item.visitStartTime}-${item.visitEndTime}`
-                        : " · 尚未套用時間"}
+                        ? `${item.visitDate} ${item.visitStartTime}-${item.visitEndTime}`
+                        : "尚未套用時間"}
                       {item.status === "keyed" ? " · 已 KEY" : ""}
                     </p>
                   </div>
@@ -1294,7 +1357,16 @@ export function CareFormDeskPanel({
           <section className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg">
             <h3 className="text-lg font-semibold">確認本筆訪視時間</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {timeDraft.caseName}（{timeDraft.caseCode}）· 同組訪查員時段不可衝突（核銷稽核）
+              {
+                formatDeskCasePaperLabel({
+                  villageCode: timeDraft.villageCode,
+                  village: timeDraft.village || batch?.village,
+                  villageSeq: timeDraft.villageSeq,
+                  name: timeDraft.caseName,
+                  caseCode: timeDraft.caseCode,
+                }).full
+              }
+              · 同組訪查員時段不可衝突（核銷稽核）
             </p>
             <div className="mt-4 grid gap-3">
               <Field label="訪視日期 *">
@@ -1341,7 +1413,7 @@ export function CareFormDeskPanel({
               <Button type="button" variant="outline" disabled={busy} onClick={() => setTimeDraft(null)}>
                 取消
               </Button>
-              <Button type="button" disabled={busy} onClick={() => void confirmTimeAndEnter()}>
+              <Button type="button" disabled={busy} onClick={() => void confirmTimeOnly()}>
                 {busy ? "檢查中…" : "通過稽核並儲存時段"}
               </Button>
             </div>

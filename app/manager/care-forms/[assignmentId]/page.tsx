@@ -17,6 +17,8 @@ export default async function ManagerCareFormFillPage({
     end?: string;
     return?: string;
     villageCode?: string;
+    missedSlot?: string;
+    paperKey?: string;
   }>;
 }) {
   const role = (await cookies()).get("demo_role")?.value;
@@ -67,6 +69,8 @@ export default async function ManagerCareFormFillPage({
           visitStartTime: query.start,
           visitEndTime: query.end,
         }}
+        initialDeskMissedSlot={query.missedSlot}
+        initialDeskPaperKey={query.paperKey}
       />
     </AppShell>
   );

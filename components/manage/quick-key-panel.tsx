@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { PageIntro } from "@/components/ui/page-intro";
 
 import { formatYongheVillageCode } from "@/lib/domain/village-admins";
-import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
+import {
+  formatDeskCasePaperLabel,
+  type DeskVisitorOption,
+} from "@/lib/domain/manager-care-form-desk";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
 type QuickPendingItem = {
@@ -464,25 +467,28 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
 
           <div className="mt-4 grid gap-2">
             {items.map((item) => {
-              const seqLabel = item.villageSeq != null ? `#${item.villageSeq}` : "";
+              const paperLabel = formatDeskCasePaperLabel({
+                villageCode: item.villageCode || loadedCode,
+                village: item.village || villageNames[0] || "",
+                villageSeq: item.villageSeq,
+                name: item.caseName,
+                caseCode: item.caseCode,
+              });
               return (
                 <div
                   key={item.caseId}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold">
-                      {seqLabel ? `${seqLabel} ` : ""}
-                      {item.caseName}
-                    </p>
+                    <p className="font-semibold">{paperLabel.primary}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {item.caseCode}
-                      {item.address ? ` · ${item.address}` : ""}
+                      {paperLabel.secondary ? `${paperLabel.secondary} · ` : ""}
+                      {item.address ? `${item.address} · ` : ""}
                       {item.blockedByOther
-                        ? ` · 進行中：${item.activeVisitorName || item.activeVisitorId}`
+                        ? `進行中：${item.activeVisitorName || item.activeVisitorId}`
                         : item.canContinue
-                          ? " · 可繼續 KEY"
-                          : ` · ${item.visitStatus || "待訪"}`}
+                          ? "可繼續 KEY"
+                          : item.visitStatus || "待訪"}
                     </p>
                   </div>
                   <Button

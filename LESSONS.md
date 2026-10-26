@@ -30,11 +30,19 @@
 - **Evidence:** `components/manage/quick-key-panel.tsx`, `app/api/manager/care-forms/quick-pending/route.ts`, `app/api/visitor/quick-confirm/route.ts`.
 - **Added on:** 2026-10-26
 
+## Lesson: Desk continuous KEY + 未遇 U2 three papers
+
+- **Trigger:** Paper KEY staff need apply-batch → first form, then auto-advance; 未遇 must become three dated papers (早／中／晚), not one form with three attempts.
+- **Cause:** Batch apply only wrote times and stayed on the list; desk 未遇 still asked for 3 slots on one paper.
+- **Rule:** After `confirm-time-batch`, navigate to first ready. After desk submit, mark `elder-desk-care-batch-v1` keyed and open next ready (or list + `batchDone=1`). On 未遇 submit: treat current as D 晚（第 3 次）, `POST expand-missed` creates D-2 早／D-1 中 with `allow_multi_active`, insert as ready before continuing; skip if case already has ≥3 desk papers. Desk 未遇 needs ≥1 MissedVisitTimeSlot (早→上午、中→中午、晚→夜間). Order desk `visitAttempt` by `due_date` when notes are 公所代填.
+- **Evidence:** `lib/domain/desk-care-batch.ts`, `app/api/manager/care-forms/expand-missed/route.ts`, `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk batch KEY times use slot + 5-min travel gap
 
 - **Trigger:** Paper KEY staff need auto-spaced visit windows between cases, not back-to-back slots.
 - **Cause:** First stagger used start-to-start +10 with 10-min duration (adjacent, no travel buffer).
-- **Rule:** Default duration 10 minutes; between cases add travel gap 5 minutes. Example: 09:00–09:10 → 09:15–09:25 → 09:30–09:40. Apply writes all assignment notes once, then stay on the queue for “進表 KEY”.
+- **Rule:** Default duration 10 minutes; between cases add travel gap 5 minutes. Example: 09:00–09:10 → 09:15–09:25 → 09:30–09:40. Apply writes all assignment notes once, then navigate into the first ready form for continuous KEY.
 - **Evidence:** `lib/domain/desk-care-batch.ts` (`buildStaggeredVisitWindows`, `DESK_BATCH_TRAVEL_GAP_MINUTES`), `app/api/manager/care-forms/confirm-time-batch/route.ts`, `components/manage/care-form-desk-panel.tsx`.
 - **Added on:** 2026-10-26
 
@@ -53,6 +61,14 @@
 - **Rule:** Persist Excel `里編號` as `village_seq`. Desk step-3 sorts by `village_seq` and shows `#N` before the name. Keep `external_id` as the workbook-wide `編號`.
 - **Evidence:** `gas/src/modules/CaseModule.gs`, `lib/domain/manager-care-form-desk.ts`, `components/manage/care-form-desk-panel.tsx`, `scripts/import-village-desk-p0.mjs`.
 - **Added on:** 2026-10-26
+
+## Lesson: KEY UIs show paper对照 before system case code
+
+- **Trigger:** Paper batch KEY and visitor self KEY both need on-screen labels that match the village booklet (里編碼＋里別＋里民序), not EV-/encoded_id first.
+- **Cause:** Lists and form headers led with `caseCode` (encoded_id); `#N` alone was incomplete for paper对照.
+- **Rule:** Use shared `formatDeskCasePaperLabel(...)` so primary is like `040051（上林里）#12 王小明` and system code is muted secondary. Apply on desk case checkboxes, 待 KEY queue, time modal, quick-key pending rows, visitor task card, and care-form KEY headers. Do not change encoded_id generation or export column order.
+- **Evidence:** `lib/domain/manager-care-form-desk.ts`, `components/manage/care-form-desk-panel.tsx`, `components/manage/quick-key-panel.tsx`, `components/visitor/task-card.tsx`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-27
 
 ## Lesson: Village admin management is owner-facing, desk is assignee-facing
 
@@ -89,8 +105,8 @@
 
 - **Trigger:** Paper bulk KEY needs the same civil/social visit team across many cases without re-picking, and overlapping times break reimbursement.
 - **Cause:** Old desk UI was single-case → single-visitor → immediate form; times were not audited across the team.
-- **Rule:** Flow is identity/village → pick 民政/社政 visitors (at least one side; multi per side) + manual primary → multi-select cases → prepare many assignments → queue → confirm each case’s time (conflict check vs same-team windows + assignment notes/careform answers) → enter form. Store companions/time in assignment `notes` (`公所代填・紙本｜主填:…｜同行:…｜時段:…`). Only 未遇 requires three sequential papers; completed/refused do not.
-- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`, `lib/domain/desk-visit-time-audit.ts`, `app/api/manager/care-forms/prepare/route.ts`, `app/api/manager/care-forms/confirm-time/route.ts`.
+- **Rule:** Flow is identity/village → pick 民政/社政 visitors (at least one side; multi per side) + manual primary → multi-select cases → prepare many assignments → queue → apply batch times (then enter first) → continuous KEY with sessionStorage queue. Store companions/time in assignment `notes` (`公所代填・紙本｜主填:…｜同行:…｜時段:…`). Only 未遇 requires three sequential papers (U2 auto-creates the other two); completed/refused do not.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`, `lib/domain/desk-visit-time-audit.ts`, `app/api/manager/care-forms/prepare/route.ts`, `app/api/manager/care-forms/confirm-time/route.ts`, `app/api/manager/care-forms/expand-missed/route.ts`.
 - **Added on:** 2026-10-26
 
 ## Lesson: Manager desk care forms reuse the visitor submit path

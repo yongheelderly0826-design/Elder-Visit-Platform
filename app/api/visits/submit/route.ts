@@ -118,15 +118,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (isMissedVisit && countMissedVisitPhotoSlots(submission.photoNames) < missedVisitMinSlots) {
-    // 承辦紙本建檔：允許以「三次未遇補錄」時段勾選產生的 photoNames 過關；
-    // 若仍不足則擋下。
+  const missedSlotFloor = body.deskEntry ? 1 : missedVisitMinSlots;
+  if (isMissedVisit && countMissedVisitPhotoSlots(submission.photoNames) < missedSlotFloor) {
+    // 紙本：一張＝一次訪視，至少 1 個時段；外勤仍需 3–5 個不同時段佐證照。
     return NextResponse.json(
       {
         error: {
           code: "MISSED_VISIT_SLOTS_REQUIRED",
           message: body.deskEntry
-            ? `未遇紙本請勾選至少 ${missedVisitMinSlots} 個不同時段（一張紙＝一次訪視）`
+            ? "未遇紙本請勾選本趟時段（早／中／晚對應上午／中午／夜間）"
             : `未遇需至少 ${missedVisitMinSlots} 個不同時段的佐證照片`,
         },
       },

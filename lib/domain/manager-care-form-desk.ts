@@ -129,6 +129,62 @@ export function compareDeskCasesByVillageSeq(a: DeskCaseOption, b: DeskCaseOptio
   return a.name.localeCompare(b.name, "zh-Hant");
 }
 
+export type DeskCasePaperLabelInput = {
+  villageCode?: string | null;
+  village?: string | null;
+  villageSeq?: number | null;
+  name?: string | null;
+  caseCode?: string | null;
+};
+
+export type DeskCasePaperLabel = {
+  /** 紙本對照主行，例：`040051（上林里）#12 王小明` */
+  primary: string;
+  /** 志工／系統編碼（EV-…），UI 請降為次要／muted */
+  secondary: string;
+  /** 不含姓名的紙本識別，例：`040051（上林里）#12` */
+  paperId: string;
+  /** 單行標題／稽核訊息用：`primary（secondary）` */
+  full: string;
+};
+
+/**
+ * KEY 畫面個案標籤：紙本對照（里編碼＋里別＋里民序）在前，系統編碼在後。
+ * 缺欄位時盡量降級（僅里名、僅 #N、僅姓名／案號），不捏造里編碼。
+ */
+export function formatDeskCasePaperLabel(
+  input: DeskCasePaperLabelInput,
+): DeskCasePaperLabel {
+  const code =
+    formatYongheVillageCode(input.villageCode) ||
+    String(input.villageCode ?? "").trim();
+  const village = String(input.village ?? "").trim();
+  const seqNum = Number(input.villageSeq);
+  const seq =
+    input.villageSeq != null && Number.isFinite(seqNum) && seqNum > 0
+      ? seqNum
+      : null;
+  const name = String(input.name ?? "").trim();
+  const caseCode = String(input.caseCode ?? "").trim();
+
+  const paperChunks: string[] = [];
+  if (code) {
+    paperChunks.push(village ? `${code}（${village}）` : code);
+  } else if (village) {
+    paperChunks.push(village);
+  }
+  if (seq != null) paperChunks.push(`#${seq}`);
+  const paperId = paperChunks.join("");
+
+  const primary = [paperId, name].filter(Boolean).join(paperId && name ? " " : "");
+  const primaryFinal = primary || name || caseCode || "（未命名個案）";
+  const secondary =
+    caseCode && caseCode !== primaryFinal && caseCode !== name ? caseCode : "";
+  const full = secondary ? `${primaryFinal}（${secondary}）` : primaryFinal;
+
+  return { primary: primaryFinal, secondary, paperId, full };
+}
+
 export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption {
   const rawPhone = row.phone ?? row.primary_phone ?? row.mobile ?? "";
   return {
@@ -147,6 +203,8 @@ export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption 
 export function toDeskElderCase(row: Record<string, unknown>): ElderCase {
   const caseId = String(row.case_id ?? row.external_id ?? "");
   const encodedId = String(row.encoded_id ?? "");
+  const seqRaw = row.village_seq ?? row.villageSeq;
+  const seqNum = Number(seqRaw);
   return {
     id: caseId,
     caseCode: encodedId || String(row.external_id ?? caseId),
@@ -160,6 +218,10 @@ export function toDeskElderCase(row: Record<string, unknown>): ElderCase {
     address: String(row.address ?? ""),
     district: String(row.visit_district ?? "永和區"),
     village: String(row.visit_village ?? row.household_village ?? ""),
+    villageSeq: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : null,
+    villageCode: formatYongheVillageCode(
+      (row.village_code ?? row.villageCode) as string | number | null | undefined,
+    ),
     serviceUnit: null,
     lineIdStatus: null,
     lineIdNote: null,

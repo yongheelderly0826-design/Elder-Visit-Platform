@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, FileText, Loader2, MapPin, PenLine, Save } from "lucide-react";
 import { SignaturePad } from "@/components/consent/signature-pad";
 import { VisitAssignmentClock } from "@/components/visitor/visit-assignment-clock";
@@ -74,7 +75,20 @@ import {
 } from "@/lib/domain/visits";
 import { toggleMissedVisitSlot } from "@/lib/domain/missed-visit-supplement";
 import { visitGuidePrecheck, visitGuideStages } from "@/lib/domain/visit-guide";
-import { MANAGER_DESK_NOTE } from "@/lib/domain/manager-care-form-desk";
+import {
+  formatDeskCasePaperLabel,
+  MANAGER_DESK_NOTE,
+} from "@/lib/domain/manager-care-form-desk";
+import {
+  buildDeskCareFormPath,
+  findNextReadyDeskBatchItem,
+  insertDeskBatchItemsAfter,
+  markDeskBatchItemKeyed,
+  normalizeDeskVisitDateToIso,
+  readDeskBatchState,
+  writeDeskBatchState,
+  type DeskBatchQueueItem,
+} from "@/lib/domain/desk-care-batch";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -148,6 +162,8 @@ export function VisitDialogueForm({
   deskReturnPath,
   listReturnPath,
   formDefaults = "roster",
+  initialDeskMissedSlot,
+  initialDeskPaperKey,
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
@@ -166,11 +182,26 @@ export function VisitDialogueForm({
    * 快速 KEY（訪員／場生）應傳 desk。
    */
   formDefaults?: "roster" | "desk";
+  /** 未遇補件紙本：預選 MissedVisitTimeSlot（上午／中午／夜間） */
+  initialDeskMissedSlot?: string;
+  initialDeskPaperKey?: string;
 }) {
-  const [submission, setSubmission] = useState(initialSubmission);
+  const router = useRouter();
+  const seededMissedSlot = (missedVisitTimeSlots as readonly string[]).includes(
+    String(initialDeskMissedSlot ?? "").trim(),
+  )
+    ? (String(initialDeskMissedSlot).trim() as MissedVisitTimeSlot)
+    : null;
+  const [submission, setSubmission] = useState(() =>
+    seededMissedSlot
+      ? { ...initialSubmission, visitResult: "未遇" as const }
+      : initialSubmission,
+  );
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [continuousNextHref, setContinuousNextHref] = useState<string | null>(null);
+  const [continuousListHref, setContinuousListHref] = useState<string | null>(null);
   const [mohwErrors, setMohwErrors] = useState<MohwValidationError[]>([]);
   const [exportResult, setExportResult] = useState<string | null>(null);
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "captured" | "unavailable">("idle");
@@ -180,8 +211,10 @@ export function VisitDialogueForm({
   const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
   const isDeskEntry = variant === "manager_desk";
   const useDeskFormDefaults = isDeskEntry || formDefaults === "desk";
-  /** 紙本未遇：本張紙＝本次第 N 次訪視，只勾本趟時段佐證 */
-  const [deskPaperSlots, setDeskPaperSlots] = useState<MissedVisitTimeSlot[]>([]);
+  /** 紙本未遇：本張紙＝本次第 N 次訪視；U2 補件預選本趟對應時段 */
+  const [deskPaperSlots, setDeskPaperSlots] = useState<MissedVisitTimeSlot[]>(() =>
+    seededMissedSlot ? [seededMissedSlot] : [],
+  );
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() => {
     const initial = useDeskFormDefaults
       ? createMohwDeskInitialAnswers(elderCase, schedule)
@@ -251,8 +284,9 @@ export function VisitDialogueForm({
     useDeskFormDefaults ? ":desk_defaults_v4" : ":phone_lead0_v1"
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
+  /** 紙本一張＝一次訪視：至少勾本趟 1 個時段；現場外勤仍要 3–5 個不同時段照片。 */
   const deskPaperSlotsOk =
-    !deskPaperMissed || new Set(deskPaperSlots).size >= missedVisitMinSlots;
+    !deskPaperMissed || new Set(deskPaperSlots).size >= 1;
   const effectivePhotoNames = useMemo(
     () =>
       deskPaperMissed
@@ -483,10 +517,186 @@ export function VisitDialogueForm({
     const listed = data.data?.highCare?.triggered
       ? `；已列入高關懷（${(data.data.highCare.colors ?? []).join("、") || data.data.highCare.primaryColor}）`
       : "";
-    setResult(`${data.data?.nextStep ?? "已送出"}${listed}`);
+    let successMessage = `${data.data?.nextStep ?? "已送出"}${listed}`;
     window.localStorage.removeItem(draftKey);
     window.localStorage.removeItem(careFormDraftKey);
+
+    if (isDeskEntry) {
+      const continuous = await advanceDeskContinuousKey({
+        assignmentId: schedule.id,
+        caseId: elderCase.id,
+        caseName: elderCase.name,
+        caseCode: elderCase.caseCode,
+        visitResult: submission.visitResult,
+        visitDateRaw:
+          normalizeDeskVisitDateToIso(mohwAnswers.visit_date) ||
+          normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
+          normalizeDeskVisitDateToIso(schedule.visitDate) ||
+          "",
+        returnPath: deskReturnPath || "/desk/care-forms",
+      });
+      if (continuous.toastMessage) {
+        successMessage = continuous.toastMessage;
+      }
+      setContinuousNextHref(continuous.nextHref);
+      setContinuousListHref(continuous.listHref);
+      setResult(successMessage);
+      setIsSubmitting(false);
+      if (continuous.nextHref) {
+        window.setTimeout(() => {
+          router.push(continuous.nextHref!);
+        }, 700);
+      } else if (continuous.listHref) {
+        window.setTimeout(() => {
+          router.push(continuous.listHref!);
+        }, 700);
+      }
+      return;
+    }
+
+    setResult(successMessage);
     setIsSubmitting(false);
+  }
+
+  async function advanceDeskContinuousKey(input: {
+    assignmentId: string;
+    caseId: string;
+    caseName: string;
+    caseCode: string;
+    visitResult: VisitSubmission["visitResult"];
+    visitDateRaw: string;
+    returnPath: string;
+  }): Promise<{
+    nextHref: string | null;
+    listHref: string;
+    toastMessage: string | null;
+  }> {
+    const listHrefBase = input.returnPath || deskReturnPath || "/desk/care-forms";
+    const doneQuery = `done=${encodeURIComponent(input.assignmentId)}`;
+    let batch = readDeskBatchState();
+    let toastMessage: string | null = null;
+
+    if (batch) {
+      batch = markDeskBatchItemKeyed(batch, input.assignmentId);
+      writeDeskBatchState(batch);
+    }
+
+    if (input.visitResult === "未遇" && input.visitDateRaw) {
+      try {
+        const expandRes = await fetch("/api/manager/care-forms/expand-missed", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            assignmentId: input.assignmentId,
+            caseId: input.caseId,
+            caseName: input.caseName,
+            caseCode: input.caseCode,
+            visitDate: input.visitDateRaw,
+            primaryVisitorId: batch?.primaryVisitorId || schedule.visitorId,
+            companionVisitorIds: batch?.companionVisitorIds ?? [],
+            visitorName:
+              batch?.visitorNames?.[batch.primaryVisitorId] || visitorName || "",
+            companionNames: batch?.visitorNames ?? {},
+          }),
+        });
+        const expandJson = (await expandRes.json()) as {
+          data?: {
+            created?: boolean;
+            skipped?: boolean;
+            createdItems?: Array<{
+              caseId: string;
+              caseName: string;
+              caseCode: string;
+              assignmentId: string;
+              visitDate: string;
+              visitStartTime: string;
+              visitEndTime: string;
+              missedSlot: string;
+              paperKey: string;
+              attempt: number;
+            }>;
+          };
+          error?: { message?: string };
+        };
+        if (expandRes.ok && expandJson.data?.createdItems?.length) {
+          const created = [...expandJson.data.createdItems].sort((a, b) =>
+            a.visitDate.localeCompare(b.visitDate),
+          );
+          if (expandJson.data.created) {
+            toastMessage =
+              "已建立另兩筆未遇紙本（D-2 早、D-1 中），接著填寫";
+          }
+          if (batch) {
+            const currentBatch = batch;
+            const queueItems: DeskBatchQueueItem[] = created.map((item) => ({
+              caseId: item.caseId,
+              caseName: item.caseName,
+              caseCode: item.caseCode,
+              assignmentId: item.assignmentId,
+              status: "ready" as const,
+              visitDate: item.visitDate,
+              visitStartTime: item.visitStartTime,
+              visitEndTime: item.visitEndTime,
+              village: elderCase.village || currentBatch.village,
+              villageSeq: elderCase.villageSeq ?? null,
+              villageCode: elderCase.villageCode || "",
+            }));
+            batch = insertDeskBatchItemsAfter(currentBatch, input.assignmentId, queueItems);
+            writeDeskBatchState(batch);
+          }
+          const first = created[0];
+          if (first) {
+            return {
+              nextHref: buildDeskCareFormPath(first.assignmentId, {
+                visitDate: first.visitDate,
+                visitStartTime: first.visitStartTime,
+                visitEndTime: first.visitEndTime,
+                returnPath: listHrefBase,
+                missedSlot: first.missedSlot,
+                paperKey: first.paperKey,
+              }),
+              listHref: `${listHrefBase}?${doneQuery}`,
+              toastMessage,
+            };
+          }
+        }
+      } catch {
+        // 補件失敗仍繼續一般連續 KEY
+      }
+    }
+
+    batch = readDeskBatchState();
+    const next = findNextReadyDeskBatchItem(batch, {
+      afterAssignmentId: input.assignmentId,
+      excludeAssignmentIds: [input.assignmentId],
+    });
+    if (next?.visitDate && next.visitStartTime && next.visitEndTime) {
+      return {
+        nextHref: buildDeskCareFormPath(next.assignmentId, {
+          visitDate: next.visitDate,
+          visitStartTime: next.visitStartTime,
+          visitEndTime: next.visitEndTime,
+          returnPath: listHrefBase,
+        }),
+        listHref: `${listHrefBase}?${doneQuery}`,
+        toastMessage,
+      };
+    }
+    if (next) {
+      return {
+        nextHref: buildDeskCareFormPath(next.assignmentId, {
+          returnPath: listHrefBase,
+        }),
+        listHref: `${listHrefBase}?${doneQuery}`,
+        toastMessage,
+      };
+    }
+
+    return {
+      nextHref: null,
+      listHref: `${listHrefBase}?${doneQuery}&batchDone=1`,
+      toastMessage: toastMessage || "本批待 KEY 已全部送出",
+    };
   }
 
   function captureLocation() {
@@ -615,9 +825,21 @@ export function VisitDialogueForm({
         <p className="text-sm font-medium text-primary">
           {isDeskEntry ? "公所代填・紙本（一張＝一次訪視）" : "對話式填報流程"}
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">{elderCase.name || "未填姓名"}</h1>
+        <h1 className="mt-2 text-2xl font-semibold">
+          {
+            formatDeskCasePaperLabel({
+              villageCode: elderCase.villageCode,
+              village: elderCase.village,
+              villageSeq: elderCase.villageSeq,
+              name: elderCase.name || "未填姓名",
+              caseCode: elderCase.caseCode,
+            }).primary
+          }
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {elderCase.caseCode} · {elderCase.district} · {elderCase.village} · 第{" "}
+          {elderCase.caseCode ? `${elderCase.caseCode} · ` : ""}
+          {elderCase.district}
+          {elderCase.village ? ` · ${elderCase.village}` : ""} · 第{" "}
           {schedule.visitAttempt} 次訪視
           {isDeskEntry && visitorName ? ` · 指定訪員 ${visitorName}` : ""}
         </p>
@@ -973,11 +1195,12 @@ export function VisitDialogueForm({
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
             <h2 className="text-sm font-semibold text-amber-950">
               本張紙本・第 {schedule.visitAttempt} 次未遇時段
+              {initialDeskPaperKey ? `（${initialDeskPaperKey}）` : ""}
             </h2>
             <p className="mt-1 text-sm leading-6 text-amber-900/90">
-              依紙本勾選本次訪視已備之不同時段（至少 {missedVisitMinSlots} 個）。
+              一張紙＝一次訪視：請勾本趟對應時段（早→上午、中→中午、晚→夜間）。
               {schedule.visitAttempt < missedVisitClosureAttempt
-                ? ` 送出後再 KEY 下一張，直到滿 ${missedVisitClosureAttempt} 次。`
+                ? ` 未遇滿 ${missedVisitClosureAttempt} 張後可結案；若這是第一張未遇，送出後會自動補另兩張紙本。`
                 : ` 已達第 ${missedVisitClosureAttempt} 次，可送出後由督導結案。`}
             </p>
             <p
@@ -987,7 +1210,7 @@ export function VisitDialogueForm({
                   : "border-amber-300 bg-card text-amber-950"
               }`}
             >
-              已勾 {new Set(deskPaperSlots).size}／至少 {missedVisitMinSlots}
+              已勾 {new Set(deskPaperSlots).size}／至少 1
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {missedVisitTimeSlots.map((slot) => {
@@ -1190,26 +1413,47 @@ export function VisitDialogueForm({
         <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-primary">本次訪查已完成</p>
           <h2 className="mt-1 text-base font-semibold">
-            {listReturnPath || isDeskEntry
-              ? "已 KEY 送出，可回名單繼續下一案"
-              : "紀錄已送出，下一步可返回任務清單"}
+            {isDeskEntry
+              ? continuousNextHref
+                ? "已 KEY 送出，即將開啟下一案"
+                : "已 KEY 送出"
+              : listReturnPath
+                ? "已 KEY 送出，可回名單繼續下一案"
+                : "紀錄已送出，下一步可返回任務清單"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {listReturnPath || isDeskEntry
-              ? "系統已清除本機草稿。請回待訪名單，再點下一案「確認」繼續 KEY。"
-              : "系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。"}
+            {isDeskEntry
+              ? result
+              : listReturnPath
+                ? "系統已清除本機草稿。請回待訪名單，再點下一案「確認」繼續 KEY。"
+                : "系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex">
-            {listReturnPath || isDeskEntry ? (
-              <Button asChild className="w-full sm:w-auto">
-                <a
-                  href={
-                    listReturnPath ||
-                    `${deskReturnPath || "/desk/care-forms"}?done=${encodeURIComponent(schedule.id)}`
-                  }
+            {isDeskEntry ? (
+              <>
+                {continuousNextHref ? (
+                  <Button asChild className="w-full sm:w-auto">
+                    <a href={continuousNextHref}>下一案 KEY</a>
+                  </Button>
+                ) : null}
+                <Button
+                  asChild
+                  className="w-full sm:w-auto"
+                  variant={continuousNextHref ? "outline" : "default"}
                 >
-                  回待訪名單
-                </a>
+                  <a
+                    href={
+                      continuousListHref ||
+                      `${deskReturnPath || "/desk/care-forms"}?done=${encodeURIComponent(schedule.id)}`
+                    }
+                  >
+                    回待 KEY 清單
+                  </a>
+                </Button>
+              </>
+            ) : listReturnPath ? (
+              <Button asChild className="w-full sm:w-auto">
+                <a href={listReturnPath}>回待訪名單</a>
               </Button>
             ) : (
               <>
@@ -1268,8 +1512,19 @@ function VisitGuidePanel({ elderCase }: { elderCase: ElderCase }) {
           <p className="font-semibold">{visitGuidePrecheck.title}</p>
           <p className="mt-1 leading-5 text-muted-foreground">{visitGuidePrecheck.goal}</p>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
-            <GuideFact label="個案" value={elderCase.name} />
-            <GuideFact label="案號" value={elderCase.caseCode} />
+            <GuideFact
+              label="紙本對照"
+              value={
+                formatDeskCasePaperLabel({
+                  villageCode: elderCase.villageCode,
+                  village: elderCase.village,
+                  villageSeq: elderCase.villageSeq,
+                  name: elderCase.name,
+                  caseCode: elderCase.caseCode,
+                }).primary
+              }
+            />
+            <GuideFact label="系統編碼" value={elderCase.caseCode} />
             <GuideFact label="區里" value={`${elderCase.district} ${elderCase.village}`} />
             <GuideFact label="地址" value={elderCase.address} />
           </div>

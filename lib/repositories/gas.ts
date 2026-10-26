@@ -72,6 +72,8 @@ function toElderCase(row: GasCaseRow): ElderCase {
   const externalId = String(row.external_id ?? "");
   const encodedId = String(row.encoded_id ?? "");
   const caseId = String(row.case_id ?? externalId);
+  const seqNum = Number(row.village_seq);
+  const villageCodeRaw = row.village_code;
   return {
     id: caseId,
     caseCode: encodedId || externalId || caseId,
@@ -85,6 +87,11 @@ function toElderCase(row: GasCaseRow): ElderCase {
     address: String(row.address ?? ""),
     district: String(row.visit_district ?? "永和區"),
     village: String(row.visit_village ?? row.household_village ?? ""),
+    villageSeq: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : null,
+    villageCode:
+      villageCodeRaw != null && String(villageCodeRaw).trim()
+        ? String(villageCodeRaw).trim()
+        : null,
     serviceUnit: null,
     lineIdStatus: null,
     lineIdNote: null,
@@ -416,7 +423,16 @@ export const gasRepository: AppRepository = {
       const allForCase = ((await gasClient.assignments.list()) as GasAssignmentRow[]).filter(
         (item) => String(item.case_id) === String(row.case_id),
       );
+      // 紙本代填未遇三趟：以 due_date（D-2／D-1／D）決定 visitAttempt，避免新建補件序號錯亂。
+      const deskPaperish = allForCase.some((item) =>
+        String(item.notes ?? "").includes("公所代填"),
+      );
       const ordered = allForCase.slice().sort((a, b) => {
+        if (deskPaperish) {
+          const aDue = String(a.due_date ?? "").slice(0, 10);
+          const bDue = String(b.due_date ?? "").slice(0, 10);
+          if (aDue && bDue && aDue !== bDue) return aDue.localeCompare(bDue);
+        }
         const left = String(a.dispatched_at ?? a.updated_at ?? a.assignment_id ?? "");
         const right = String(b.dispatched_at ?? b.updated_at ?? b.assignment_id ?? "");
         return left.localeCompare(right);

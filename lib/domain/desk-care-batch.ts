@@ -1,10 +1,44 @@
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
+import type { MissedVisitTimeSlot } from "@/lib/domain/visits";
 
 export const DESK_BATCH_STORAGE_KEY = "elder-desk-care-batch-v1";
 
 /** 場生 KEY：預設每案時段長度；案與案之間預留移動時間（分鐘） */
 export const DESK_BATCH_SLOT_MINUTES = 10;
 export const DESK_BATCH_TRAVEL_GAP_MINUTES = 5;
+
+/**
+ * 未遇紙本三趟固定時段（早／中／晚）。
+ * MissedVisitTimeSlot 對照：早→上午、中→中午、晚→夜間。
+ */
+export const DESK_PAPER_MISS_WINDOWS = {
+  EARLY: {
+    paperKey: "早" as const,
+    start: "09:00",
+    end: "09:10",
+    missedSlot: "上午" as MissedVisitTimeSlot,
+    attempt: 1,
+    dayOffsetFromLate: -2,
+  },
+  MID: {
+    paperKey: "中" as const,
+    start: "14:00",
+    end: "14:10",
+    missedSlot: "中午" as MissedVisitTimeSlot,
+    attempt: 2,
+    dayOffsetFromLate: -1,
+  },
+  LATE: {
+    paperKey: "晚" as const,
+    start: "19:00",
+    end: "19:10",
+    missedSlot: "夜間" as MissedVisitTimeSlot,
+    attempt: 3,
+    dayOffsetFromLate: 0,
+  },
+} as const;
+
+export type DeskPaperMissWindowKey = keyof typeof DESK_PAPER_MISS_WINDOWS;
 
 export type DeskVisitWindow = {
   visitDate: string;
@@ -25,6 +59,10 @@ export type DeskBatchQueueItem = {
   visitDate?: string;
   visitStartTime?: string;
   visitEndTime?: string;
+  /** 紙本 KEY 對照（可缺；舊 sessionStorage 批次可能沒有） */
+  village?: string;
+  villageSeq?: number | null;
+  villageCode?: string;
 };
 
 export type DeskBatchState = {
@@ -282,4 +320,197 @@ export function writeDeskBatchState(state: DeskBatchState) {
 export function clearDeskBatchState() {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(DESK_BATCH_STORAGE_KEY);
+}
+
+/** 民國 yyy/MM/dd 或 ISO yyyy-MM-dd → ISO；無法解析則 null。 */
+export function normalizeDeskVisitDateToIso(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() + 1 !== month ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  }
+  const roc = text.match(/^(\d{2,3})\/(\d{1,2})\/(\d{1,2})$/);
+  if (roc) {
+    const year = Number(roc[1]) + 1911;
+    const month = Number(roc[2]);
+    const day = Number(roc[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() + 1 !== month ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/** ISO 日期加減天（以 UTC 日界，避免本地 DST）。 */
+export function addCalendarDaysIso(isoDate: string, deltaDays: number): string | null {
+  const base = normalizeDeskVisitDateToIso(isoDate);
+  if (!base) return null;
+  const [y, m, d] = base.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+export type DeskMissedPaperPlanItem = {
+  attempt: number;
+  paperKey: "早" | "中" | "晚";
+  visitDate: string;
+  visitStartTime: string;
+  visitEndTime: string;
+  missedSlot: MissedVisitTimeSlot;
+  /** true＝本次已送出的那張（晚／D）；false＝需新建 */
+  isSubmittedPaper: boolean;
+};
+
+/**
+ * 以已送出未遇紙本的訪視日 D 為準：本張＝D 晚（第 3 次），另兩張＝D-2 早、D-1 中。
+ */
+export function buildMissedDeskPaperSupplementPlan(
+  visitDateRaw: string,
+):
+  | { ok: true; lateDate: string; items: DeskMissedPaperPlanItem[] }
+  | { ok: false; message: string } {
+  const lateDate = normalizeDeskVisitDateToIso(visitDateRaw);
+  if (!lateDate) {
+    return { ok: false, message: "訪視日期無效，無法建立未遇紙本補件。" };
+  }
+  const earlyDate = addCalendarDaysIso(lateDate, DESK_PAPER_MISS_WINDOWS.EARLY.dayOffsetFromLate);
+  const midDate = addCalendarDaysIso(lateDate, DESK_PAPER_MISS_WINDOWS.MID.dayOffsetFromLate);
+  if (!earlyDate || !midDate) {
+    return { ok: false, message: "無法推算未遇補件日期。" };
+  }
+
+  const items: DeskMissedPaperPlanItem[] = [
+    {
+      attempt: DESK_PAPER_MISS_WINDOWS.EARLY.attempt,
+      paperKey: DESK_PAPER_MISS_WINDOWS.EARLY.paperKey,
+      visitDate: earlyDate,
+      visitStartTime: DESK_PAPER_MISS_WINDOWS.EARLY.start,
+      visitEndTime: DESK_PAPER_MISS_WINDOWS.EARLY.end,
+      missedSlot: DESK_PAPER_MISS_WINDOWS.EARLY.missedSlot,
+      isSubmittedPaper: false,
+    },
+    {
+      attempt: DESK_PAPER_MISS_WINDOWS.MID.attempt,
+      paperKey: DESK_PAPER_MISS_WINDOWS.MID.paperKey,
+      visitDate: midDate,
+      visitStartTime: DESK_PAPER_MISS_WINDOWS.MID.start,
+      visitEndTime: DESK_PAPER_MISS_WINDOWS.MID.end,
+      missedSlot: DESK_PAPER_MISS_WINDOWS.MID.missedSlot,
+      isSubmittedPaper: false,
+    },
+    {
+      attempt: DESK_PAPER_MISS_WINDOWS.LATE.attempt,
+      paperKey: DESK_PAPER_MISS_WINDOWS.LATE.paperKey,
+      visitDate: lateDate,
+      visitStartTime: DESK_PAPER_MISS_WINDOWS.LATE.start,
+      visitEndTime: DESK_PAPER_MISS_WINDOWS.LATE.end,
+      missedSlot: DESK_PAPER_MISS_WINDOWS.LATE.missedSlot,
+      isSubmittedPaper: true,
+    },
+  ];
+
+  return { ok: true, lateDate, items };
+}
+
+export function findNextReadyDeskBatchItem(
+  state: DeskBatchState | null | undefined,
+  options?: { afterAssignmentId?: string; excludeAssignmentIds?: string[] },
+): DeskBatchQueueItem | null {
+  if (!state?.items?.length) return null;
+  const exclude = new Set(
+    (options?.excludeAssignmentIds ?? []).map((id) => String(id || "").trim()).filter(Boolean),
+  );
+  const afterId = String(options?.afterAssignmentId ?? "").trim();
+  const ready = state.items.filter(
+    (item) => item.status === "ready" && !exclude.has(item.assignmentId),
+  );
+  if (!ready.length) return null;
+  if (!afterId) return ready[0] ?? null;
+  const afterIndex = state.items.findIndex((item) => item.assignmentId === afterId);
+  if (afterIndex < 0) return ready[0] ?? null;
+  const afterInReady = ready.find(
+    (item) => state.items.indexOf(item) > afterIndex,
+  );
+  return afterInReady ?? ready[0] ?? null;
+}
+
+export function markDeskBatchItemKeyed(
+  state: DeskBatchState,
+  assignmentId: string,
+): DeskBatchState {
+  return {
+    ...state,
+    items: state.items.map((item) =>
+      item.assignmentId === assignmentId ? { ...item, status: "keyed" as const } : item,
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** 把新項目插在指定 assignment 之後（找不到則插在最前）。 */
+export function insertDeskBatchItemsAfter(
+  state: DeskBatchState,
+  afterAssignmentId: string,
+  newItems: DeskBatchQueueItem[],
+): DeskBatchState {
+  if (!newItems.length) return state;
+  const existingIds = new Set(state.items.map((item) => item.assignmentId));
+  const toInsert = newItems.filter((item) => !existingIds.has(item.assignmentId));
+  if (!toInsert.length) return state;
+  const index = state.items.findIndex((item) => item.assignmentId === afterAssignmentId);
+  const items =
+    index < 0
+      ? [...toInsert, ...state.items]
+      : [
+          ...state.items.slice(0, index + 1),
+          ...toInsert,
+          ...state.items.slice(index + 1),
+        ];
+  return { ...state, items, updatedAt: new Date().toISOString() };
+}
+
+export function buildDeskCareFormPath(
+  assignmentId: string,
+  input: {
+    visitDate?: string;
+    visitStartTime?: string;
+    visitEndTime?: string;
+    returnPath?: string;
+    missedSlot?: MissedVisitTimeSlot | string;
+    paperKey?: string;
+  },
+) {
+  const params = new URLSearchParams();
+  if (input.visitDate) params.set("date", input.visitDate);
+  if (input.visitStartTime) params.set("start", input.visitStartTime);
+  if (input.visitEndTime) params.set("end", input.visitEndTime);
+  if (input.returnPath) params.set("return", input.returnPath);
+  if (input.missedSlot) params.set("missedSlot", String(input.missedSlot));
+  if (input.paperKey) params.set("paperKey", String(input.paperKey));
+  const query = params.toString();
+  return `/manager/care-forms/${assignmentId}${query ? `?${query}` : ""}`;
+}
+
+export function isDeskPaperAssignmentNotes(notes: unknown) {
+  const text = String(notes ?? "");
+  return text.includes(DESK_PAPER_SOURCE_NOTE) || text.includes("公所代填");
 }

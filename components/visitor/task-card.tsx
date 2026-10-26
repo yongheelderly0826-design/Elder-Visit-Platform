@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, Camera, MapPin, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDeskCasePaperLabel } from "@/lib/domain/manager-care-form-desk";
 import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
 import { getRiskLabel, getVisitStatusLabel } from "@/lib/domain/visits";
 import { maskPersonName } from "@/lib/domain/person-name";
@@ -13,12 +14,20 @@ export function TaskCard({
   elderCase: ElderCase;
   schedule: VisitSchedule;
 }) {
+  const paperLabel = formatDeskCasePaperLabel({
+    villageCode: elderCase.villageCode,
+    village: elderCase.village,
+    villageSeq: elderCase.villageSeq,
+    name: maskPersonName(elderCase.name),
+    caseCode: elderCase.caseCode,
+  });
+
   return (
     <article className="rounded-lg border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">{maskPersonName(elderCase.name)}</h2>
+            <h2 className="text-base font-semibold">{paperLabel.primary}</h2>
             <span
               className={cn(
                 "rounded-md px-2 py-1 text-xs font-medium",
@@ -30,7 +39,9 @@ export function TaskCard({
               {getRiskLabel(elderCase.riskLevel)}
             </span>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">{elderCase.caseCode}</p>
+          {paperLabel.secondary ? (
+            <p className="mt-1 text-sm text-muted-foreground">{paperLabel.secondary}</p>
+          ) : null}
         </div>
         <span className="rounded-md bg-secondary px-2 py-1 text-xs">
           {getVisitStatusLabel(schedule.status)}

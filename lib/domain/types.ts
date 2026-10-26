@@ -383,6 +383,10 @@ export type ElderCase = {
   address: string;
   district: string;
   village: string;
+  /** 紙本里民序（Excel 里編號）；KEY 對照用 */
+  villageSeq?: number | null;
+  /** 六碼里編碼，如 040051 */
+  villageCode?: string | null;
   serviceUnit: string | null;
   lineIdStatus: string | null;
   lineIdNote: string | null;
