@@ -2,6 +2,10 @@ import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
 export const DESK_BATCH_STORAGE_KEY = "elder-desk-care-batch-v1";
 
+/** 場生 KEY：預設每案時段長度與整批錯開間距（分鐘） */
+export const DESK_BATCH_SLOT_MINUTES = 10;
+export const DESK_BATCH_STAGGER_MINUTES = 10;
+
 export type DeskVisitWindow = {
   visitDate: string;
   start: string;
@@ -67,6 +71,89 @@ export function toMinutes(time: string) {
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return hour * 60 + minute;
+}
+
+export function minutesToTime(total: number) {
+  if (!Number.isFinite(total) || total < 0 || total >= 24 * 60) return null;
+  const hour = Math.floor(total / 60);
+  const minute = total % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function addMinutesToTime(time: string, deltaMinutes: number) {
+  const base = toMinutes(time);
+  if (base == null || !Number.isFinite(deltaMinutes)) return null;
+  return minutesToTime(base + deltaMinutes);
+}
+
+export type DeskStaggeredVisitSlot = {
+  visitDate: string;
+  visitStartTime: string;
+  visitEndTime: string;
+};
+
+/**
+ * 以第 1 筆起迄為基準，後案同日、整段平移 staggerMinutes。
+ * 時長須 ≤ 間距，否則同組訪查員時段會重疊（核銷稽核）。
+ */
+export function buildStaggeredVisitWindows(input: {
+  visitDate: string;
+  firstStart: string;
+  firstEnd: string;
+  count: number;
+  staggerMinutes?: number;
+}):
+  | { ok: true; slots: DeskStaggeredVisitSlot[]; durationMinutes: number }
+  | { ok: false; message: string } {
+  const visitDate = String(input.visitDate || "").trim();
+  const firstStart = String(input.firstStart || "").trim().slice(0, 5);
+  const firstEnd = String(input.firstEnd || "").trim().slice(0, 5);
+  const count = Math.max(0, Math.floor(input.count));
+  const stagger =
+    input.staggerMinutes == null ? DESK_BATCH_STAGGER_MINUTES : Number(input.staggerMinutes);
+
+  if (!visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+    return { ok: false, message: "請填寫訪視日期。" };
+  }
+  if (count < 1) {
+    return { ok: false, message: "沒有可排程的個案。" };
+  }
+  if (!Number.isFinite(stagger) || stagger < 1) {
+    return { ok: false, message: "間距分鐘數無效。" };
+  }
+
+  const startMin = toMinutes(firstStart);
+  const endMin = toMinutes(firstEnd);
+  if (startMin == null || endMin == null) {
+    return { ok: false, message: "請完整填寫開始與結束時間。" };
+  }
+  if (endMin <= startMin) {
+    return { ok: false, message: "結束時間必須晚於開始時間。" };
+  }
+
+  const durationMinutes = endMin - startMin;
+  if (durationMinutes > stagger) {
+    return {
+      ok: false,
+      message: `每案時長 ${durationMinutes} 分大於間距 ${stagger} 分，後案會與前案重疊。請縮短為 ${stagger} 分以內（建議 ${firstStart}–${addMinutesToTime(firstStart, stagger) ?? ""}）。`,
+    };
+  }
+
+  const slots: DeskStaggeredVisitSlot[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const offset = index * stagger;
+    const visitStartTime = addMinutesToTime(firstStart, offset);
+    const visitEndTime = addMinutesToTime(firstEnd, offset);
+    if (!visitStartTime || !visitEndTime) {
+      return {
+        ok: false,
+        message: `第 ${index + 1} 筆時段超出當日 24:00，請提早第 1 筆開始時間或減少案數。`,
+      };
+    }
+    slots.push({ visitDate, visitStartTime, visitEndTime });
+  }
+
+  return { ok: true, slots, durationMinutes };
 }
 
 export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {

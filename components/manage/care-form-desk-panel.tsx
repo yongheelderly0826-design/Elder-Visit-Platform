@@ -6,6 +6,10 @@ import { ClipboardPen, Plus, Search, UserRound } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import {
+  DESK_BATCH_SLOT_MINUTES,
+  DESK_BATCH_STAGGER_MINUTES,
+  addMinutesToTime,
+  buildStaggeredVisitWindows,
   clearDeskBatchState,
   readDeskBatchState,
   writeDeskBatchState,
@@ -87,6 +91,11 @@ export function CareFormDeskPanel({
   const [visitorsLoading, setVisitorsLoading] = useState(true);
   const [batch, setBatch] = useState<DeskBatchState | null>(null);
   const [timeDraft, setTimeDraft] = useState<TimeDraft | null>(null);
+  const [batchTimeDraft, setBatchTimeDraft] = useState({
+    visitDate: "",
+    visitStartTime: "09:00",
+    visitEndTime: addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) || "09:10",
+  });
 
   useEffect(() => {
     const saved = readDeskBatchState();
@@ -97,7 +106,16 @@ export function CareFormDeskPanel({
       setPrimaryVisitorId(saved.primaryVisitorId);
       const companions = saved.companionVisitorIds;
       // 還原勾選需等 visitors 載入後再分欄；先記主填
-      setMessage(`已恢復待 KEY 清單（${saved.items.length} 案）。請確認時間後進表。`);
+      setMessage(`已恢復待 KEY 清單（${saved.items.length} 案）。可整批套用時間後進表。`);
+      const firstTimed = saved.items.find((item) => item.visitDate && item.visitStartTime);
+      setBatchTimeDraft({
+        visitDate: firstTimed?.visitDate || new Date().toISOString().slice(0, 10),
+        visitStartTime: firstTimed?.visitStartTime || "09:00",
+        visitEndTime:
+          firstTimed?.visitEndTime ||
+          addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) ||
+          "09:10",
+      });
       void companions;
     }
   }, []);
@@ -479,8 +497,15 @@ export function CareFormDeskPanel({
       };
       writeDeskBatchState(next);
       setBatch(next);
+      setBatchTimeDraft({
+        visitDate: new Date().toISOString().slice(0, 10),
+        visitStartTime: "09:00",
+        visitEndTime: addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) || "09:10",
+      });
       setCreating(false);
-      setMessage(`已準備 ${next.items.length} 筆派案。請逐案確認訪視時間後進表 KEY。`);
+      setMessage(
+        `已準備 ${next.items.length} 筆派案。請填第 1 筆時間後「套用整批時段」，再逐案進表 KEY。`,
+      );
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -488,18 +513,101 @@ export function CareFormDeskPanel({
     }
   }
 
+  const staggerPreview = useMemo(() => {
+    if (!batch?.items.length) return null;
+    return buildStaggeredVisitWindows({
+      visitDate: batchTimeDraft.visitDate,
+      firstStart: batchTimeDraft.visitStartTime,
+      firstEnd: batchTimeDraft.visitEndTime,
+      count: batch.items.length,
+      staggerMinutes: DESK_BATCH_STAGGER_MINUTES,
+    });
+  }, [batch, batchTimeDraft]);
+
   function openTimeConfirm(item: DeskBatchQueueItem) {
     const today = new Date().toISOString().slice(0, 10);
+    const defaultEnd = addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) || "09:10";
     setTimeDraft({
       assignmentId: item.assignmentId,
       caseId: item.caseId,
       caseName: item.caseName,
       caseCode: item.caseCode,
-      visitDate: item.visitDate || today,
-      visitStartTime: item.visitStartTime || "09:00",
-      visitEndTime: item.visitEndTime || "10:00",
+      visitDate: item.visitDate || batchTimeDraft.visitDate || today,
+      visitStartTime: item.visitStartTime || batchTimeDraft.visitStartTime || "09:00",
+      visitEndTime: item.visitEndTime || batchTimeDraft.visitEndTime || defaultEnd,
     });
     setMessage(null);
+  }
+
+  function enterFormWithTime(item: DeskBatchQueueItem) {
+    if (!item.visitDate || !item.visitStartTime || !item.visitEndTime) {
+      openTimeConfirm(item);
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("date", item.visitDate);
+    params.set("start", item.visitStartTime);
+    params.set("end", item.visitEndTime);
+    params.set("return", returnPath);
+    router.push(`/manager/care-forms/${item.assignmentId}?${params.toString()}`);
+  }
+
+  async function applyBatchTimes() {
+    if (!batch) return;
+    const built = buildStaggeredVisitWindows({
+      visitDate: batchTimeDraft.visitDate,
+      firstStart: batchTimeDraft.visitStartTime,
+      firstEnd: batchTimeDraft.visitEndTime,
+      count: batch.items.length,
+      staggerMinutes: DESK_BATCH_STAGGER_MINUTES,
+    });
+    if (!built.ok) {
+      setMessage(built.message);
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/manager/care-forms/confirm-time-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          primaryVisitorId: batch.primaryVisitorId,
+          companionVisitorIds: batch.companionVisitorIds,
+          items: batch.items.map((item, index) => ({
+            assignmentId: item.assignmentId,
+            caseId: item.caseId,
+            caseLabel: `${item.caseName}（${item.caseCode}）`,
+            visitDate: built.slots[index].visitDate,
+            visitStartTime: built.slots[index].visitStartTime,
+            visitEndTime: built.slots[index].visitEndTime,
+          })),
+        }),
+      });
+      const json = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        setMessage(json.error?.message ?? "整批時段無法套用");
+        return;
+      }
+
+      const nextItems = batch.items.map((item, index) => ({
+        ...item,
+        visitDate: built.slots[index].visitDate,
+        visitStartTime: built.slots[index].visitStartTime,
+        visitEndTime: built.slots[index].visitEndTime,
+      }));
+      const nextBatch = { ...batch, items: nextItems, updatedAt: new Date().toISOString() };
+      writeDeskBatchState(nextBatch);
+      setBatch(nextBatch);
+      setMessage(
+        `已套用整批時段（間距 ${DESK_BATCH_STAGGER_MINUTES} 分）。請留在清單逐案「進表 KEY」。`,
+      );
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function confirmTimeAndEnter() {
@@ -560,13 +668,7 @@ export function CareFormDeskPanel({
       writeDeskBatchState(nextBatch);
       setBatch(nextBatch);
       setTimeDraft(null);
-
-      const params = new URLSearchParams();
-      params.set("date", timeDraft.visitDate);
-      params.set("start", timeDraft.visitStartTime);
-      params.set("end", timeDraft.visitEndTime);
-      params.set("return", returnPath);
-      router.push(`/manager/care-forms/${timeDraft.assignmentId}?${params.toString()}`);
+      setMessage("已更新本筆時段，可按「進表 KEY」。");
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -620,7 +722,7 @@ export function CareFormDeskPanel({
         icon={ClipboardPen}
         eyebrow={entry === "desk" ? "里責填表入口" : "承辦後台"}
         title="關懷表建檔"
-        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；每案進表前確認時間且不可與同組訪查員時段衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
+        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；整批套用訪視時間（第 1 筆起迄、後案 +10 分）後留在清單進表。同組時段不可衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
       />
 
       {batch ? (
@@ -631,7 +733,7 @@ export function CareFormDeskPanel({
                 目前有待 KEY 清單（{batch.items.length} 案）— 上方步驟已暫鎖
               </p>
               <p className="mt-1 text-sm text-amber-900">
-                請往下到「4. 待 KEY 清單」確認時間進表；若要重選訪查員／個案，請先清空清單。
+                請往下到「4. 待 KEY 清單」整批套用時間後進表；若要重選訪查員／個案，請先清空清單。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -994,7 +1096,7 @@ export function CareFormDeskPanel({
         <section id="desk-batch-queue" className="rounded-lg border border-primary/30 bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-semibold">4. 待 KEY 清單（逐案確認時間）</h2>
+              <h2 className="font-semibold">4. 待 KEY 清單（整批時間後進表）</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 訪查組固定：
                 {[batch.primaryVisitorId, ...batch.companionVisitorIds]
@@ -1009,32 +1111,126 @@ export function CareFormDeskPanel({
               清空清單／更換訪查組
             </Button>
           </div>
-          <div className="mt-4 grid gap-2">
-            {batch.items.map((item) => (
-              <div
-                key={item.assignmentId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+
+          <div className="mt-4 rounded-md border border-dashed bg-secondary/40 p-3">
+            <p className="text-sm font-medium">整批訪視時間</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              填第 1 筆日期與起迄；後案同日、整段自動 +{DESK_BATCH_STAGGER_MINUTES}{" "}
+              分（預設時長 {DESK_BATCH_SLOT_MINUTES} 分）。套用後留在清單自行進表。
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Field label="訪視日期 *">
+                <input
+                  type="date"
+                  className="h-11 w-full rounded-md border px-3 text-sm"
+                  value={batchTimeDraft.visitDate}
+                  onChange={(event) =>
+                    setBatchTimeDraft((current) => ({
+                      ...current,
+                      visitDate: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="第 1 筆開始 *">
+                <input
+                  type="time"
+                  className="h-11 w-full rounded-md border px-3 text-sm"
+                  value={batchTimeDraft.visitStartTime}
+                  onChange={(event) => {
+                    const visitStartTime = event.target.value;
+                    const visitEndTime =
+                      addMinutesToTime(visitStartTime, DESK_BATCH_SLOT_MINUTES) ||
+                      batchTimeDraft.visitEndTime;
+                    setBatchTimeDraft((current) => ({
+                      ...current,
+                      visitStartTime,
+                      visitEndTime,
+                    }));
+                  }}
+                />
+              </Field>
+              <Field label="第 1 筆結束 *">
+                <input
+                  type="time"
+                  className="h-11 w-full rounded-md border px-3 text-sm"
+                  value={batchTimeDraft.visitEndTime}
+                  onChange={(event) =>
+                    setBatchTimeDraft((current) => ({
+                      ...current,
+                      visitEndTime: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+            </div>
+            {staggerPreview?.ok ? (
+              <ul className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                {batch.items.map((item, index) => {
+                  const slot = staggerPreview.slots[index];
+                  return (
+                    <li key={item.assignmentId}>
+                      {index + 1}. {item.caseName}：{slot.visitDate} {slot.visitStartTime}–
+                      {slot.visitEndTime}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : staggerPreview && !staggerPreview.ok ? (
+              <p className="mt-3 text-sm text-destructive">{staggerPreview.message}</p>
+            ) : null}
+            <div className="mt-3">
+              <Button
+                type="button"
+                disabled={busy || !staggerPreview?.ok}
+                onClick={() => void applyBatchTimes()}
               >
-                <div>
-                  <p className="font-semibold">{item.caseName}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {item.caseCode}
-                    {item.visitDate
-                      ? ` · ${item.visitDate} ${item.visitStartTime}-${item.visitEndTime}`
-                      : " · 尚未確認時間"}
-                    {item.status === "keyed" ? " · 已 KEY" : ""}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant={item.status === "keyed" ? "outline" : "default"}
-                  disabled={busy}
-                  onClick={() => openTimeConfirm(item)}
+                {busy ? "套用中…" : "套用整批時段"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {batch.items.map((item) => {
+              const hasTime = Boolean(item.visitDate && item.visitStartTime && item.visitEndTime);
+              return (
+                <div
+                  key={item.assignmentId}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
                 >
-                  {item.status === "keyed" ? "再確認時間／查看" : "確認時間並進表"}
-                </Button>
-              </div>
-            ))}
+                  <div>
+                    <p className="font-semibold">{item.caseName}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {item.caseCode}
+                      {hasTime
+                        ? ` · ${item.visitDate} ${item.visitStartTime}-${item.visitEndTime}`
+                        : " · 尚未套用時間"}
+                      {item.status === "keyed" ? " · 已 KEY" : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hasTime ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => openTimeConfirm(item)}
+                      >
+                        調整時間
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant={item.status === "keyed" ? "outline" : "default"}
+                      disabled={busy}
+                      onClick={() => enterFormWithTime(item)}
+                    >
+                      {item.status === "keyed" ? "再進表／查看" : hasTime ? "進表 KEY" : "先填時間"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -1092,7 +1288,7 @@ export function CareFormDeskPanel({
                 取消
               </Button>
               <Button type="button" disabled={busy} onClick={() => void confirmTimeAndEnter()}>
-                {busy ? "檢查中…" : "通過稽核並進表"}
+                {busy ? "檢查中…" : "通過稽核並儲存時段"}
               </Button>
             </div>
           </section>

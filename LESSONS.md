@@ -1,3 +1,11 @@
+## Lesson: Desk batch KEY times stagger by 10 minutes
+
+- **Trigger:** Paper KEY staff selected multiple cases but hated confirming visit time one by one.
+- **Cause:** Per-case modal + 60-minute default windows would overlap if only the start time advanced by 10 minutes.
+- **Rule:** Batch step-4 uses first-case date/start/end; later cases shift by +10 minutes with default duration 10 minutes (duration must be ≤ stagger). Apply writes all assignment notes once, then stay on the queue for “進表 KEY”.
+- **Evidence:** `lib/domain/desk-care-batch.ts` (`buildStaggeredVisitWindows`), `app/api/manager/care-forms/confirm-time-batch/route.ts`, `components/manage/care-form-desk-panel.tsx`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Desk care-form defaults favor paper KEY safety values
 
 - **Trigger:** Bulk paper KEY needed gender/birth from roster, 02/09 phone prefixes, and “none” questionnaire defaults.
