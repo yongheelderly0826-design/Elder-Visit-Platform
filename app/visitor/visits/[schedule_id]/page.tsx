@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { VisitDialogueForm } from "@/components/visitor/visit-dialogue-form";
 import { VisitorWorkflowBar } from "@/components/visitor/visitor-workflow-bar";
 import { requireVisitorSession } from "@/lib/auth/visitor-guard";
+import { FIELD_SELF_SOURCE_NOTE } from "@/lib/domain/desk-care-batch";
 import { parseCareformAnswers } from "@/lib/domain/manager-care-form-desk";
 import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { gasClient } from "@/lib/gas-client";
@@ -35,12 +36,17 @@ export default async function VisitDetailPage({
     : undefined;
 
   const villageCode = String(query.villageCode ?? "").trim();
-  const listReturnPath =
-    query.return === "/visitor/quick-key"
-      ? villageCode
-        ? `/visitor/quick-key?villageCode=${encodeURIComponent(villageCode)}`
-        : "/visitor/quick-key"
-      : undefined;
+  const fromQuickKey = query.return === "/visitor/quick-key";
+  const fieldSelfKey = String(task.schedule.assignmentReason ?? "").includes(
+    FIELD_SELF_SOURCE_NOTE,
+  );
+  const listReturnPath = fromQuickKey
+    ? villageCode
+      ? `/visitor/quick-key?villageCode=${encodeURIComponent(villageCode)}`
+      : "/visitor/quick-key"
+    : undefined;
+
+  const { name: visitorName } = resolveVisitorIdentity(session);
 
   return (
     <AppShell active={listReturnPath ? "quickKey" : "tasks"}>
@@ -51,6 +57,8 @@ export default async function VisitDetailPage({
         readonly={readonly}
         initialAnswers={submittedAnswers}
         listReturnPath={listReturnPath}
+        visitorName={visitorName || session.name}
+        formDefaults={fromQuickKey || fieldSelfKey ? "desk" : "roster"}
       />
     </AppShell>
   );

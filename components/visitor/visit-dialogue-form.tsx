@@ -143,6 +143,7 @@ export function VisitDialogueForm({
   initialAnswers,
   deskReturnPath,
   listReturnPath,
+  formDefaults = "roster",
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
@@ -156,6 +157,11 @@ export function VisitDialogueForm({
   deskReturnPath?: string;
   /** 送出後回待訪／快速 KEY 名單（可帶 query） */
   listReturnPath?: string;
+  /**
+   * roster＝只帶名冊欄位；desk＝與關懷表建檔相同預設（性別推估、民國生日、電話 02/09、以上均無等）。
+   * 快速 KEY（訪員／場生）應傳 desk。
+   */
+  formDefaults?: "roster" | "desk";
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
@@ -169,10 +175,11 @@ export function VisitDialogueForm({
   );
   const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
   const isDeskEntry = variant === "manager_desk";
+  const useDeskFormDefaults = isDeskEntry || formDefaults === "desk";
   /** 紙本未遇：本張紙＝本次第 N 次訪視，只勾本趟時段佐證 */
   const [deskPaperSlots, setDeskPaperSlots] = useState<MissedVisitTimeSlot[]>([]);
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() => {
-    const initial = isDeskEntry
+    const initial = useDeskFormDefaults
       ? createMohwDeskInitialAnswers(elderCase, schedule)
       : createInitialMohwAnswers(elderCase, schedule);
     const withTimes: MohwLifeCareAnswers = {
@@ -183,7 +190,7 @@ export function VisitDialogueForm({
       ...(initialTimes?.visitEndTime ? { visit_end_time: initialTimes.visitEndTime } : {}),
     };
     const seeded =
-      isDeskEntry &&
+      useDeskFormDefaults &&
       selectedVisitor &&
       !withTimes.social_worker_name &&
       !withTimes.civil_worker_name
@@ -197,7 +204,10 @@ export function VisitDialogueForm({
       .map((section) => section.title),
   );
   const draftKey = getVisitDraftKey(schedule.id);
-  const careFormDraftKey = `${draftKey}:mohw_life_care_form`;
+  // desk 預設換 key，避免舊訪員草稿蓋掉性別／電話等建檔預設
+  const careFormDraftKey = `${draftKey}:mohw_life_care_form${
+    useDeskFormDefaults ? ":desk_defaults" : ""
+  }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   const deskPaperSlotsOk =
     !deskPaperMissed || new Set(deskPaperSlots).size >= missedVisitMinSlots;
@@ -334,7 +344,7 @@ export function VisitDialogueForm({
         ),
       ),
     );
-    const mohwAnswers = isDeskEntry ? finalizeDeskContactPhones(synced) : synced;
+    const mohwAnswers = useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced;
     setCareFormAnswers(mohwAnswers);
 
     if (submission.visitResult !== "未遇") {
@@ -775,7 +785,7 @@ export function VisitDialogueForm({
                         value={careFormAnswers[field.key]}
                         error={mohwErrorByField.get(field.key)}
                         visitorDirectory={visitorDirectory}
-                        deskEntry={isDeskEntry}
+                        deskEntry={useDeskFormDefaults}
                         onChange={(value) =>
                           setCareFormAnswers((current) => ({ ...current, [field.key]: value }))
                         }
