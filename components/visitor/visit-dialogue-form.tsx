@@ -1498,8 +1498,12 @@ function CareFormInput({
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];
+    const fieldKey = field.mohwKey || field.key;
+    const hasNoneOption = Boolean(field.options?.includes(MOHW_NONE_OF_ABOVE));
     const exclusiveNone =
-      deskEntry && MOHW_EXCLUSIVE_NONE_MULTI_KEYS.has(field.mohwKey || field.key);
+      hasNoneOption &&
+      (MOHW_EXCLUSIVE_NONE_MULTI_KEYS.has(fieldKey) ||
+        (deskEntry && hasNoneOption));
     const noneSelected = exclusiveNone && selectedValues.includes(MOHW_NONE_OF_ABOVE);
     return (
       <div
@@ -1508,9 +1512,17 @@ function CareFormInput({
           error ? "border-destructive bg-destructive/5" : "bg-background"
         }`}
       >
-        <p className="text-sm font-medium">
-          {field.label}
-          {requiredMark}
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-medium">
+          <span>
+            {field.label}
+            {requiredMark}
+          </span>
+          <span className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+            可複選
+          </span>
+        </p>
+        <p className="mt-1 text-xs font-normal leading-5 text-muted-foreground">
+          可同時勾選多項；再點已選項目可取消勾選。
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {field.options?.map((option, index) => {
@@ -1522,6 +1534,7 @@ function CareFormInput({
                 key={`${field.key}-${option}`}
                 type="button"
                 disabled={disabledOther}
+                aria-pressed={selected}
                 className={`rounded-md border px-2 py-1 text-xs ${
                   selected
                     ? "bg-primary text-primary-foreground"
@@ -1545,8 +1558,14 @@ function CareFormInput({
           })}
         </div>
         {exclusiveNone ? (
-          <p className="mt-2 text-xs font-normal leading-5 text-muted-foreground">
-            選「以上均無」時其他選項會反灰；取消後即可再勾其他項。
+          <p
+            className={`mt-2 text-xs leading-5 ${
+              noneSelected ? "font-medium text-foreground" : "font-normal text-muted-foreground"
+            }`}
+          >
+            {noneSelected
+              ? "目前為「以上均無」：其他選項已反灰。再按一次「以上均無」即可取消，然後可勾其他項。"
+              : "選「以上均無」會清掉其他項並反灰；再按一次「以上均無」即可取消。"}
           </p>
         ) : null}
         {errorText ? <div className="mt-2">{errorText}</div> : null}

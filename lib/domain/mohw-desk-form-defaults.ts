@@ -14,6 +14,9 @@ export const MOHW_NONE_OF_ABOVE = "以上均無";
 
 export const MOHW_EXCLUSIVE_NONE_MULTI_KEYS = new Set([
   "diseases",
+  "information_channels",
+  "past_activities",
+  "desired_activities",
   "home_safety_issues",
   "home_hygiene_issues",
 ]);
