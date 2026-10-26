@@ -57,9 +57,9 @@
 
 - **Trigger:** Badge photos and roster names were wrong; operators had to patch Drive via scripts.
 - **Cause:** GAS already had `visitors.update` / `accounts.setHeadshot`, but the users panel had no whitelist editor.
-- **Rule:** First version only corrects name, mobile, and headshot on approved visitors. Do not expose generic sheet updates. Keep old Drive photos. Sync 訪查員主檔, 註冊檔, and login display name together.
+- **Rule:** Approved-visitor correction may update name, mobile, headshot, 民政/社政 (`workerGroup`), and department（含「其他」）. Do not expose generic sheet updates. Keep old Drive photos. Sync 訪查員主檔 `volunteer_group`, 註冊 `profile_json`, and login display name together; rebuild display name when unit fields change.
 - **Evidence:** `components/workspace/visitor-correction-dialog.tsx`, `gas/src/modules/UserAccountModule.gs` `patchApprovedVisitor`.
-- **Added on:** 2026-10-22
+- **Added on:** 2026-10-22（單位／民政社政：2026-10-26）
 
 ## Lesson: Care-form numbers must be foolproof for import
 

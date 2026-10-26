@@ -568,7 +568,7 @@ var UserAccountModule = (function () {
   }
 
   /**
-   * 承辦補正已核准訪員：只允許姓名、電話、證件照。
+   * 承辦補正已核准訪員：姓名、電話、證件照、民政/社政、科室／其他單位。
    * 同步訪查員主檔、註冊檔與登入帳號顯示名稱。
    */
   function patchApprovedVisitor(data) {
@@ -587,6 +587,13 @@ var UserAccountModule = (function () {
 
       var name = data.name != null ? String(data.name).trim() : '';
       var phone = data.phone != null ? normalizeVisitorPhone_(data.phone) : '';
+      var workerGroup = data.worker_group != null ? String(data.worker_group).trim() : '';
+      var departmentName =
+        data.department_name != null ? String(data.department_name).trim() : '';
+      var hasDepartmentOther = Object.prototype.hasOwnProperty.call(data, 'department_other');
+      var departmentOther = hasDepartmentOther
+        ? String(data.department_other == null ? '' : data.department_other).trim()
+        : null;
       var dataUrl = String(data.data_url || '');
       if (!dataUrl && data.base64) {
         dataUrl =
@@ -596,8 +603,13 @@ var UserAccountModule = (function () {
           String(data.base64);
       }
       var hasPhoto = /^data:image\/[A-Za-z0-9.+-]+;base64,/.test(dataUrl);
-      if (!name && !phone && !hasPhoto) {
-        throw error_('VALIDATION_ERROR', '請至少修改姓名、電話或證件照其中一項。');
+      var hasOrgPatch =
+        Boolean(workerGroup) || Boolean(departmentName) || hasDepartmentOther;
+      if (!name && !phone && !hasPhoto && !hasOrgPatch) {
+        throw error_(
+          'VALIDATION_ERROR',
+          '請至少修改姓名、電話、證件照、民政/社政或單位其中一項。'
+        );
       }
       if (name && name.length < 2) {
         throw error_('VALIDATION_ERROR', '姓名至少 2 個字。');
@@ -605,11 +617,20 @@ var UserAccountModule = (function () {
       if (phone && !/^09\d{8}$/.test(phone)) {
         throw error_('VALIDATION_ERROR', '手機請填 09 開頭的 10 碼數字。');
       }
+      if (workerGroup && workerGroup !== 'civil_affairs' && workerGroup !== 'social_affairs') {
+        throw error_('VALIDATION_ERROR', '民政/社政請選 civil_affairs 或 social_affairs。');
+      }
+      if (departmentName === '其他' && departmentOther !== null && !departmentOther) {
+        throw error_('VALIDATION_ERROR', '單位選「其他」時請填寫其他單位名稱。');
+      }
+
+      SheetHelper.ensureColumns(VISITORS, ['volunteer_group']);
 
       var now = now_();
       var visitorPatch = { updated_at: now };
       if (name) visitorPatch.name = name;
       if (phone) visitorPatch.phone = phone;
+      if (workerGroup) visitorPatch.volunteer_group = workerGroup;
       var photoUrl = '';
       if (hasPhoto) {
         photoUrl = persistDataImage_(dataUrl, visitorId + '-headshot-' + Date.now());
@@ -619,14 +640,25 @@ var UserAccountModule = (function () {
 
       var registrations = SheetHelper.rowsToObjects(SheetHelper.getSheet(REGISTRATIONS));
       var updatedRegs = 0;
+      var latestProfile = {};
       for (var i = 0; i < registrations.length; i++) {
         if (String(registrations[i].visitor_id || '') !== visitorId) continue;
         var profile = parseProfile_(registrations[i]);
-        if (name) profile.displayName = rebuildDisplayName_(profile, name);
         if (phone) profile.phone = phone;
+        if (workerGroup) profile.workerGroup = workerGroup;
+        if (departmentName) profile.departmentName = departmentName;
+        if (hasDepartmentOther) {
+          profile.departmentOther = departmentName === '其他' ? departmentOther : '';
+        } else if (departmentName && departmentName !== '其他') {
+          profile.departmentOther = '';
+        }
         if (photoUrl) {
           profile.headshotProcessedUrl = photoUrl;
           profile.headshotOriginalUrl = photoUrl;
+        }
+        var displaySourceName = name || String(registrations[i].full_name || profile.displayName || '');
+        if (name || hasOrgPatch) {
+          profile.displayName = rebuildDisplayName_(profile, displaySourceName);
         }
         var registrationPatch = {
           profile_json: JSON.stringify(profile),
@@ -634,6 +666,7 @@ var UserAccountModule = (function () {
         };
         if (name) registrationPatch.full_name = name;
         SheetHelper.updateByKey(REGISTRATIONS, 'request_id', registrations[i].request_id, registrationPatch);
+        latestProfile = profile;
         updatedRegs += 1;
       }
 
@@ -660,6 +693,11 @@ var UserAccountModule = (function () {
         email: String(latest.email || ''),
         photo_url: String(latest.photo_url || ''),
         photo_updated: Boolean(photoUrl),
+        volunteer_group: String(latest.volunteer_group || latestProfile.workerGroup || ''),
+        worker_group: String(latestProfile.workerGroup || latest.volunteer_group || ''),
+        department_name: String(latestProfile.departmentName || ''),
+        department_other: String(latestProfile.departmentOther || ''),
+        display_name: String(latestProfile.displayName || ''),
         registrations_updated: updatedRegs,
         accounts_updated: updatedAccounts,
       };

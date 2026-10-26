@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
-import type { UserRegistrationRequest } from "@/lib/domain/types";
-import type { VisitorCorrectionResult } from "@/lib/domain/user-management";
+import type { UserRegistrationRequest, VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
+import {
+  visitorRegistrationDepartments,
+  type VisitorCorrectionResult,
+} from "@/lib/domain/user-management";
 
 export function VisitorCorrectionDialog({
   request,
@@ -22,6 +25,11 @@ export function VisitorCorrectionDialog({
   const albumInputRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState(request.fullName);
   const [phone, setPhone] = useState(profile?.phone ?? "");
+  const [workerGroup, setWorkerGroup] = useState<VisitorRegistrationWorkerGroup>(
+    profile?.workerGroup ?? "civil_affairs",
+  );
+  const [departmentName, setDepartmentName] = useState(profile?.departmentName ?? "其他");
+  const [departmentOther, setDepartmentOther] = useState(profile?.departmentOther ?? "");
   const [headshotDataUrl, setHeadshotDataUrl] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,10 +39,20 @@ export function VisitorCorrectionDialog({
   useEffect(() => {
     setFullName(request.fullName);
     setPhone(profile?.phone ?? "");
+    setWorkerGroup(profile?.workerGroup ?? "civil_affairs");
+    setDepartmentName(profile?.departmentName ?? "其他");
+    setDepartmentOther(profile?.departmentOther ?? "");
     setHeadshotDataUrl(null);
     setMessage(null);
     setPhotoNonce(Date.now());
-  }, [profile?.phone, request.fullName, request.id]);
+  }, [
+    profile?.departmentName,
+    profile?.departmentOther,
+    profile?.phone,
+    profile?.workerGroup,
+    request.fullName,
+    request.id,
+  ]);
 
   const currentPhoto = headshotDataUrl
     ? headshotDataUrl
@@ -59,10 +77,24 @@ export function VisitorCorrectionDialog({
   async function save() {
     const nextName = fullName.trim();
     const nextPhone = normalizeTaiwanMobilePhone(phone);
+    const nextDepartmentOther = departmentOther.trim();
     const nameChanged = nextName !== request.fullName.trim();
     const phoneChanged = nextPhone !== normalizeTaiwanMobilePhone(profile?.phone ?? "");
-    if (!nameChanged && !phoneChanged && !headshotDataUrl) {
-      setMessage("沒有變更。請修改姓名、電話或補上傳證件照。");
+    const workerChanged = workerGroup !== (profile?.workerGroup ?? "civil_affairs");
+    const departmentChanged = departmentName !== (profile?.departmentName ?? "其他");
+    const departmentOtherChanged =
+      departmentName === "其他" &&
+      nextDepartmentOther !== String(profile?.departmentOther ?? "").trim();
+
+    if (
+      !nameChanged &&
+      !phoneChanged &&
+      !headshotDataUrl &&
+      !workerChanged &&
+      !departmentChanged &&
+      !departmentOtherChanged
+    ) {
+      setMessage("沒有變更。請修改姓名、電話、證件照、民政/社政或單位。");
       return;
     }
     if (nextName.length < 2) {
@@ -71,6 +103,10 @@ export function VisitorCorrectionDialog({
     }
     if (phoneChanged && !/^09\d{8}$/.test(nextPhone)) {
       setMessage("手機請填 09 開頭的 10 碼數字。");
+      return;
+    }
+    if (departmentName === "其他" && !nextDepartmentOther) {
+      setMessage("單位選「其他」時請填寫其他單位名稱。");
       return;
     }
 
@@ -85,6 +121,13 @@ export function VisitorCorrectionDialog({
           ...(nameChanged ? { fullName: nextName } : {}),
           ...(phoneChanged ? { phone: nextPhone } : {}),
           ...(headshotDataUrl ? { headshotDataUrl } : {}),
+          ...(workerChanged ? { workerGroup } : {}),
+          ...(departmentChanged || departmentOtherChanged
+            ? {
+                departmentName,
+                departmentOther: departmentName === "其他" ? nextDepartmentOther : null,
+              }
+            : {}),
         }),
       });
       const json = (await response.json()) as {
@@ -194,8 +237,50 @@ export function VisitorCorrectionDialog({
                 placeholder="09xxxxxxxx"
               />
             </label>
+            <label className="grid gap-1 text-sm font-medium">
+              民政 / 社政
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={workerGroup}
+                onChange={(event) =>
+                  setWorkerGroup(event.target.value as VisitorRegistrationWorkerGroup)
+                }
+              >
+                <option value="civil_affairs">民政訪查人員</option>
+                <option value="social_affairs">社政訪查人員</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              科室 / 單位別
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={departmentName}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setDepartmentName(next);
+                  if (next !== "其他") setDepartmentOther("");
+                }}
+              >
+                {visitorRegistrationDepartments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {departmentName === "其他" ? (
+              <label className="grid gap-1 text-sm font-medium">
+                其他單位
+                <input
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={departmentOther}
+                  onChange={(event) => setDepartmentOther(event.target.value)}
+                  placeholder="請填寫單位"
+                />
+              </label>
+            ) : null}
             <p className="text-xs leading-5 text-muted-foreground">
-              只改姓名、電話與證件照。舊照片會留在雲端目錄，不會刪除。
+              可補正姓名、電話、證件照、民政/社政與單位（含「其他」）。暱稱會依單位自動重算；舊照片留在雲端不刪。
             </p>
           </div>
         </div>

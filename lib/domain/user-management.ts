@@ -457,6 +457,9 @@ export type VisitorCorrectionInput = {
   fullName?: string;
   phone?: string;
   headshotDataUrl?: string;
+  workerGroup?: VisitorRegistrationWorkerGroup;
+  departmentName?: string;
+  departmentOther?: string | null;
 };
 
 export type VisitorCorrectionResult = {
@@ -466,6 +469,9 @@ export type VisitorCorrectionResult = {
   phone: string;
   photoUpdated: boolean;
   displayName: string | null;
+  workerGroup: VisitorRegistrationWorkerGroup | null;
+  departmentName: string | null;
+  departmentOther: string | null;
   message: string;
 };
 
@@ -490,12 +496,20 @@ export async function correctApprovedVisitor(
     throw new Error("這筆申請還沒有訪員編碼，無法補正。");
   }
 
+  const profile = registration.profile ?? {};
   const fullName = input.fullName?.trim() ?? "";
   const phone = input.phone != null ? normalizeTaiwanMobilePhone(input.phone) : "";
   const headshotDataUrl = input.headshotDataUrl?.trim() ?? "";
+  const workerGroup = input.workerGroup ? normalizeWorkerGroup(input.workerGroup) : null;
+  const departmentName = input.departmentName?.trim() ?? "";
+  const hasDepartmentOther = Object.prototype.hasOwnProperty.call(input, "departmentOther");
+  const departmentOther = hasDepartmentOther
+    ? String(input.departmentOther ?? "").trim()
+    : null;
 
-  if (!fullName && !phone && !headshotDataUrl) {
-    throw new Error("請至少修改姓名、電話或證件照其中一項。");
+  const hasOrgPatch = Boolean(workerGroup) || Boolean(departmentName) || hasDepartmentOther;
+  if (!fullName && !phone && !headshotDataUrl && !hasOrgPatch) {
+    throw new Error("請至少修改姓名、電話、證件照、民政/社政或單位其中一項。");
   }
   if (fullName && fullName.length < 2) {
     throw new Error("姓名至少 2 個字。");
@@ -506,6 +520,12 @@ export async function correctApprovedVisitor(
   if (headshotDataUrl && !/^data:image\/[A-Za-z0-9.+-]+;base64,/.test(headshotDataUrl)) {
     throw new Error("證件照格式不正確，請重新選擇照片。");
   }
+  if (departmentName && !visitorRegistrationDepartments.includes(departmentName)) {
+    throw new Error("單位不在可選清單中。");
+  }
+  if (departmentName === "其他" && !departmentOther) {
+    throw new Error("單位選「其他」時請填寫其他單位名稱。");
+  }
 
   try {
     const patched = await gasClient.accounts.patchApprovedVisitor({
@@ -514,25 +534,36 @@ export async function correctApprovedVisitor(
       ...(fullName ? { name: fullName } : {}),
       ...(phone ? { phone } : {}),
       ...(headshotDataUrl ? { data_url: headshotDataUrl } : {}),
+      ...(workerGroup ? { worker_group: workerGroup } : {}),
+      ...(departmentName ? { department_name: departmentName } : {}),
+      ...(hasDepartmentOther ? { department_other: departmentOther } : {}),
     });
     const nextName = patched.name || fullName || registration.full_name;
-    const profile = registration.profile ?? {};
-    const displayName = fullName
-      ? createVisitorDisplayName({
-          rootUnitName: String(profile.rootUnitName || "永和區公所"),
-          departmentName: String(profile.departmentName || "其他"),
-          departmentOther: typeof profile.departmentOther === "string" ? profile.departmentOther : null,
-          fullName: nextName,
-          jobTitle: String(profile.jobTitle || "其他"),
-          jobTitleOther: typeof profile.jobTitleOther === "string" ? profile.jobTitleOther : null,
-        })
-      : typeof profile.displayName === "string"
-        ? profile.displayName
-        : null;
+    const nextDepartmentName =
+      patched.department_name || departmentName || String(profile.departmentName || "其他");
+    const nextDepartmentOther =
+      patched.department_other ||
+      departmentOther ||
+      (typeof profile.departmentOther === "string" ? profile.departmentOther : null);
+    const nextWorkerGroup = normalizeWorkerGroup(
+      patched.worker_group || workerGroup || String(profile.workerGroup || ""),
+    );
+    const displayName =
+      patched.display_name ||
+      createVisitorDisplayName({
+        rootUnitName: String(profile.rootUnitName || "永和區公所"),
+        departmentName: nextDepartmentName,
+        departmentOther: nextDepartmentOther,
+        fullName: nextName,
+        jobTitle: String(profile.jobTitle || "其他"),
+        jobTitleOther: typeof profile.jobTitleOther === "string" ? profile.jobTitleOther : null,
+      });
     const changed: string[] = [];
     if (fullName) changed.push("姓名");
     if (phone) changed.push("電話");
     if (patched.photo_updated) changed.push("證件照");
+    if (workerGroup) changed.push("民政/社政");
+    if (departmentName || hasDepartmentOther) changed.push("單位");
     return {
       requestId,
       visitorId: patched.visitor_id,
@@ -540,6 +571,9 @@ export async function correctApprovedVisitor(
       phone: patched.phone || phone || String(profile.phone || ""),
       photoUpdated: patched.photo_updated,
       displayName,
+      workerGroup: nextWorkerGroup,
+      departmentName: nextDepartmentName,
+      departmentOther: nextDepartmentOther,
       message: `${nextName} 已更新${changed.join("、") || "資料"}。`,
     };
   } catch (error) {

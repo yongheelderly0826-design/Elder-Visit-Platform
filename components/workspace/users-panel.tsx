@@ -315,6 +315,14 @@ export function UsersPanel() {
                           phone: result.phone || request.visitorRegistrationProfile.phone,
                           displayName:
                             result.displayName ?? request.visitorRegistrationProfile.displayName,
+                          workerGroup:
+                            result.workerGroup ?? request.visitorRegistrationProfile.workerGroup,
+                          departmentName:
+                            result.departmentName ??
+                            request.visitorRegistrationProfile.departmentName,
+                          departmentOther:
+                            result.departmentOther ??
+                            request.visitorRegistrationProfile.departmentOther,
                           headshotProcessedUrl: result.photoUpdated
                             ? `/api/users/gas-headshot/${encodeURIComponent(result.visitorId)}?ts=${Date.now()}`
                             : request.visitorRegistrationProfile.headshotProcessedUrl,

@@ -273,6 +273,9 @@ export const gasClient = {
       data_url?: string;
       base64?: string;
       mime?: string;
+      worker_group?: string;
+      department_name?: string;
+      department_other?: string | null;
     }) =>
       gasFetch<{
         visitor_id: string;
@@ -281,6 +284,11 @@ export const gasClient = {
         email: string;
         photo_url: string;
         photo_updated: boolean;
+        volunteer_group?: string;
+        worker_group?: string;
+        department_name?: string;
+        department_other?: string;
+        display_name?: string;
         registrations_updated: number;
         accounts_updated: number;
       }>("accounts.patchApprovedVisitor", { method: "POST", body }),
