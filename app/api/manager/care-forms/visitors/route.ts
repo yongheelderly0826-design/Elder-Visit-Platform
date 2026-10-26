@@ -14,10 +14,13 @@ export async function POST(request: NextRequest) {
     phone?: string;
     email?: string;
     idNumber?: string;
+    workerGroup?: string;
   };
 
   const name = String(body.name ?? "").trim();
   const phone = String(body.phone ?? "").trim();
+  const workerGroup =
+    body.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs";
   if (!name || !phone) {
     return NextResponse.json(
       { error: { code: "VALIDATION", message: "新增訪查員請填姓名與手機。" } },
@@ -31,6 +34,7 @@ export async function POST(request: NextRequest) {
       phone,
       email: String(body.email ?? "").trim().toLowerCase(),
       id_number: String(body.idNumber ?? "").trim().toUpperCase(),
+      volunteer_group: workerGroup,
       desk_minimal: true,
     })) as Record<string, unknown>;
 

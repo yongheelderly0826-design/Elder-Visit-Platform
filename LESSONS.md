@@ -29,13 +29,21 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Desk care forms batch KEY with sticky visit team and time audit
+
+- **Trigger:** Paper bulk KEY needs the same civil/social visit team across many cases without re-picking, and overlapping times break reimbursement.
+- **Cause:** Old desk UI was single-case → single-visitor → immediate form; times were not audited across the team.
+- **Rule:** Flow is identity/village → pick 民政/社政 visitors (at least one side; multi per side) + manual primary → multi-select cases → prepare many assignments → queue → confirm each case’s time (conflict check vs same-team windows + assignment notes/careform answers) → enter form. Store companions/time in assignment `notes` (`公所代填・紙本｜主填:…｜同行:…｜時段:…`). Only 未遇 requires three sequential papers; completed/refused do not.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`, `lib/domain/desk-visit-time-audit.ts`, `app/api/manager/care-forms/prepare/route.ts`, `app/api/manager/care-forms/confirm-time/route.ts`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Manager desk care forms reuse the visitor submit path
 
 - **Trigger:** Office staff key paper care forms and must attach them to a visitor without a new export pipeline.
 - **Cause:** Creating a separate desk table would drift from the 102-column gold export.
-- **Rule:** Desk flow creates or reuses a case, dispatches `公所代填・紙本` to the chosen visitor, then submits through `careform.submit`. After status is submitted, the visitor page is read-only. Do not skip audit or invent a second MOHW path. `cases.create` must be deployed with GAS before live desk-create works. Current phase: **one paper = one visit**; each desk「下一步」always creates a new assignment (`allow_multi_active`). Three 未遇 papers KEY’d in sequence = three visit attempts = complete—do **not** pack three attempts into one form. Field visitor self-KEY still keeps unique active assignment.
+- **Rule:** Desk flow creates or reuses a case, dispatches `公所代填・紙本` to the chosen visitor, then submits through `careform.submit`. After status is submitted, the visitor page is read-only. Do not skip audit or invent a second MOHW path. `cases.create` must be deployed with GAS before live desk-create works. Current phase: **one paper = one visit**; each desk prepare creates assignment(s) with `allow_multi_active`. Three 未遇 papers KEY’d in sequence = three visit attempts = complete—do **not** pack three attempts into one form. Field visitor self-KEY still keeps unique active assignment.
 - **Evidence:** `app/manager/care-forms/`, `app/api/manager/care-forms/prepare/route.ts`, `gas/src/modules/AssignmentModule.gs`, `gas/src/modules/CaseModule.gs`.
-- **Added on:** 2026-10-24（紙本一張一次／2026-10-25）
+- **Added on:** 2026-10-24（紙本一張一次／2026-10-25；批次訪查組／2026-10-26）
 
 ## Lesson: Elder phone sentinels are 10 zeros or 10 nines
 

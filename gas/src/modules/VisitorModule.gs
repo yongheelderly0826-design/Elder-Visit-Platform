@@ -25,6 +25,7 @@ var VisitorModule = (function () {
           phone: r.phone || '',
           status: r.status || '',
           badge_no: r.badge_no || '',
+          volunteer_group: r.volunteer_group || '',
         };
       });
     }

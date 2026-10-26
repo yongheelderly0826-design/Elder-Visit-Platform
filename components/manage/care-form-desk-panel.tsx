@@ -5,8 +5,17 @@ import { useRouter } from "next/navigation";
 import { ClipboardPen, Plus, Search, UserRound } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
+import {
+  clearDeskBatchState,
+  readDeskBatchState,
+  writeDeskBatchState,
+  type DeskBatchQueueItem,
+  type DeskBatchState,
+  type DeskVisitWindow,
+} from "@/lib/domain/desk-care-batch";
 import type { DeskCaseOption, DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
 import type { DeskIdentityOption, DeskScope } from "@/lib/domain/village-admins";
+import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
 type OptionsPayload = {
   cases: DeskCaseOption[];
@@ -14,6 +23,16 @@ type OptionsPayload = {
   scope?: DeskScope;
   allowedVillages?: string[] | null;
   identityOptions?: DeskIdentityOption[];
+};
+
+type TimeDraft = {
+  assignmentId: string;
+  caseId: string;
+  caseName: string;
+  caseCode: string;
+  visitDate: string;
+  visitStartTime: string;
+  visitEndTime: string;
 };
 
 export function CareFormDeskPanel({
@@ -24,18 +43,27 @@ export function CareFormDeskPanel({
   entry?: "manager" | "desk";
 }) {
   const router = useRouter();
+  const returnPath = entry === "desk" ? "/desk/care-forms" : "/manager/care-forms";
   const [options, setOptions] = useState<OptionsPayload | null>(null);
   const [identityKey, setIdentityKey] = useState("");
   const [villageFilter, setVillageFilter] = useState("");
   const [query, setQuery] = useState("");
-  const [visitorQuery, setVisitorQuery] = useState("");
-  const [caseId, setCaseId] = useState(presetCaseId ?? "");
-  const [visitorId, setVisitorId] = useState("");
+  const [civilQuery, setCivilQuery] = useState("");
+  const [socialQuery, setSocialQuery] = useState("");
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>(
+    presetCaseId ? [presetCaseId] : [],
+  );
+  const [civilVisitorIds, setCivilVisitorIds] = useState<string[]>([]);
+  const [socialVisitorIds, setSocialVisitorIds] = useState<string[]>([]);
+  const [primaryVisitorId, setPrimaryVisitorId] = useState("");
   const [creatingVisitor, setCreatingVisitor] = useState(false);
-  const [newVisitor, setNewVisitor] = useState({ name: "", phone: "", email: "", idNumber: "" });
-  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [visitStartTime, setVisitStartTime] = useState("09:00");
-  const [visitEndTime, setVisitEndTime] = useState("10:00");
+  const [newVisitor, setNewVisitor] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    idNumber: "",
+    workerGroup: "civil_affairs" as VisitorRegistrationWorkerGroup,
+  });
   const [creating, setCreating] = useState(false);
   const [newCase, setNewCase] = useState({
     name: "",
@@ -53,13 +81,28 @@ export function CareFormDeskPanel({
   const [villageCases, setVillageCases] = useState<DeskCaseOption[]>([]);
   const [metaLoading, setMetaLoading] = useState(true);
   const [visitorsLoading, setVisitorsLoading] = useState(true);
+  const [batch, setBatch] = useState<DeskBatchState | null>(null);
+  const [timeDraft, setTimeDraft] = useState<TimeDraft | null>(null);
+
+  useEffect(() => {
+    const saved = readDeskBatchState();
+    if (saved?.items?.length) {
+      setBatch(saved);
+      setIdentityKey(saved.identityKey);
+      setVillageFilter(saved.village);
+      setPrimaryVisitorId(saved.primaryVisitorId);
+      const companions = saved.companionVisitorIds;
+      // 還原勾選需等 visitors 載入後再分欄；先記主填
+      setMessage(`已恢復待 KEY 清單（${saved.items.length} 案）。請確認時間後進表。`);
+      void companions;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setMetaLoading(true);
       try {
-        // 1) 身份／里別：只打里責任表，盡快可選
         const response = await fetch("/api/manager/care-forms/options?part=identities");
         const json = (await response.json()) as {
           data?: OptionsPayload;
@@ -75,17 +118,18 @@ export function CareFormDeskPanel({
         setMetaLoading(false);
 
         const identities = payload.identityOptions ?? [];
-        if (identities.length === 1) {
-          setIdentityKey(identities[0].key);
-          if (identities[0].villages.length === 1) {
-            setVillageFilter(identities[0].villages[0]);
-            setNewCase((current) => ({ ...current, village: identities[0].villages[0] }));
+        if (!readDeskBatchState()) {
+          if (identities.length === 1) {
+            setIdentityKey(identities[0].key);
+            if (identities[0].villages.length === 1) {
+              setVillageFilter(identities[0].villages[0]);
+              setNewCase((current) => ({ ...current, village: identities[0].villages[0] }));
+            }
+          } else if (payload.scope?.mode === "all") {
+            setIdentityKey("all");
           }
-        } else if (payload.scope?.mode === "all") {
-          setIdentityKey("all");
         }
 
-        // 2) 訪查員背景載入（不擋身份下拉）
         setVisitorsLoading(true);
         void fetch("/api/manager/care-forms/options?part=visitors")
           .then(async (visitorRes) => {
@@ -93,14 +137,27 @@ export function CareFormDeskPanel({
               data?: { visitors?: DeskVisitorOption[] };
             };
             if (cancelled || !visitorRes.ok) return;
+            const visitors = visitorJson.data?.visitors ?? [];
             setOptions((current) =>
               current
-                ? { ...current, visitors: visitorJson.data?.visitors ?? [] }
-                : {
-                    cases: [],
-                    visitors: visitorJson.data?.visitors ?? [],
-                  },
+                ? { ...current, visitors }
+                : { cases: [], visitors },
             );
+            const saved = readDeskBatchState();
+            if (saved) {
+              const civil: string[] = [];
+              const social: string[] = [];
+              const team = [saved.primaryVisitorId, ...saved.companionVisitorIds];
+              for (const id of team) {
+                const visitor = visitors.find((item) => item.id === id);
+                if (!visitor) continue;
+                if (visitor.workerGroup === "social_affairs") social.push(id);
+                else civil.push(id);
+              }
+              setCivilVisitorIds(civil);
+              setSocialVisitorIds(social);
+              setPrimaryVisitorId(saved.primaryVisitorId);
+            }
           })
           .catch(() => {
             /* 訪查員稍後再試即可 */
@@ -109,7 +166,7 @@ export function CareFormDeskPanel({
             if (!cancelled) setVisitorsLoading(false);
           });
 
-        if (presetCaseId) {
+        if (presetCaseId && !readDeskBatchState()) {
           const presetRes = await fetch(
             `/api/manager/care-forms/options?caseId=${encodeURIComponent(presetCaseId)}`,
           );
@@ -122,7 +179,7 @@ export function CareFormDeskPanel({
           if (village) {
             setVillageFilter(village);
             setVillageCases(cases);
-            setCaseId(presetCaseId);
+            setSelectedCaseIds([presetCaseId]);
             setNewCase((current) => ({ ...current, village }));
             const match = identities.find(
               (item) => item.key !== "all" && item.villages.includes(village),
@@ -183,38 +240,65 @@ export function CareFormDeskPanel({
   const identityOptions = options?.identityOptions ?? [];
   const selectedIdentity = identityOptions.find((item) => item.key === identityKey) ?? null;
   const villageOptions = selectedIdentity?.villages ?? [];
+  const allVisitors = options?.visitors ?? [];
+
+  const civilVisitors = useMemo(
+    () =>
+      filterVisitors(
+        allVisitors.filter(
+          (item) => item.workerGroup === "civil_affairs" || item.workerGroup === "unknown",
+        ),
+        civilQuery,
+      ),
+    [allVisitors, civilQuery],
+  );
+  const socialVisitors = useMemo(
+    () =>
+      filterVisitors(
+        allVisitors.filter(
+          (item) => item.workerGroup === "social_affairs" || item.workerGroup === "unknown",
+        ),
+        socialQuery,
+      ),
+    [allVisitors, socialQuery],
+  );
 
   const filteredCases = useMemo(() => {
     if (!villageFilter) return [];
     const rows = villageCases.filter((item) => item.village === villageFilter);
     const needle = query.trim();
-    if (!needle) return rows.slice(0, 60);
+    if (!needle) return rows.slice(0, 80);
     return rows
       .filter((item) =>
         [item.name, item.caseCode, item.village, item.address].some((value) => value.includes(needle)),
       )
-      .slice(0, 60);
+      .slice(0, 80);
   }, [villageCases, query, villageFilter]);
 
-  const filteredVisitors = useMemo(() => {
-    const rows = options?.visitors ?? [];
-    const needle = visitorQuery.trim();
-    if (!needle) return rows.slice(0, 30);
-    return rows
-      .filter((item) => [item.name, item.badgeNo, item.status].some((value) => value.includes(needle)))
-      .slice(0, 30);
-  }, [options?.visitors, visitorQuery]);
+  const selectedVisitorIds = useMemo(
+    () => [...new Set([...civilVisitorIds, ...socialVisitorIds])],
+    [civilVisitorIds, socialVisitorIds],
+  );
+  const companionVisitorIds = selectedVisitorIds.filter((id) => id !== primaryVisitorId);
+  const visitorNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const visitor of allVisitors) map[visitor.id] = visitor.name;
+    return map;
+  }, [allVisitors]);
 
-  const selectedCase = villageCases.find((item) => item.id === caseId);
-  const selectedVisitor = options?.visitors.find((item) => item.id === visitorId);
   const scope = options?.scope;
   const scopeBlocked = Boolean(options) && scope?.mode === "none";
   const canBrowseCases = Boolean(identityKey && villageFilter);
+  const visitorStepOk =
+    selectedVisitorIds.length > 0 &&
+    Boolean(primaryVisitorId) &&
+    selectedVisitorIds.includes(primaryVisitorId) &&
+    (civilVisitorIds.length > 0 || socialVisitorIds.length > 0);
 
   function onIdentityChange(nextKey: string) {
     setIdentityKey(nextKey);
     setVillageFilter("");
-    setCaseId("");
+    setSelectedCaseIds([]);
     setQuery("");
     const next = identityOptions.find((item) => item.key === nextKey);
     if (next?.villages.length === 1) {
@@ -227,9 +311,30 @@ export function CareFormDeskPanel({
 
   function onVillageChange(nextVillage: string) {
     setVillageFilter(nextVillage);
-    setCaseId("");
+    setSelectedCaseIds([]);
     setQuery("");
     setNewCase((current) => ({ ...current, village: nextVillage }));
+  }
+
+  function toggleVisitor(group: "civil" | "social", visitorId: string) {
+    const otherIds = group === "civil" ? socialVisitorIds : civilVisitorIds;
+    const setter = group === "civil" ? setCivilVisitorIds : setSocialVisitorIds;
+    setter((current) => {
+      const next = current.includes(visitorId)
+        ? current.filter((id) => id !== visitorId)
+        : [...current, visitorId];
+      const stillSelected = next.includes(visitorId) || otherIds.includes(visitorId);
+      setPrimaryVisitorId((primary) =>
+        primary === visitorId && !stillSelected ? "" : primary,
+      );
+      return next;
+    });
+  }
+
+  function toggleCase(caseId: string) {
+    setSelectedCaseIds((current) =>
+      current.includes(caseId) ? current.filter((id) => id !== caseId) : [...current, caseId],
+    );
   }
 
   async function createVisitor() {
@@ -249,15 +354,20 @@ export function CareFormDeskPanel({
         setMessage(json.error?.message ?? "無法新增訪查員");
         return;
       }
+      const created = json.data;
       setOptions((current) =>
         current
-          ? { ...current, visitors: [json.data!, ...current.visitors] }
-          : { cases: [], visitors: [json.data!] },
+          ? { ...current, visitors: [created, ...current.visitors] }
+          : { cases: [], visitors: [created] },
       );
-      setVisitorId(json.data.id);
+      if (created.workerGroup === "social_affairs") {
+        setSocialVisitorIds((current) => [...new Set([...current, created.id])]);
+      } else {
+        setCivilVisitorIds((current) => [...new Set([...current, created.id])]);
+      }
+      if (!primaryVisitorId) setPrimaryVisitorId(created.id);
       setCreatingVisitor(false);
-      setVisitorQuery(json.data.name);
-      setMessage(`已新增訪查員「${json.data.name}」，可繼續填關懷表。`);
+      setMessage(`已新增訪查員「${created.name}」，已勾入${created.workerGroup === "social_affairs" ? "社政" : "民政"}。`);
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -265,7 +375,20 @@ export function CareFormDeskPanel({
     }
   }
 
-  async function startDesk() {
+  async function prepareBatch() {
+    if (!visitorStepOk) {
+      setMessage("請先勾選民政或社政訪查員，並手動指定一位主填表人。");
+      return;
+    }
+    if (!creating && selectedCaseIds.length === 0) {
+      setMessage("請至少勾選一位個案。");
+      return;
+    }
+    if (creating && !newCase.name.trim()) {
+      setMessage("新增個案請填姓名。");
+      return;
+    }
+
     setBusy(true);
     setMessage(null);
     try {
@@ -273,27 +396,49 @@ export function CareFormDeskPanel({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          caseId: creating ? undefined : caseId || undefined,
+          caseIds: creating ? undefined : selectedCaseIds,
           newCase: creating ? newCase : undefined,
-          visitorId,
-          visitDate,
-          visitStartTime,
-          visitEndTime,
+          visitorId: primaryVisitorId,
+          companionVisitorIds,
         }),
       });
       const json = (await response.json()) as {
-        data?: { assignmentId?: string };
+        data?: {
+          items?: Array<{
+            caseId: string;
+            caseName: string;
+            caseCode: string;
+            assignmentId: string;
+          }>;
+        };
         error?: { message?: string };
       };
-      if (!response.ok || !json.data?.assignmentId) {
-        setMessage(json.error?.message ?? "無法開始代填");
+      if (!response.ok || !json.data?.items?.length) {
+        setMessage(json.error?.message ?? "無法準備派案");
         return;
       }
-      const params = new URLSearchParams();
-      if (visitStartTime) params.set("start", visitStartTime);
-      if (visitEndTime) params.set("end", visitEndTime);
-      if (visitDate) params.set("date", visitDate);
-      router.push(`/manager/care-forms/${json.data.assignmentId}?${params.toString()}`);
+
+      const next: DeskBatchState = {
+        version: 1,
+        returnPath,
+        identityKey,
+        village: villageFilter,
+        primaryVisitorId,
+        companionVisitorIds,
+        visitorNames: visitorNameById,
+        items: json.data.items.map((item) => ({
+          caseId: item.caseId,
+          caseName: item.caseName,
+          caseCode: item.caseCode,
+          assignmentId: item.assignmentId,
+          status: "ready" as const,
+        })),
+        updatedAt: new Date().toISOString(),
+      };
+      writeDeskBatchState(next);
+      setBatch(next);
+      setCreating(false);
+      setMessage(`已準備 ${next.items.length} 筆派案。請逐案確認訪視時間後進表 KEY。`);
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -301,13 +446,139 @@ export function CareFormDeskPanel({
     }
   }
 
+  function openTimeConfirm(item: DeskBatchQueueItem) {
+    const today = new Date().toISOString().slice(0, 10);
+    setTimeDraft({
+      assignmentId: item.assignmentId,
+      caseId: item.caseId,
+      caseName: item.caseName,
+      caseCode: item.caseCode,
+      visitDate: item.visitDate || today,
+      visitStartTime: item.visitStartTime || "09:00",
+      visitEndTime: item.visitEndTime || "10:00",
+    });
+    setMessage(null);
+  }
+
+  async function confirmTimeAndEnter() {
+    if (!timeDraft || !batch) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const siblingWindows: DeskVisitWindow[] = batch.items
+        .filter(
+          (item) =>
+            item.assignmentId !== timeDraft.assignmentId &&
+            item.visitDate &&
+            item.visitStartTime &&
+            item.visitEndTime,
+        )
+        .map((item) => ({
+          assignmentId: item.assignmentId,
+          caseId: item.caseId,
+          label: `${item.caseName}（${item.caseCode}）`,
+          visitDate: item.visitDate!,
+          start: item.visitStartTime!,
+          end: item.visitEndTime!,
+          visitorIds: [batch.primaryVisitorId, ...batch.companionVisitorIds],
+        }));
+
+      const response = await fetch("/api/manager/care-forms/confirm-time", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          assignmentId: timeDraft.assignmentId,
+          caseId: timeDraft.caseId,
+          caseLabel: `${timeDraft.caseName}（${timeDraft.caseCode}）`,
+          primaryVisitorId: batch.primaryVisitorId,
+          companionVisitorIds: batch.companionVisitorIds,
+          visitDate: timeDraft.visitDate,
+          visitStartTime: timeDraft.visitStartTime,
+          visitEndTime: timeDraft.visitEndTime,
+          siblingWindows,
+        }),
+      });
+      const json = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        setMessage(json.error?.message ?? "時段無法確認");
+        return;
+      }
+
+      const nextItems = batch.items.map((item) =>
+        item.assignmentId === timeDraft.assignmentId
+          ? {
+              ...item,
+              visitDate: timeDraft.visitDate,
+              visitStartTime: timeDraft.visitStartTime,
+              visitEndTime: timeDraft.visitEndTime,
+            }
+          : item,
+      );
+      const nextBatch = { ...batch, items: nextItems, updatedAt: new Date().toISOString() };
+      writeDeskBatchState(nextBatch);
+      setBatch(nextBatch);
+      setTimeDraft(null);
+
+      const params = new URLSearchParams();
+      params.set("date", timeDraft.visitDate);
+      params.set("start", timeDraft.visitStartTime);
+      params.set("end", timeDraft.visitEndTime);
+      params.set("return", returnPath);
+      router.push(`/manager/care-forms/${timeDraft.assignmentId}?${params.toString()}`);
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function markKeyedAndStay(assignmentId: string) {
+    if (!batch) return;
+    const next = {
+      ...batch,
+      items: batch.items.map((item) =>
+        item.assignmentId === assignmentId ? { ...item, status: "keyed" as const } : item,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+    writeDeskBatchState(next);
+    setBatch(next);
+  }
+
+  function clearBatch() {
+    clearDeskBatchState();
+    setBatch(null);
+    setTimeDraft(null);
+    setMessage("已清空待 KEY 清單。訪查組仍保留，可再勾個案準備。");
+  }
+
+  // 從表單返回時：若 URL 有 done=assignmentId 可由外層處理；這裡在 mount 時把已有時間的 ready 維持即可
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const doneId = params.get("done");
+    if (!doneId) return;
+    markKeyedAndStay(doneId);
+    params.delete("done");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+    window.history.replaceState({}, "", next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const teamSummary = selectedVisitorIds
+    .map((id) => {
+      const name = visitorNameById[id] || id;
+      return id === primaryVisitorId ? `${name}（主填）` : name;
+    })
+    .join("、");
+
   return (
     <div className="grid gap-5">
       <PageIntro
         icon={ClipboardPen}
         eyebrow={entry === "desk" ? "里責填表入口" : "承辦後台"}
         title="關懷表建檔"
-        description="一張紙本＝一次訪視。先選身份與里別，再找個案與訪查員 KEY；未遇請陸續 KEY 滿三張才算完整。送出後掛到該訪查員紀錄，通過稽核才能匯出。"
+        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；每案進表前確認時間且不可與同組訪查員時段衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
       />
 
       {scopeBlocked && identityOptions.length === 0 ? (
@@ -323,13 +594,13 @@ export function CareFormDeskPanel({
 
       <section className="rounded-lg border bg-card p-4">
         <h2 className="font-semibold">1. 選擇身份與里別</h2>
-        <p className="mt-1 text-sm text-muted-foreground">先點身份，再選該身份負責的里，個案清單會變短比較好找。</p>
+        <p className="mt-1 text-sm text-muted-foreground">先點身份，再選該身份負責的里。</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Field label="身份 *">
             <select
               className="h-11 w-full rounded-md border px-3 text-sm"
               value={identityKey}
-              disabled={scopeBlocked || metaLoading || identityOptions.length === 0}
+              disabled={scopeBlocked || metaLoading || identityOptions.length === 0 || Boolean(batch)}
               onChange={(event) => onIdentityChange(event.target.value)}
             >
               <option value="">
@@ -355,7 +626,7 @@ export function CareFormDeskPanel({
             <select
               className="h-11 w-full rounded-md border px-3 text-sm"
               value={villageFilter}
-              disabled={!selectedIdentity}
+              disabled={!selectedIdentity || Boolean(batch)}
               onChange={(event) => onVillageChange(event.target.value)}
             >
               <option value="">{selectedIdentity ? "請選擇里別" : "先選身份"}</option>
@@ -367,20 +638,117 @@ export function CareFormDeskPanel({
             </select>
           </Field>
         </div>
-        {selectedIdentity && villageFilter ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            目前：{selectedIdentity.label} · {villageFilter}
-          </p>
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">2. 勾選實際填表訪查員</h2>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(batch)}
+            onClick={() => setCreatingVisitor((current) => !current)}
+          >
+            <Plus className="h-4 w-4" />
+            {creatingVisitor ? "改搜現有訪查員" : "新增訪查員"}
+          </Button>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。
+        </p>
+
+        {creatingVisitor ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Field label="訪查員姓名 *">
+              <input
+                className="h-11 w-full rounded-md border px-3 text-sm"
+                value={newVisitor.name}
+                onChange={(event) => setNewVisitor((current) => ({ ...current, name: event.target.value }))}
+              />
+            </Field>
+            <Field label="手機 *">
+              <input
+                className="h-11 w-full rounded-md border px-3 text-sm"
+                value={newVisitor.phone}
+                onChange={(event) => setNewVisitor((current) => ({ ...current, phone: event.target.value }))}
+              />
+            </Field>
+            <Field label="民政／社政 *">
+              <select
+                className="h-11 w-full rounded-md border px-3 text-sm"
+                value={newVisitor.workerGroup}
+                onChange={(event) =>
+                  setNewVisitor((current) => ({
+                    ...current,
+                    workerGroup: event.target.value as VisitorRegistrationWorkerGroup,
+                  }))
+                }
+              >
+                <option value="civil_affairs">民政訪查人員</option>
+                <option value="social_affairs">社政訪查人員</option>
+              </select>
+            </Field>
+            <Field label="Email（可後補）">
+              <input
+                className="h-11 w-full rounded-md border px-3 text-sm"
+                value={newVisitor.email}
+                onChange={(event) => setNewVisitor((current) => ({ ...current, email: event.target.value }))}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button
+                type="button"
+                disabled={busy || !newVisitor.name.trim() || !newVisitor.phone.trim()}
+                onClick={() => void createVisitor()}
+              >
+                {busy ? "新增中…" : "建立訪查員並勾選"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <VisitorPickColumn
+              title="民政（訪員）"
+              query={civilQuery}
+              onQueryChange={setCivilQuery}
+              visitors={civilVisitors}
+              selectedIds={civilVisitorIds}
+              primaryVisitorId={primaryVisitorId}
+              loading={visitorsLoading}
+              disabled={Boolean(batch)}
+              onToggle={(id) => toggleVisitor("civil", id)}
+              onSetPrimary={setPrimaryVisitorId}
+            />
+            <VisitorPickColumn
+              title="社政（訪員）"
+              query={socialQuery}
+              onQueryChange={setSocialQuery}
+              visitors={socialVisitors}
+              selectedIds={socialVisitorIds}
+              primaryVisitorId={primaryVisitorId}
+              loading={visitorsLoading}
+              disabled={Boolean(batch)}
+              onToggle={(id) => toggleVisitor("social", id)}
+              onSetPrimary={setPrimaryVisitorId}
+            />
+          </div>
+        )}
+
+        {selectedVisitorIds.length > 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">本次訪查組：{teamSummary || "尚未勾選"}</p>
+        ) : null}
+        {!visitorStepOk && selectedVisitorIds.length > 0 ? (
+          <p className="mt-2 text-sm text-amber-800">請點選一位已勾選的訪查員作為「主填表人」。</p>
         ) : null}
       </section>
 
       <section className="rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">2. 選擇或新增個案</h2>
+          <h2 className="font-semibold">3. 勾選個案並準備派案</h2>
           <Button
             type="button"
             variant="outline"
-            disabled={!canBrowseCases}
+            disabled={!canBrowseCases || Boolean(batch)}
             onClick={() => setCreating((current) => !current)}
           >
             <Plus className="h-4 w-4" />
@@ -461,27 +829,38 @@ export function CareFormDeskPanel({
               <Search className="h-4 w-4 text-muted-foreground" />
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                placeholder={`${villageFilter}：搜尋姓名、編碼`}
+                placeholder={`${villageFilter}：搜尋姓名、編碼（可多選）`}
                 value={query}
+                disabled={Boolean(batch)}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
             <div className="mt-3 grid max-h-80 gap-2 overflow-auto">
-              {filteredCases.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`rounded-md border p-3 text-left ${
-                    caseId === item.id ? "border-primary bg-primary/5" : "bg-background"
-                  }`}
-                  onClick={() => setCaseId(item.id)}
-                >
-                  <p className="font-semibold">{item.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {item.caseCode} · {item.village} · {item.visitStatus}
-                  </p>
-                </button>
-              ))}
+              {filteredCases.map((item) => {
+                const checked = selectedCaseIds.includes(item.id);
+                return (
+                  <label
+                    key={item.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 ${
+                      checked ? "border-primary bg-primary/5" : "bg-background"
+                    } ${batch ? "pointer-events-none opacity-60" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4"
+                      checked={checked}
+                      disabled={Boolean(batch)}
+                      onChange={() => toggleCase(item.id)}
+                    />
+                    <span>
+                      <span className="block font-semibold">{item.name}</span>
+                      <span className="mt-1 block text-sm text-muted-foreground">
+                        {item.caseCode} · {item.village} · {item.visitStatus}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
               {casesLoading ? (
                 <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
                   正在載入 {villageFilter} 個案…
@@ -492,162 +871,241 @@ export function CareFormDeskPanel({
                 </p>
               ) : null}
             </div>
-            {selectedCase ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                已選：{selectedCase.name}（{selectedCase.caseCode}）
-              </p>
+            {selectedCaseIds.length > 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">已勾選 {selectedCaseIds.length} 位個案</p>
             ) : null}
           </>
         )}
-      </section>
 
-      <section className="rounded-lg border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">3. 勾選實際填表訪查員與訪視時間</h2>
+        {!batch ? (
           <Button
-            type="button"
-            variant="outline"
-            onClick={() => setCreatingVisitor((current) => !current)}
+            className="mt-4 h-11"
+            disabled={
+              busy ||
+              scopeBlocked ||
+              !canBrowseCases ||
+              !visitorStepOk ||
+              (!creating && selectedCaseIds.length === 0) ||
+              (creating && !newCase.name.trim())
+            }
+            onClick={() => void prepareBatch()}
           >
-            <Plus className="h-4 w-4" />
-            {creatingVisitor ? "改搜現有訪查員" : "新增訪查員"}
+            <UserRound className="h-4 w-4" />
+            {busy ? "準備中…" : "一次準備派案（產生待 KEY 清單）"}
           </Button>
-        </div>
-
-        {creatingVisitor ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="訪查員姓名 *">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.name}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, name: event.target.value }))}
-              />
-            </Field>
-            <Field label="手機 *">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.phone}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, phone: event.target.value }))}
-              />
-            </Field>
-            <Field label="Email（可後補）">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.email}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, email: event.target.value }))}
-              />
-            </Field>
-            <Field label="身分證（可後補）">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.idNumber}
-                onChange={(event) =>
-                  setNewVisitor((current) => ({ ...current, idNumber: event.target.value }))
-                }
-              />
-            </Field>
-            <div className="sm:col-span-2">
-              <Button
-                type="button"
-                disabled={busy || !newVisitor.name.trim() || !newVisitor.phone.trim()}
-                onClick={() => void createVisitor()}
-              >
-                {busy ? "新增中…" : "建立訪查員並選用"}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <label className="mt-4 flex h-11 items-center gap-2 rounded-md border bg-background px-3">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                placeholder="搜尋訪查員姓名或編碼"
-                value={visitorQuery}
-                onChange={(event) => setVisitorQuery(event.target.value)}
-              />
-            </label>
-            <div className="mt-3 grid max-h-56 gap-2 overflow-auto">
-              {filteredVisitors.map((visitor) => (
-                <button
-                  key={visitor.id}
-                  type="button"
-                  className={`rounded-md border p-3 text-left ${
-                    visitorId === visitor.id ? "border-primary bg-primary/5" : "bg-background"
-                  }`}
-                  onClick={() => setVisitorId(visitor.id)}
-                >
-                  <p className="font-semibold">{visitor.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {visitor.badgeNo || visitor.id}
-                    {visitor.status ? ` · ${visitor.status}` : ""}
-                  </p>
-                </button>
-              ))}
-              {visitorsLoading ? (
-                <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
-                  訪查員清單載入中…
-                </p>
-              ) : filteredVisitors.length === 0 ? (
-                <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
-                  找不到訪查員。可按「新增訪查員」建立後再填。
-                </p>
-              ) : null}
-            </div>
-            {selectedVisitor ? (
-              <p className="mt-3 text-sm text-muted-foreground">已選訪查員：{selectedVisitor.name}</p>
-            ) : null}
-          </>
-        )}
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Field label="訪視日期 *">
-            <input
-              type="date"
-              className="h-11 w-full rounded-md border px-3 text-sm"
-              value={visitDate}
-              onChange={(event) => setVisitDate(event.target.value)}
-            />
-          </Field>
-          <Field label="開始時間">
-            <input
-              type="time"
-              className="h-11 w-full rounded-md border px-3 text-sm"
-              value={visitStartTime}
-              onChange={(event) => setVisitStartTime(event.target.value)}
-            />
-          </Field>
-          <Field label="結束時間">
-            <input
-              type="time"
-              className="h-11 w-full rounded-md border px-3 text-sm"
-              value={visitEndTime}
-              onChange={(event) => setVisitEndTime(event.target.value)}
-            />
-          </Field>
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          來源固定為「公所代填・紙本」。每按一次「下一步」＝新開一筆訪視（可換訪查員）。送出後訪查員端只能看、不能改。
-        </p>
-        <Button
-          className="mt-4 h-11"
-          disabled={
-            busy ||
-            scopeBlocked ||
-            !canBrowseCases ||
-            !visitorId ||
-            (!creating && !caseId) ||
-            (creating && !newCase.name.trim())
-          }
-          onClick={() => void startDesk()}
-        >
-          <UserRound className="h-4 w-4" />
-          {busy ? "準備中…" : "下一步：填關懷表"}
-        </Button>
-        {message ? (
-          <p className="mt-3 rounded-md bg-secondary p-3 text-sm text-muted-foreground">{message}</p>
         ) : null}
       </section>
+
+      {batch ? (
+        <section className="rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">4. 待 KEY 清單（逐案確認時間）</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                訪查組固定：
+                {[batch.primaryVisitorId, ...batch.companionVisitorIds]
+                  .map((id) => {
+                    const name = batch.visitorNames[id] || id;
+                    return id === batch.primaryVisitorId ? `${name}（主填）` : name;
+                  })
+                  .join("、")}
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={clearBatch}>
+              清空清單／更換訪查組
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {batch.items.map((item) => (
+              <div
+                key={item.assignmentId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+              >
+                <div>
+                  <p className="font-semibold">{item.caseName}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {item.caseCode}
+                    {item.visitDate
+                      ? ` · ${item.visitDate} ${item.visitStartTime}-${item.visitEndTime}`
+                      : " · 尚未確認時間"}
+                    {item.status === "keyed" ? " · 已 KEY" : ""}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={item.status === "keyed" ? "outline" : "default"}
+                  disabled={busy}
+                  onClick={() => openTimeConfirm(item)}
+                >
+                  {item.status === "keyed" ? "再確認時間／查看" : "確認時間並進表"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {timeDraft ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+          <section className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg">
+            <h3 className="text-lg font-semibold">確認本筆訪視時間</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {timeDraft.caseName}（{timeDraft.caseCode}）· 同組訪查員時段不可衝突（核銷稽核）
+            </p>
+            <div className="mt-4 grid gap-3">
+              <Field label="訪視日期 *">
+                <input
+                  type="date"
+                  className="h-11 w-full rounded-md border px-3 text-sm"
+                  value={timeDraft.visitDate}
+                  onChange={(event) =>
+                    setTimeDraft((current) =>
+                      current ? { ...current, visitDate: event.target.value } : current,
+                    )
+                  }
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="開始 *">
+                  <input
+                    type="time"
+                    className="h-11 w-full rounded-md border px-3 text-sm"
+                    value={timeDraft.visitStartTime}
+                    onChange={(event) =>
+                      setTimeDraft((current) =>
+                        current ? { ...current, visitStartTime: event.target.value } : current,
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="結束 *">
+                  <input
+                    type="time"
+                    className="h-11 w-full rounded-md border px-3 text-sm"
+                    value={timeDraft.visitEndTime}
+                    onChange={(event) =>
+                      setTimeDraft((current) =>
+                        current ? { ...current, visitEndTime: event.target.value } : current,
+                      )
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+            {message ? <p className="mt-3 text-sm text-destructive">{message}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setTimeDraft(null)}>
+                取消
+              </Button>
+              <Button type="button" disabled={busy} onClick={() => void confirmTimeAndEnter()}>
+                {busy ? "檢查中…" : "通過稽核並進表"}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {message && !timeDraft ? (
+        <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">{message}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function filterVisitors(rows: DeskVisitorOption[], query: string) {
+  const needle = query.trim();
+  const filtered = !needle
+    ? rows
+    : rows.filter((item) =>
+        [item.name, item.badgeNo, item.status].some((value) => value.includes(needle)),
+      );
+  return filtered.slice(0, 40);
+}
+
+function VisitorPickColumn({
+  title,
+  query,
+  onQueryChange,
+  visitors,
+  selectedIds,
+  primaryVisitorId,
+  loading,
+  disabled,
+  onToggle,
+  onSetPrimary,
+}: {
+  title: string;
+  query: string;
+  onQueryChange: (value: string) => void;
+  visitors: DeskVisitorOption[];
+  selectedIds: string[];
+  primaryVisitorId: string;
+  loading: boolean;
+  disabled?: boolean;
+  onToggle: (id: string) => void;
+  onSetPrimary: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-sm font-semibold">{title}</p>
+      <label className="mt-2 flex h-10 items-center gap-2 rounded-md border bg-background px-3">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          placeholder="搜尋姓名或編碼"
+          value={query}
+          disabled={disabled}
+          onChange={(event) => onQueryChange(event.target.value)}
+        />
+      </label>
+      <div className="mt-2 grid max-h-56 gap-2 overflow-auto">
+        {visitors.map((visitor) => {
+          const checked = selectedIds.includes(visitor.id);
+          const isPrimary = primaryVisitorId === visitor.id;
+          return (
+            <div
+              key={visitor.id}
+              className={`rounded-md border p-2 ${checked ? "border-primary bg-primary/5" : "bg-background"}`}
+            >
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => onToggle(visitor.id)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{visitor.name}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {visitor.badgeNo || visitor.id}
+                    {visitor.status ? ` · ${visitor.status}` : ""}
+                    {visitor.workerGroup === "unknown" ? " · 未分類" : ""}
+                  </span>
+                </span>
+              </label>
+              {checked ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
+                    isPrimary ? "border-primary bg-primary text-primary-foreground" : "bg-card"
+                  }`}
+                  onClick={() => onSetPrimary(visitor.id)}
+                >
+                  {isPrimary ? "主填表人（已指定）" : "設為主填表人"}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        {loading ? (
+          <p className="text-sm text-muted-foreground">載入中…</p>
+        ) : visitors.length === 0 ? (
+          <p className="text-sm text-muted-foreground">此欄暫無訪查員</p>
+        ) : null}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">已勾 {selectedIds.length} 人</p>
     </div>
   );
 }

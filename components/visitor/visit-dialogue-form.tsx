@@ -132,6 +132,7 @@ export function VisitDialogueForm({
   selectedVisitor,
   initialTimes,
   initialAnswers,
+  deskReturnPath,
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
@@ -142,6 +143,7 @@ export function VisitDialogueForm({
   selectedVisitor?: DeskVisitorOption;
   initialTimes?: { visitDate?: string; visitStartTime?: string; visitEndTime?: string };
   initialAnswers?: MohwLifeCareAnswers;
+  deskReturnPath?: string;
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
@@ -546,7 +548,8 @@ export function VisitDialogueForm({
         </p>
         {isDeskEntry ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            未遇需陸續 KEY 滿 {missedVisitClosureAttempt} 張紙本才算完整；本次只填這一張。
+            一般完成／拒訪不需三次；僅「未遇」才需陸續 KEY 滿 {missedVisitClosureAttempt}{" "}
+            張紙本（每次各自確認訪視時間）。本次只填這一張。
           </p>
         ) : null}
         {readonly ? (
@@ -1093,17 +1096,33 @@ export function VisitDialogueForm({
       {result && (
         <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-primary">本次訪查已完成</p>
-          <h2 className="mt-1 text-base font-semibold">紀錄已送出，下一步可返回任務清單</h2>
+          <h2 className="mt-1 text-base font-semibold">
+            {isDeskEntry ? "紙本已 KEY 送出，可回清單繼續下一家" : "紀錄已送出，下一步可返回任務清單"}
+          </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。
+            {isDeskEntry
+              ? "系統已清除本機草稿。請回關懷表建檔待 KEY 清單，確認下一案時間後繼續。"
+              : "系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex">
-            <Button asChild className="w-full sm:w-auto">
-              <a href="/visitor/tasks">回到任務清單</a>
-            </Button>
-            <Button asChild className="w-full sm:w-auto" variant="outline">
-              <a href="/visitor/drafts">查看草稿</a>
-            </Button>
+            {isDeskEntry ? (
+              <Button asChild className="w-full sm:w-auto">
+                <a
+                  href={`${deskReturnPath || "/desk/care-forms"}?done=${encodeURIComponent(schedule.id)}`}
+                >
+                  回待 KEY 清單
+                </a>
+              </Button>
+            ) : (
+              <>
+                <Button asChild className="w-full sm:w-auto">
+                  <a href="/visitor/tasks">回到任務清單</a>
+                </Button>
+                <Button asChild className="w-full sm:w-auto" variant="outline">
+                  <a href="/visitor/drafts">查看草稿</a>
+                </Button>
+              </>
+            )}
           </div>
         </section>
       )}

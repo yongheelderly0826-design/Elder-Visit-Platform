@@ -11,7 +11,7 @@ export default async function ManagerCareFormFillPage({
   searchParams,
 }: {
   params: Promise<{ assignmentId: string }>;
-  searchParams: Promise<{ date?: string; start?: string; end?: string }>;
+  searchParams: Promise<{ date?: string; start?: string; end?: string; return?: string }>;
 }) {
   const role = (await cookies()).get("demo_role")?.value;
   if (role === "visitor") redirect("/visitor/home");
@@ -25,6 +25,10 @@ export default async function ManagerCareFormFillPage({
     .map(mapDeskVisitor)
     .filter((item) => item.id && item.name);
   const visitor = visitors.find((item) => item.id === task.schedule.visitorId);
+  const deskReturnPath =
+    query.return === "/manager/care-forms" || query.return === "/desk/care-forms"
+      ? query.return
+      : "/desk/care-forms";
 
   return (
     <AppShell active="careForms">
@@ -38,6 +42,7 @@ export default async function ManagerCareFormFillPage({
         visitorName={visitor?.name}
         visitorDirectory={visitors}
         selectedVisitor={visitor}
+        deskReturnPath={deskReturnPath}
         initialTimes={{
           visitDate: query.date || task.schedule.visitDate,
           visitStartTime: query.start,

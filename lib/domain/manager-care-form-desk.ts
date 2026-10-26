@@ -1,5 +1,10 @@
+import { normalizeDeskWorkerGroup } from "@/lib/domain/desk-care-batch";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
-import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
+import type {
+  ElderCase,
+  VisitSchedule,
+  VisitorRegistrationWorkerGroup,
+} from "@/lib/domain/types";
 
 export const MANAGER_DESK_NOTE = "公所代填・紙本";
 
@@ -12,6 +17,7 @@ export type DeskVisitorOption = {
   status: string;
   nationalId: string;
   phone: string;
+  workerGroup: VisitorRegistrationWorkerGroup | "unknown";
 };
 
 export type DeskCaseOption = {
@@ -37,9 +43,11 @@ export type DeskNewCaseInput = {
 
 export type DeskPrepareInput = {
   caseId?: string;
+  caseIds?: string[];
   newCase?: DeskNewCaseInput;
   visitorId: string;
-  visitDate: string;
+  companionVisitorIds?: string[];
+  visitDate?: string;
   visitStartTime?: string;
   visitEndTime?: string;
 };
@@ -88,6 +96,9 @@ export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption 
     status: String(row.status ?? ""),
     nationalId: String(row.id_number ?? "").trim().toUpperCase(),
     phone: String(row.phone ?? row.primary_phone ?? row.mobile ?? "").trim(),
+    workerGroup: normalizeDeskWorkerGroup(
+      row.volunteer_group ?? row.worker_group ?? row.workerGroup,
+    ),
   };
 }
 

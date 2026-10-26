@@ -120,6 +120,7 @@ var AssignmentModule = (function () {
       patch.confirmed_at = new Date().toISOString();
     }
     if (data.notes) patch.notes = data.notes;
+    if (data.due_date) patch.due_date = String(data.due_date).slice(0, 10);
     var updated = SheetHelper.updateByKey(SHEET, 'assignment_id', data.assignment_id, patch);
     if (!updated) {
       var err = new Error('Assignment not found: ' + data.assignment_id);

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
+import { buildDeskAssignmentNotes } from "@/lib/domain/desk-care-batch";
 import {
   MANAGER_DESK_NOTE,
   toDeskElderCase,
@@ -16,26 +17,55 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as DeskPrepareInput;
   const visitorId = String(body.visitorId ?? "").trim();
+  const companionVisitorIds = [
+    ...new Set(
+      (body.companionVisitorIds ?? [])
+        .map((id) => String(id ?? "").trim())
+        .filter((id) => id && id !== visitorId),
+    ),
+  ];
   const visitDate = String(body.visitDate ?? "").trim();
+  const caseIds = [
+    ...new Set(
+      [
+        ...(body.caseIds ?? []).map((id) => String(id ?? "").trim()),
+        String(body.caseId ?? "").trim(),
+      ].filter(Boolean),
+    ),
+  ];
 
   if (!visitorId) {
     return NextResponse.json(
-      { error: { code: "VALIDATION", message: "請指定訪員。" } },
-      { status: 400 },
-    );
-  }
-  if (!visitDate) {
-    return NextResponse.json(
-      { error: { code: "VALIDATION", message: "請填訪視日期。" } },
+      { error: { code: "VALIDATION", message: "請指定主填表訪查員。" } },
       { status: 400 },
     );
   }
 
   try {
-    let caseRow: Record<string, unknown> | null = null;
-    if (body.caseId) {
-      caseRow = (await gasClient.cases.get(body.caseId)) as Record<string, unknown> | null;
-    } else if (body.newCase?.name?.trim()) {
+    const visitorRows = ((await gasClient.visitors.list({ slim: true })) as Record<
+      string,
+      unknown
+    >[]) ?? [];
+    const nameById = new Map(
+      visitorRows.map((row) => [
+        String(row.visitor_id ?? ""),
+        String(row.name ?? row.full_name ?? ""),
+      ]),
+    );
+    const notes = buildDeskAssignmentNotes({
+      primaryVisitorId: visitorId,
+      primaryVisitorName: nameById.get(visitorId) || "",
+      companionVisitorIds,
+      companionNames: Object.fromEntries(
+        companionVisitorIds.map((id) => [id, nameById.get(id) || ""]),
+      ),
+      visitDate: visitDate || undefined,
+      visitStartTime: body.visitStartTime,
+      visitEndTime: body.visitEndTime,
+    });
+
+    const preparedCaseIds: string[] = [...caseIds];
+    if (!preparedCaseIds.length && body.newCase?.name?.trim()) {
       const created = await gasClient.cases.create({
         name: body.newCase.name.trim(),
         id_number: body.newCase.idNumber?.trim() ?? "",
@@ -51,39 +81,82 @@ export async function POST(request: NextRequest) {
         case_type: "獨老",
         contact_note: MANAGER_DESK_NOTE,
       });
-      caseRow = created;
+      const createdId = String(created.case_id ?? "");
+      if (!createdId) {
+        return NextResponse.json(
+          { error: { code: "VALIDATION", message: "新增個案失敗。" } },
+          { status: 400 },
+        );
+      }
+      preparedCaseIds.push(createdId);
     }
 
-    if (!caseRow || !caseRow.case_id) {
+    if (!preparedCaseIds.length) {
       return NextResponse.json(
-        { error: { code: "VALIDATION", message: "請選擇個案，或自己填入新個案資料。" } },
+        { error: { code: "VALIDATION", message: "請至少選擇一位個案。" } },
         { status: 400 },
       );
     }
 
-    const caseId = String(caseRow.case_id);
+    const items: Array<{
+      caseId: string;
+      caseName: string;
+      caseCode: string;
+      assignmentId: string;
+      visitAttempt: number;
+      elderCase: ReturnType<typeof toDeskElderCase>;
+      schedule: ReturnType<typeof toDeskSchedule>;
+    }> = [];
 
-    // 紙本建檔：一張紙＝一次訪視。每次「下一步」都新開派案（可換訪查員），visit_attempt 由 GAS 依派案序累計。
-    const saved = (await gasClient.assignments.dispatch({
-      case_id: caseId,
-      visitor_id: visitorId,
-      due_date: visitDate,
-      notes: MANAGER_DESK_NOTE,
-      auto_confirm: true,
-      allow_multi_active: true,
-    })) as Record<string, unknown>;
-    invalidateGasReadCaches();
+    for (const caseId of preparedCaseIds) {
+      const caseRow = (await gasClient.cases.get(caseId)) as Record<string, unknown> | null;
+      if (!caseRow?.case_id) {
+        return NextResponse.json(
+          { error: { code: "VALIDATION", message: `找不到個案 ${caseId}` } },
+          { status: 400 },
+        );
+      }
 
-    const latestCase = ((await gasClient.cases.get(caseId)) as Record<string, unknown> | null) ?? caseRow;
-    return NextResponse.json({
-      data: {
-        reused: false,
+      const saved = (await gasClient.assignments.dispatch({
+        case_id: caseId,
+        visitor_id: visitorId,
+        due_date: visitDate || undefined,
+        notes,
+        auto_confirm: true,
+        allow_multi_active: true,
+      })) as Record<string, unknown>;
+
+      const latestCase =
+        ((await gasClient.cases.get(caseId)) as Record<string, unknown> | null) ?? caseRow;
+      items.push({
+        caseId,
+        caseName: String(latestCase.name ?? ""),
+        caseCode: String(latestCase.encoded_id ?? latestCase.external_id ?? caseId),
         assignmentId: String(saved.assignment_id ?? ""),
         visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
         elderCase: toDeskElderCase(latestCase),
-        schedule: toDeskSchedule(saved, visitDate),
+        schedule: toDeskSchedule(saved, visitDate || new Date().toISOString().slice(0, 10)),
+      });
+    }
+
+    invalidateGasReadCaches();
+
+    const first = items[0];
+    return NextResponse.json({
+      data: {
+        reused: false,
+        batch: true,
+        count: items.length,
+        items,
+        // 相容舊版單案回應
+        assignmentId: first?.assignmentId ?? "",
+        visitAttempt: first?.visitAttempt ?? 1,
+        elderCase: first?.elderCase,
+        schedule: first?.schedule,
         visitStartTime: body.visitStartTime ?? "",
         visitEndTime: body.visitEndTime ?? "",
+        primaryVisitorId: visitorId,
+        companionVisitorIds,
       },
     });
   } catch (error) {

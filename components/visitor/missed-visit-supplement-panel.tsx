@@ -38,7 +38,7 @@ export function MissedVisitSupplementPanel({
         <div>
           <h2 className="text-sm font-semibold text-amber-950">未遇三次補錄（手動補充）</h2>
           <p className="mt-1 text-sm leading-6 text-amber-900/90">
-            規定每案須有 3 次訪視紀錄。實際只去 1–2 次且皆未遇時，請用下方分頁補齊其餘次數；
+            僅「未遇」才須湊滿 3 次訪視紀錄。實際只去 1–2 次且皆未遇時，請用下方分頁補齊其餘次數；
             每一頁至少勾選 {missedVisitMinSlots} 個不同時段（紙本佐證已備即可）。
           </p>
         </div>
