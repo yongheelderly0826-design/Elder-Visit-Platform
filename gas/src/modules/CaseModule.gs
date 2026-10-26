@@ -17,6 +17,7 @@ var CaseModule = (function () {
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
 
+    SheetHelper.ensureColumns(SHEET, ['village_seq']);
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.district) {
       rows = rows.filter(function (r) {
@@ -75,6 +76,7 @@ var CaseModule = (function () {
       contact_note: String(data.contact_note || '公所代填').trim(),
       visit_status: '待訪',
       dispatch_priority: String(data.dispatch_priority || '中').trim() || '中',
+      village_seq: data.village_seq != null && data.village_seq !== '' ? Number(data.village_seq) || '' : '',
     };
     var result = importBatch({ rows: [row] });
     var caseId = result.case_ids && result.case_ids[0];
@@ -90,10 +92,15 @@ var CaseModule = (function () {
     if (!Array.isArray(rows)) {
       throw new Error('rows must be an array');
     }
+    SheetHelper.ensureColumns(SHEET, ['village_seq']);
     var sheet = SheetHelper.getSheet(SHEET);
     var grid = sheet.getDataRange().getValues();
     if (!grid.length) throw new Error('個案名冊空白');
-    var headers = grid[0];
+    var headers = grid[0].map(String);
+    // ensureColumns 可能剛補欄，重新對齊 row 長度
+    if (headers.indexOf('village_seq') === -1) {
+      throw new Error('個案名冊缺少 village_seq 欄位');
+    }
     var idIdx = headers.indexOf('id_number');
     var caseIdIdx = headers.indexOf('case_id');
     var byIdNumber = {};
@@ -126,6 +133,9 @@ var CaseModule = (function () {
     rows.forEach(function (row) {
       var idNumber = normalizeId_(row.id_number);
       row.id_number = idNumber;
+      if (row.village_seq != null && row.village_seq !== '') {
+        row.village_seq = Number(row.village_seq) || String(row.village_seq).trim();
+      }
       if (idNumber && !Validation.validateTaiwanId(idNumber)) {
         row.data_quality_tag = (row.data_quality_tag || '') + ';invalid_id';
       }
@@ -150,6 +160,12 @@ var CaseModule = (function () {
           data_quality_tag: row.data_quality_tag || prev.data_quality_tag || '',
           updated_at: now,
         };
+        if (row.village_seq != null && row.village_seq !== '') {
+          patch.village_seq = row.village_seq;
+        }
+        if (row.external_id != null && row.external_id !== '') {
+          patch.external_id = row.external_id;
+        }
         Object.keys(patch).forEach(function (k) {
           prev[k] = patch[k];
         });

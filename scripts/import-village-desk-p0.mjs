@@ -121,6 +121,8 @@ function parseCases() {
         visit_status: village === "永成里" ? "不訪" : "待訪",
         dispatch_priority: "中",
         external_id: String(row["編號"] || "").trim(),
+        // Excel「里編號」＝該里紙本順序（與全域「編號」不同）
+        village_seq: Number(row["里編號"] || row["里編碼"] || 0) || "",
       };
     })
     .filter(Boolean);

@@ -93,6 +93,7 @@
 | contact_note | 聯絡人備註 | text | | |
 | visit_status | 訪視狀態 | enum | ✅ | 待訪/已完成/空訪 |
 | dispatch_priority | 派案優先 | enum | | 高/中/低 |
+| village_seq | 里編號 | number | | 該里紙本里民順序（Excel 里編號；與全域編號不同） |
 | encoded_id | 去識別化編碼 | text | | YH-115-A001 |
 | data_quality_tag | 資料品質 | text | | |
 | imported_at | 匯入時間 | datetime | | |

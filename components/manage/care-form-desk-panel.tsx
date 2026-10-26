@@ -13,7 +13,11 @@ import {
   type DeskBatchState,
   type DeskVisitWindow,
 } from "@/lib/domain/desk-care-batch";
-import type { DeskCaseOption, DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
+import {
+  compareDeskCasesByVillageSeq,
+  type DeskCaseOption,
+  type DeskVisitorOption,
+} from "@/lib/domain/manager-care-form-desk";
 import type { DeskIdentityOption, DeskScope } from "@/lib/domain/village-admins";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
@@ -265,14 +269,24 @@ export function CareFormDeskPanel({
 
   const filteredCases = useMemo(() => {
     if (!villageFilter) return [];
-    const rows = villageCases.filter((item) => item.village === villageFilter);
+    const rows = villageCases
+      .filter((item) => item.village === villageFilter)
+      .slice()
+      .sort(compareDeskCasesByVillageSeq);
     const needle = query.trim();
-    if (!needle) return rows.slice(0, 80);
+    if (!needle) return rows.slice(0, 400);
     return rows
       .filter((item) =>
-        [item.name, item.caseCode, item.village, item.address].some((value) => value.includes(needle)),
+        [
+          item.name,
+          item.caseCode,
+          item.village,
+          item.address,
+          item.villageSeq != null ? String(item.villageSeq) : "",
+          item.externalId,
+        ].some((value) => value.includes(needle)),
       )
-      .slice(0, 80);
+      .slice(0, 400);
   }, [villageCases, query, villageFilter]);
 
   const selectedVisitorIds = useMemo(
@@ -744,7 +758,12 @@ export function CareFormDeskPanel({
 
       <section className="rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">3. 勾選個案並準備派案</h2>
+          <div>
+            <h2 className="font-semibold">3. 勾選個案並準備派案</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              依紙本「里編號」排序；姓名前顯示 #里編號，方便對照 KEY。
+            </p>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -853,9 +872,16 @@ export function CareFormDeskPanel({
                       onChange={() => toggleCase(item.id)}
                     />
                     <span>
-                      <span className="block font-semibold">{item.name}</span>
+                      <span className="block font-semibold">
+                        {item.villageSeq != null ? (
+                          <span className="mr-2 inline-block min-w-[2.5rem] text-primary">
+                            #{item.villageSeq}
+                          </span>
+                        ) : null}
+                        {item.name}
+                      </span>
                       <span className="mt-1 block text-sm text-muted-foreground">
-                        {item.caseCode} · {item.village} · {item.visitStatus}
+                        里編號 {item.villageSeq ?? "—"} · {item.caseCode} · {item.visitStatus}
                       </span>
                     </span>
                   </label>

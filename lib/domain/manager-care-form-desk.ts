@@ -28,6 +28,9 @@ export type DeskCaseOption = {
   address: string;
   visitStatus: string;
   phone: string;
+  /** 紙本里民順序（Excel 里編號）；同里內 KEY 對照用 */
+  villageSeq: number | null;
+  externalId: string;
 };
 
 export type DeskNewCaseInput = {
@@ -77,6 +80,8 @@ export function parseCareformAnswers(row: unknown): MohwLifeCareAnswers | undefi
 
 export function mapDeskCase(row: Record<string, unknown>): DeskCaseOption {
   const caseId = String(row.case_id ?? row.external_id ?? "");
+  const seqRaw = row.village_seq ?? row.villageSeq;
+  const seqNum = Number(seqRaw);
   return {
     id: caseId,
     caseCode: String(row.encoded_id ?? row.external_id ?? caseId),
@@ -85,7 +90,17 @@ export function mapDeskCase(row: Record<string, unknown>): DeskCaseOption {
     address: String(row.address ?? ""),
     visitStatus: String(row.visit_status ?? "待訪"),
     phone: String(row.primary_phone ?? ""),
+    villageSeq: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : null,
+    externalId: String(row.external_id ?? "").trim(),
   };
+}
+
+/** 關懷表建檔個案清單：依紙本里編號（village_seq）排序。 */
+export function compareDeskCasesByVillageSeq(a: DeskCaseOption, b: DeskCaseOption) {
+  const aSeq = a.villageSeq ?? (Number(a.externalId) || Number.POSITIVE_INFINITY);
+  const bSeq = b.villageSeq ?? (Number(b.externalId) || Number.POSITIVE_INFINITY);
+  if (aSeq !== bSeq) return aSeq - bSeq;
+  return a.name.localeCompare(b.name, "zh-Hant");
 }
 
 export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption {
