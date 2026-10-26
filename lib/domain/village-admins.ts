@@ -84,13 +84,42 @@ export type VillageAdminRow = {
   notes: string;
 };
 
+/**
+ * 永和區里編碼：官方六碼，如上林里 `040051`。
+ * - 已是 6 碼（040051）→ 原樣
+ * - 僅里序（51／051）→ 補成 `040` + 三碼
+ * - 縣市碼 65000040 + 里序 → 取末三碼 `040` + 里序三碼
+ */
+export function formatYongheVillageCode(
+  villageCodeOrSeq: string | number | null | undefined,
+  districtCode: string | number = "65000040",
+): string {
+  const raw = String(villageCodeOrSeq ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{6}$/.test(raw)) return raw;
+  const seq = raw.replace(/\D/g, "");
+  if (!seq) return "";
+  if (seq.length >= 6) return seq.slice(-6);
+  const district = String(districtCode ?? "65000040").replace(/\D/g, "") || "65000040";
+  const prefix = district.slice(-3).padStart(3, "0");
+  return `${prefix}${seq.padStart(3, "0")}`;
+}
+
+/** 由匯入檔縣市碼＋里別組成六碼里編碼。 */
+export function buildYongheVillageCodeFromImport(input: {
+  districtCode?: string | number;
+  villageSeq?: string | number;
+}): string {
+  return formatYongheVillageCode(input.villageSeq, input.districtCode);
+}
+
 export function mapVillageAdminRow(row: Record<string, unknown>): VillageAdminRow {
   const kindRaw = String(row.admin_kind || "person");
   const adminKind =
     kindRaw === "org" || kindRaw === "skip" || kindRaw === "person" ? kindRaw : "person";
   return {
     assignmentRowId: String(row.assignment_row_id || ""),
-    villageCode: String(row.village_code || ""),
+    villageCode: formatYongheVillageCode(row.village_code as string | number | null | undefined),
     villageName: String(row.village_name || ""),
     adminDisplayName: String(row.admin_display_name || ""),
     adminKind,

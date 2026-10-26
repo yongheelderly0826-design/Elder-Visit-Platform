@@ -6,6 +6,7 @@ import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import { mapDeskCase, mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
 import {
   buildDeskIdentityOptions,
+  formatYongheVillageCode,
   mapVillageAdminRow,
   resolveDeskScope,
   villagesAllowedForDesk,
@@ -160,15 +161,28 @@ async function resolveScopeOnly(identity: {
   });
 }
 
+async function loadVillageCodeByName() {
+  const adminRows = await gasClient.villageAdmins
+    .list()
+    .catch(() => [] as Record<string, unknown>[]);
+  const map: Record<string, string> = {};
+  for (const row of adminRows.map(mapVillageAdminRow)) {
+    const code = formatYongheVillageCode(row.villageCode);
+    if (row.villageName && code) map[row.villageName] = code;
+  }
+  return map;
+}
+
 async function loadVillageCases(
   village: string,
   identity: { email: string; name: string; roleKey: string },
 ) {
-  const [caseRows, scope] = await Promise.all([
+  const [caseRows, scope, villageCodeByName] = await Promise.all([
     gasClient.cases.list({ district: "永和區", visit_village: village }) as Promise<
       Record<string, unknown>[]
     >,
     resolveScopeOnly(identity),
+    loadVillageCodeByName(),
   ]);
 
   const allowed = villagesAllowedForDesk(scope);
@@ -176,7 +190,9 @@ async function loadVillageCases(
     return [];
   }
 
-  let cases = caseRows.map(mapDeskCase).filter((item) => item.id && item.name);
+  let cases = caseRows
+    .map((row) => mapDeskCase(row, villageCodeByName))
+    .filter((item) => item.id && item.name);
   if (scope.mode !== "all") {
     cases = cases.filter((item) => item.visitStatus !== "不訪");
   }

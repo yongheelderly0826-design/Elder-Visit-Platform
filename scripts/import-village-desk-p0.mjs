@@ -122,7 +122,14 @@ function parseCases() {
         dispatch_priority: "中",
         external_id: String(row["編號"] || "").trim(),
         // Excel「里編號」＝該里紙本順序（與全域「編號」不同）
-        village_seq: Number(row["里編號"] || row["里編碼"] || 0) || "",
+        village_seq: Number(row["里編號"] || 0) || "",
+        // 里編碼六碼：縣市末三碼 + 里別三碼（上林里 040051）
+        village_code: (() => {
+          const district = String(row["縣市"] || "65000040").replace(/\D/g, "") || "65000040";
+          const seq = String(row["里別"] || "").replace(/\D/g, "");
+          if (!seq) return "";
+          return `${district.slice(-3).padStart(3, "0")}${seq.padStart(3, "0")}`;
+        })(),
       };
     })
     .filter(Boolean);

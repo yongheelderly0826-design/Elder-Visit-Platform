@@ -918,15 +918,21 @@ export function CareFormDeskPanel({
                     />
                     <span>
                       <span className="block font-semibold">
+                        {item.villageCode ? (
+                          <span className="mr-2 font-mono text-sm text-primary">
+                            {item.villageCode}
+                          </span>
+                        ) : null}
                         {item.villageSeq != null ? (
-                          <span className="mr-2 inline-block min-w-[2.5rem] text-primary">
+                          <span className="mr-2 inline-block min-w-[2rem] text-primary">
                             #{item.villageSeq}
                           </span>
                         ) : null}
                         {item.name}
                       </span>
                       <span className="mt-1 block text-sm text-muted-foreground">
-                        里編號 {item.villageSeq ?? "—"} · {item.caseCode} · {item.visitStatus}
+                        {item.villageCode ? `${item.villageCode} · ` : ""}
+                        {item.caseCode} · 里民序 {item.villageSeq ?? "—"} · {item.visitStatus}
                       </span>
                     </span>
                   </label>

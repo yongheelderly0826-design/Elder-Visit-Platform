@@ -5,6 +5,7 @@ import type {
   VisitSchedule,
   VisitorRegistrationWorkerGroup,
 } from "@/lib/domain/types";
+import { formatYongheVillageCode } from "@/lib/domain/village-admins";
 
 export const MANAGER_DESK_NOTE = "公所代填・紙本";
 
@@ -30,6 +31,8 @@ export type DeskCaseOption = {
   phone: string;
   /** 紙本里民順序（Excel 里編號）；同里內 KEY 對照用 */
   villageSeq: number | null;
+  /** 里編碼六碼，如 040051（上林里） */
+  villageCode: string;
   externalId: string;
 };
 
@@ -78,19 +81,28 @@ export function parseCareformAnswers(row: unknown): MohwLifeCareAnswers | undefi
   return undefined;
 }
 
-export function mapDeskCase(row: Record<string, unknown>): DeskCaseOption {
+export function mapDeskCase(
+  row: Record<string, unknown>,
+  villageCodeByName?: Record<string, string>,
+): DeskCaseOption {
   const caseId = String(row.case_id ?? row.external_id ?? "");
   const seqRaw = row.village_seq ?? row.villageSeq;
   const seqNum = Number(seqRaw);
+  const village = String(row.visit_village ?? row.household_village ?? "");
+  const fromRow = formatYongheVillageCode(
+    (row.village_code ?? row.villageCode) as string | number | null | undefined,
+  );
+  const fromMap = village ? formatYongheVillageCode(villageCodeByName?.[village]) : "";
   return {
     id: caseId,
     caseCode: String(row.encoded_id ?? row.external_id ?? caseId),
     name: String(row.name ?? ""),
-    village: String(row.visit_village ?? row.household_village ?? ""),
+    village,
     address: String(row.address ?? ""),
     visitStatus: String(row.visit_status ?? "待訪"),
     phone: String(row.primary_phone ?? ""),
     villageSeq: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : null,
+    villageCode: fromRow || fromMap,
     externalId: String(row.external_id ?? "").trim(),
   };
 }
