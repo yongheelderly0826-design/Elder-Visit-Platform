@@ -8,7 +8,7 @@ import type { UserRegistrationRequest, VisitorRegistrationWorkerGroup } from "@/
 import {
   visitorRegistrationDepartments,
   type VisitorCorrectionResult,
-} from "@/lib/domain/user-management";
+} from "@/lib/domain/visitor-registration-options";
 
 export function VisitorCorrectionDialog({
   request,

@@ -44,7 +44,7 @@ import type {
   Workspace,
   WorkspaceRoleKey,
 } from "@/lib/domain/types";
-import type { VisitorCorrectionResult } from "@/lib/domain/user-management";
+import type { VisitorCorrectionResult } from "@/lib/domain/visitor-registration-options";
 
 type UsersPayload = {
   workspace: Workspace;

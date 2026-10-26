@@ -19,30 +19,16 @@ import type {
   WorkspaceRoleKey,
 } from "@/lib/domain/types";
 
-export const visitorRegistrationDepartments = [
-  "志工",
-  "所本部",
-  "民政課",
-  "會計室",
-  "社會人文課",
-  "經建課",
-  "工務課",
-  "秘書室",
-  "人事室",
-  "政風室",
-  "役政災防課",
-  "其他",
-];
+export {
+  visitorRegistrationDepartments,
+  visitorRegistrationJobTitles,
+  type VisitorCorrectionResult,
+} from "@/lib/domain/visitor-registration-options";
 
-export const visitorRegistrationJobTitles = [
-  "公所人員",
-  "里長",
-  "里幹事",
-  "社工",
-  "志工",
-  "其他（鄰長）",
-  "其他",
-];
+import {
+  visitorRegistrationDepartments,
+  type VisitorCorrectionResult,
+} from "@/lib/domain/visitor-registration-options";
 
 export async function getUserManagementOverview() {
   const workspace = getCurrentWorkspace();
@@ -462,19 +448,6 @@ export type VisitorCorrectionInput = {
   departmentOther?: string | null;
 };
 
-export type VisitorCorrectionResult = {
-  requestId: string;
-  visitorId: string;
-  fullName: string;
-  phone: string;
-  photoUpdated: boolean;
-  displayName: string | null;
-  workerGroup: VisitorRegistrationWorkerGroup | null;
-  departmentName: string | null;
-  departmentOther: string | null;
-  message: string;
-};
-
 export async function correctApprovedVisitor(
   input: VisitorCorrectionInput,
 ): Promise<VisitorCorrectionResult> {
@@ -520,7 +493,10 @@ export async function correctApprovedVisitor(
   if (headshotDataUrl && !/^data:image\/[A-Za-z0-9.+-]+;base64,/.test(headshotDataUrl)) {
     throw new Error("證件照格式不正確，請重新選擇照片。");
   }
-  if (departmentName && !visitorRegistrationDepartments.includes(departmentName)) {
+  if (
+    departmentName &&
+    !(visitorRegistrationDepartments as readonly string[]).includes(departmentName)
+  ) {
     throw new Error("單位不在可選清單中。");
   }
   if (departmentName === "其他" && !departmentOther) {
