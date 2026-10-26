@@ -15,30 +15,6 @@ function datePart(value: unknown) {
   return match?.[0] ?? "";
 }
 
-function parseAnswersWindow(
-  assignmentId: string,
-  caseId: string,
-  visitorId: string,
-  teamIds: string[],
-  answers: Record<string, unknown> | null | undefined,
-  label: string,
-): DeskVisitWindow | null {
-  if (!answers) return null;
-  const visitDate = datePart(answers.visit_date);
-  const start = text(answers.visit_start_time).slice(0, 5);
-  const end = text(answers.visit_end_time).slice(0, 5);
-  if (!visitDate || !start || !end) return null;
-  return {
-    assignmentId,
-    caseId,
-    label,
-    visitDate,
-    start,
-    end,
-    visitorIds: teamIds.length ? teamIds : [visitorId],
-  };
-}
-
 export async function collectVisitorWindowsForDate(input: {
   visitorIds: string[];
   visitDate: string;
@@ -56,8 +32,10 @@ export async function collectVisitorWindowsForDate(input: {
     if (!assignmentId) continue;
     if (input.excludeAssignmentId && assignmentId === input.excludeAssignmentId) continue;
 
-    const dueDate = datePart(row.due_date);
     const notes = parseDeskAssignmentNotes(row.notes);
+    if (!notes.visitDate || !notes.visitStartTime || !notes.visitEndTime) continue;
+    if (notes.visitDate !== visitDate) continue;
+
     const rowTeam = [
       ...new Set(
         [
@@ -70,53 +48,15 @@ export async function collectVisitorWindowsForDate(input: {
     if (!teamIdsIntersect(team, rowTeam)) continue;
 
     const label = `${text(row.encoded_id) || text(row.case_id) || assignmentId}`;
-
-    if (notes.visitDate && notes.visitStartTime && notes.visitEndTime) {
-      if (notes.visitDate !== visitDate) continue;
-      windows.push({
-        assignmentId,
-        caseId: text(row.case_id),
-        label: `派案 ${label}`,
-        visitDate: notes.visitDate,
-        start: notes.visitStartTime,
-        end: notes.visitEndTime,
-        visitorIds: rowTeam,
-      });
-      continue;
-    }
-
-    if (dueDate && dueDate !== visitDate) continue;
-
-    try {
-      const careform = (await gasClient.careform.get(assignmentId)) as Record<
-        string,
-        unknown
-      > | null;
-      if (!careform) continue;
-      let answers: Record<string, unknown> | null = null;
-      if (careform.answers && typeof careform.answers === "object") {
-        answers = careform.answers as Record<string, unknown>;
-      } else if (typeof careform.answers_json === "string" && careform.answers_json) {
-        try {
-          answers = JSON.parse(careform.answers_json) as Record<string, unknown>;
-        } catch {
-          answers = null;
-        }
-      }
-      const fromAnswers = parseAnswersWindow(
-        assignmentId,
-        text(row.case_id),
-        text(row.visitor_id),
-        rowTeam,
-        answers,
-        `關懷表 ${label}`,
-      );
-      if (fromAnswers && fromAnswers.visitDate === visitDate) {
-        windows.push(fromAnswers);
-      }
-    } catch {
-      // 單筆讀取失敗不擋整批稽核
-    }
+    windows.push({
+      assignmentId,
+      caseId: text(row.case_id),
+      label: `派案 ${label}`,
+      visitDate: notes.visitDate,
+      start: notes.visitStartTime,
+      end: notes.visitEndTime,
+      visitorIds: rowTeam,
+    });
   }
 
   return windows;

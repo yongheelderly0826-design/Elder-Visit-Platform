@@ -246,6 +246,7 @@ export function CareFormDeskPanel({
   const villageOptions = selectedIdentity?.villages ?? [];
   const allVisitors = options?.visitors ?? [];
 
+  // 未分類只放民政欄，避免同一人出現兩欄造成點選混亂
   const civilVisitors = useMemo(
     () =>
       filterVisitors(
@@ -259,9 +260,7 @@ export function CareFormDeskPanel({
   const socialVisitors = useMemo(
     () =>
       filterVisitors(
-        allVisitors.filter(
-          (item) => item.workerGroup === "social_affairs" || item.workerGroup === "unknown",
-        ),
+        allVisitors.filter((item) => item.workerGroup === "social_affairs"),
         socialQuery,
       ),
     [allVisitors, socialQuery],
@@ -332,15 +331,27 @@ export function CareFormDeskPanel({
 
   function toggleVisitor(group: "civil" | "social", visitorId: string) {
     const otherIds = group === "civil" ? socialVisitorIds : civilVisitorIds;
-    const setter = group === "civil" ? setCivilVisitorIds : setSocialVisitorIds;
-    setter((current) => {
+    if (group === "civil") {
+      setCivilVisitorIds((current) => {
+        const next = current.includes(visitorId)
+          ? current.filter((id) => id !== visitorId)
+          : [...current, visitorId];
+        const stillSelected = next.includes(visitorId) || otherIds.includes(visitorId);
+        if (!stillSelected) {
+          setPrimaryVisitorId((primary) => (primary === visitorId ? "" : primary));
+        }
+        return next;
+      });
+      return;
+    }
+    setSocialVisitorIds((current) => {
       const next = current.includes(visitorId)
         ? current.filter((id) => id !== visitorId)
         : [...current, visitorId];
       const stillSelected = next.includes(visitorId) || otherIds.includes(visitorId);
-      setPrimaryVisitorId((primary) =>
-        primary === visitorId && !stillSelected ? "" : primary,
-      );
+      if (!stillSelected) {
+        setPrimaryVisitorId((primary) => (primary === visitorId ? "" : primary));
+      }
       return next;
     });
   }
@@ -595,6 +606,38 @@ export function CareFormDeskPanel({
         description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；每案進表前確認時間且不可與同組訪查員時段衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
       />
 
+      {batch ? (
+        <div className="sticky top-2 z-40 rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-950">
+                目前有待 KEY 清單（{batch.items.length} 案）— 上方步驟已暫鎖
+              </p>
+              <p className="mt-1 text-sm text-amber-900">
+                請往下到「4. 待 KEY 清單」確認時間進表；若要重選訪查員／個案，請先清空清單。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  document.getElementById("desk-batch-queue")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }}
+              >
+                跳到待 KEY 清單
+              </Button>
+              <Button type="button" onClick={clearBatch}>
+                清空清單（解鎖）
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {scopeBlocked && identityOptions.length === 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           尚未對到負責里。請確認訪查員名冊姓名／Email，或請總承辦到「里責任分配」設定。
@@ -752,7 +795,9 @@ export function CareFormDeskPanel({
           <p className="mt-3 text-sm text-muted-foreground">本次訪查組：{teamSummary || "尚未勾選"}</p>
         ) : null}
         {!visitorStepOk && selectedVisitorIds.length > 0 ? (
-          <p className="mt-2 text-sm text-amber-800">請點選一位已勾選的訪查員作為「主填表人」。</p>
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            已勾選 {selectedVisitorIds.length} 人，請再按其中一位的「設為主填表人」才能繼續勾個案。
+          </p>
         ) : null}
       </section>
 
@@ -923,7 +968,7 @@ export function CareFormDeskPanel({
       </section>
 
       {batch ? (
-        <section className="rounded-lg border bg-card p-4">
+        <section id="desk-batch-queue" className="rounded-lg border border-primary/30 bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">4. 待 KEY 清單（逐案確認時間）</h2>
