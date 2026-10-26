@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>訪查員自領多案流程｜依里編號連領</title>
+  <style>
+    :root {
+      --ink: #12324a;
+      --muted: #4b6474;
+      --line: #7aa3b3;
+      --card: #ffffff;
+      --bg: #f4f8fb;
+      --teal: #1f6f8b;
+      --ok: #2d7a4f;
+      --warn: #9a6b12;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "PingFang TC", "Noto Sans TC", "Hiragino Sans GB", sans-serif;
+    }
+    .poster {
+      width: 1400px;
+      min-height: 2100px;
+      padding: 48px 56px 40px;
+      background: var(--bg);
+    }
+    h1 {
+      margin: 0;
+      font-size: 40px;
+      letter-spacing: 0.04em;
+    }
+    .sub {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 20px;
+    }
+    .notes {
+      display: flex;
+      gap: 12px;
+      margin: 28px 0 36px;
+      flex-wrap: wrap;
+    }
+    .note {
+      background: #fff;
+      border: 1px solid #d5e3ea;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 16px;
+      color: var(--muted);
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .box {
+      width: 620px;
+      background: var(--card);
+      border: 2px solid #c5d7e0;
+      border-radius: 16px;
+      padding: 18px 22px;
+      text-align: center;
+      box-shadow: 0 6px 0 rgba(18, 50, 74, 0.04);
+    }
+    .box strong { display: block; font-size: 24px; }
+    .box span { display: block; margin-top: 6px; color: var(--muted); font-size: 16px; line-height: 1.5; }
+    .start { border-color: var(--teal); }
+    .start strong { color: var(--teal); }
+    .decision {
+      width: 560px;
+      background: #fff8e8;
+      border-color: #e0c48a;
+      border-radius: 999px;
+      padding: 22px 28px;
+    }
+    .ok { border-color: #9dcdb0; }
+    .end {
+      width: 720px;
+      background: #e8f4ef;
+      border-color: #8fbea4;
+    }
+    .end strong { color: var(--ok); }
+    .arrow {
+      width: 2px;
+      height: 28px;
+      background: var(--line);
+      position: relative;
+    }
+    .arrow::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      bottom: -2px;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 10px solid var(--line);
+    }
+    .split {
+      width: 980px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      position: relative;
+      margin-top: 8px;
+    }
+    .split::before {
+      content: "";
+      position: absolute;
+      top: -14px;
+      left: 25%;
+      right: 25%;
+      height: 14px;
+      border-top: 2px solid var(--line);
+      border-left: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+    }
+    .lane { display: flex; flex-direction: column; align-items: center; }
+    .lane-label {
+      font-size: 15px;
+      color: var(--teal);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .lane .box { width: 430px; }
+    .join {
+      width: 980px;
+      height: 18px;
+      position: relative;
+      margin: 4px 0 0;
+    }
+    .join::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 16px;
+      border-bottom: 2px solid var(--line);
+      border-left: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+    }
+    .warn { background: #fff4f0; border-color: #e3b2a4; }
+    .soft { background: #f0f7fb; border-color: #b7d0dc; }
+    .loop {
+      width: 720px;
+      background: #eef6f4;
+      border-color: #9bc4b4;
+      border-style: dashed;
+    }
+    .foot {
+      margin-top: 36px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <h1>訪查員自領多案流程｜依里編號連領</h1>
+    <p class="sub">方案 B｜實地訪查時一次領多案，於任務列表逐案簽到並 KEY 關懷表</p>
+    <div class="notes">
+      <div class="note">領案模式：B 依里編號連領</div>
+      <div class="note">來源標記：訪員自領・實訪</div>
+      <div class="note">池來源：個案名冊尚無進行中派案</div>
+      <div class="note">無「今日路線清單」步驟</div>
+    </div>
+
+    <div class="col">
+      <div class="box start">
+        <strong>訪查員登入</strong>
+        <span>進入既有「訪員任務」畫面</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box">
+        <strong>訪員任務（卡片列表）</strong>
+        <span>可查看進行中任務，或開始一次領多案</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box">
+        <strong>一次領多案</strong>
+        <span>方案 B：依里編號連領（非真隨機）</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box">
+        <strong>輸入里編碼＋領取數 N</strong>
+        <span>例：里編碼 040051；領取數 N＝想一次帶走幾筆</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box soft">
+        <strong>自該里「尚無進行中派案」池連領</strong>
+        <span>依 village_seq（里編號）由小到大，連領最多 N 筆</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box decision">
+        <strong>可領筆數是否足夠？／有無衝突？</strong>
+      </div>
+
+      <div class="split">
+        <div class="lane">
+          <div class="lane-label">池中 ≥ N</div>
+          <div class="box ok">
+            <strong>連領 N 筆成功</strong>
+            <span>派案寫入；擋別人已有進行中派案</span>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-label">池中 &lt; N 或衝突</div>
+          <div class="box warn">
+            <strong>有幾筆領幾筆並提示</strong>
+            <span>不足 N 時告知實際領取數；衝突案跳過</span>
+          </div>
+        </div>
+      </div>
+      <div class="join"></div>
+      <div class="arrow"></div>
+
+      <div class="box">
+        <strong>回到訪員任務卡片列表</strong>
+        <span>新領案件出現在列表；不另開「今日路線」</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box soft">
+        <strong>（可選）預排時段顯示於卡片</strong>
+        <span>訪視約 10 分＋路途約 5 分，僅供參考，可略過</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box loop">
+        <strong>逐案循環：到宅簽到 → KEY 關懷表</strong>
+        <span>完成一案後回任務列表，選下一案繼續</span>
+      </div>
+      <div class="arrow"></div>
+      <div class="box decision">
+        <strong>今日領取的案都完成了？</strong>
+      </div>
+      <div class="arrow"></div>
+      <div class="box end">
+        <strong>收工／核銷鉤稽</strong>
+        <span>以 assignment_id＋visitor_id 對帳；來源：訪員自領・實訪</span>
+      </div>
+    </div>
+
+    <p class="foot">
+      資料來自 Google Sheets 個案名冊（village_code、village_seq、case_id）；派案表擋「別人已有進行中派案」。<br />
+      鉤稽鍵：assignment_id + visitor_id｜永和區獨居長者訪查管理平台
+    </p>
+  </div>
+</body>
+</html>
