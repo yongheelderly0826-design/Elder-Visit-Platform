@@ -4,7 +4,7 @@ import { VisitDialogueForm } from "@/components/visitor/visit-dialogue-form";
 import { VisitorWorkflowBar } from "@/components/visitor/visitor-workflow-bar";
 import { requireVisitorSession } from "@/lib/auth/visitor-guard";
 import { FIELD_SELF_SOURCE_NOTE } from "@/lib/domain/desk-care-batch";
-import { parseCareformAnswers } from "@/lib/domain/manager-care-form-desk";
+import { mapDeskVisitor, parseCareformAnswers } from "@/lib/domain/manager-care-form-desk";
 import { resolveVisitorIdentity } from "@/lib/domain/demo-visitor-link";
 import { gasClient } from "@/lib/gas-client";
 import { getRepository } from "@/lib/repositories";
@@ -25,7 +25,7 @@ export default async function VisitDetailPage({
     notFound();
   }
 
-  const { visitorId } = resolveVisitorIdentity(session);
+  const { visitorId, name: visitorName } = resolveVisitorIdentity(session);
   if (visitorId && task.schedule.visitorId && task.schedule.visitorId !== visitorId) {
     notFound();
   }
@@ -40,13 +40,33 @@ export default async function VisitDetailPage({
   const fieldSelfKey = String(task.schedule.assignmentReason ?? "").includes(
     FIELD_SELF_SOURCE_NOTE,
   );
+  const useDeskDefaults = fromQuickKey || fieldSelfKey;
   const listReturnPath = fromQuickKey
     ? villageCode
       ? `/visitor/quick-key?villageCode=${encodeURIComponent(villageCode)}`
       : "/visitor/quick-key"
     : undefined;
 
-  const { name: visitorName } = resolveVisitorIdentity(session);
+  let selectedVisitor = null as ReturnType<typeof mapDeskVisitor> | null;
+  if (visitorId) {
+    try {
+      const row = (await gasClient.visitors.get(visitorId)) as Record<string, unknown> | null;
+      if (row) selectedVisitor = mapDeskVisitor(row);
+    } catch {
+      selectedVisitor = null;
+    }
+  }
+  if (!selectedVisitor && (visitorId || visitorName)) {
+    selectedVisitor = {
+      id: visitorId || "",
+      name: visitorName || session.name || "",
+      badgeNo: "",
+      status: "",
+      nationalId: "",
+      phone: "",
+      workerGroup: "unknown",
+    };
+  }
 
   return (
     <AppShell active={listReturnPath ? "quickKey" : "tasks"}>
@@ -57,8 +77,9 @@ export default async function VisitDetailPage({
         readonly={readonly}
         initialAnswers={submittedAnswers}
         listReturnPath={listReturnPath}
-        visitorName={visitorName || session.name}
-        formDefaults={fromQuickKey || fieldSelfKey ? "desk" : "roster"}
+        visitorName={selectedVisitor?.name || visitorName || session.name}
+        selectedVisitor={selectedVisitor ?? undefined}
+        formDefaults={useDeskDefaults ? "desk" : "roster"}
       />
     </AppShell>
   );

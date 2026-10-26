@@ -167,6 +167,27 @@ export function finalizeDeskContactPhones(answers: MohwLifeCareAnswers): MohwLif
   };
 }
 
+/** 現場現在：民國訪查日＋開始／結束（預設時長 10 分）。 */
+export function getDeskNowVisitClock(now: Date = new Date()): {
+  visitDate: string;
+  visitStartTime: string;
+  visitEndTime: string;
+} {
+  const visitDate = formatDeskBirthDate(now) || formatRocDate(now);
+  const safeDate =
+    visitDate && visitDate !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(visitDate)
+      ? visitDate
+      : formatRocDate(now);
+  const startTotal = now.getHours() * 60 + now.getMinutes();
+  const endTotal = Math.min(startTotal + 10, 23 * 60 + 59);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    visitDate: safeDate === "INVALID_DATE" ? "" : safeDate,
+    visitStartTime: `${pad(Math.floor(startTotal / 60))}:${pad(startTotal % 60)}`,
+    visitEndTime: `${pad(Math.floor(endTotal / 60))}:${pad(endTotal % 60)}`,
+  };
+}
+
 /** 建檔初始答案。 */
 export function createMohwDeskInitialAnswers(
   elderCase: ElderCase,
@@ -175,6 +196,7 @@ export function createMohwDeskInitialAnswers(
   const fromCase = createInitialMohwAnswers(elderCase, schedule);
   const inferredGender = inferGenderFromNationalId(elderCase.nationalId);
   const birthDate = formatDeskBirthDate(elderCase.birthDate ?? null);
+  const clock = getDeskNowVisitClock();
 
   const householdCity = String(fromCase.household_city || "新北市");
   const householdDistrict = String(fromCase.household_district || elderCase.district || "永和區");
@@ -188,6 +210,10 @@ export function createMohwDeskInitialAnswers(
   return {
     ...MOHW_DESK_FORM_DEFAULTS,
     ...fromCase,
+    // 一律帶入「今天＋現場時間」（民國），勿留西元 ISO
+    visit_date: clock.visitDate || fromCase.visit_date,
+    visit_start_time: clock.visitStartTime,
+    visit_end_time: clock.visitEndTime,
     gender: inferredGender || String(fromCase.gender || elderCase.gender || ""),
     birth_date: birthDate,
     living_address_type: "與戶籍地址相同",

@@ -22,6 +22,7 @@ import {
   asMultiChoiceValues,
   createMohwDeskInitialAnswers,
   finalizeDeskContactPhones,
+  getDeskNowVisitClock,
   MOHW_NONE_OF_ABOVE,
   multiIncludesNoneOfAbove,
   toggleExclusiveNoneMulti,
@@ -183,6 +184,7 @@ export function VisitDialogueForm({
     const initial = useDeskFormDefaults
       ? createMohwDeskInitialAnswers(elderCase, schedule)
       : createInitialMohwAnswers(elderCase, schedule);
+    const clock = getDeskNowVisitClock();
     const timedVisitDate = initialTimes?.visitDate
       ? (() => {
           const formatted = formatRocDate(initialTimes.visitDate);
@@ -192,20 +194,45 @@ export function VisitDialogueForm({
             ? formatted
             : initialTimes.visitDate;
         })()
-      : undefined;
+      : useDeskFormDefaults
+        ? clock.visitDate
+        : undefined;
     const withTimes: MohwLifeCareAnswers = {
       ...initial,
       ...initialAnswers,
       ...(timedVisitDate ? { visit_date: timedVisitDate } : {}),
-      ...(initialTimes?.visitStartTime ? { visit_start_time: initialTimes.visitStartTime } : {}),
-      ...(initialTimes?.visitEndTime ? { visit_end_time: initialTimes.visitEndTime } : {}),
+      ...(initialTimes?.visitStartTime
+        ? { visit_start_time: initialTimes.visitStartTime }
+        : useDeskFormDefaults
+          ? { visit_start_time: clock.visitStartTime }
+          : {}),
+      ...(initialTimes?.visitEndTime
+        ? { visit_end_time: initialTimes.visitEndTime }
+        : useDeskFormDefaults
+          ? { visit_end_time: clock.visitEndTime }
+          : {}),
     };
+    const workerKind: "social" | "civil" =
+      selectedVisitor?.workerGroup === "civil_affairs" ? "civil" : "social";
+    const visitorForSeed =
+      selectedVisitor ||
+      (visitorName
+        ? {
+            id: "",
+            name: visitorName,
+            badgeNo: "",
+            status: "",
+            nationalId: "",
+            phone: CASE_PHONE_NONE,
+            workerGroup: workerKind === "civil" ? "civil_affairs" : "social_affairs",
+          }
+        : null);
     const seeded =
       useDeskFormDefaults &&
-      selectedVisitor &&
+      visitorForSeed &&
       !withTimes.social_worker_name &&
       !withTimes.civil_worker_name
-        ? applyVisitorToWorkerAnswers(withTimes, selectedVisitor, "social")
+        ? applyVisitorToWorkerAnswers(withTimes, visitorForSeed, workerKind)
         : {};
     return { ...withTimes, ...seeded };
   });
@@ -215,9 +242,9 @@ export function VisitDialogueForm({
       .map((section) => section.title),
   );
   const draftKey = getVisitDraftKey(schedule.id);
-  // desk 預設換 key，避免舊訪員草稿蓋掉性別／電話等建檔預設
+  // desk 預設換 key，避免舊訪員草稿蓋掉性別／電話／錯誤西元年
   const careFormDraftKey = `${draftKey}:mohw_life_care_form${
-    useDeskFormDefaults ? ":desk_defaults_v2" : ""
+    useDeskFormDefaults ? ":desk_defaults_v3" : ""
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   const deskPaperSlotsOk =
@@ -266,7 +293,11 @@ export function VisitDialogueForm({
           syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
           submission,
         ),
-        { row: 2, registryNationalId: elderCase.nationalId ?? "" },
+        {
+          row: 2,
+          registryNationalId: elderCase.nationalId ?? "",
+          allowMissingWorkerNationalId: useDeskFormDefaults,
+        },
       ),
     [careFormAnswers, elderCase.nationalId, submission],
   );
@@ -362,6 +393,7 @@ export function VisitDialogueForm({
       const localCheck = validateMohwLifeCareRow(mohwAnswers, {
         row: 2,
         registryNationalId: elderCase.nationalId ?? "",
+        allowMissingWorkerNationalId: useDeskFormDefaults,
       });
       if (!localCheck.ok) {
         setMohwErrors(localCheck.errors);
@@ -1429,6 +1461,7 @@ function applyVisitorToWorkerAnswers(
   kind: "social" | "civil",
 ): MohwLifeCareAnswers {
   const visitDate = String(current.visit_date ?? "").trim();
+  const phone = String(visitor.phone || "").trim() || CASE_PHONE_NONE;
   if (kind === "civil") {
     return {
       social_worker_role: "",
@@ -1440,7 +1473,7 @@ function applyVisitorToWorkerAnswers(
       civil_worker_role: String(current.civil_worker_role || "公所人員"),
       civil_worker_name: visitor.name,
       civil_worker_national_id: visitor.nationalId || "",
-      civil_worker_phone: visitor.phone || "",
+      civil_worker_phone: phone,
       civil_worker_date: String(current.civil_worker_date || visitDate),
     };
   }
@@ -1453,7 +1486,7 @@ function applyVisitorToWorkerAnswers(
     social_worker_role: String(current.social_worker_role || "志工"),
     social_worker_name: visitor.name,
     social_worker_national_id: visitor.nationalId || "",
-    social_worker_phone: visitor.phone || "",
+    social_worker_phone: phone,
     social_worker_date: String(current.social_worker_date || visitDate),
   };
 }

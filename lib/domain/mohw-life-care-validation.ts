@@ -399,7 +399,12 @@ function pushError(
  */
 export function validateMohwLifeCareRow(
   answers: MohwLifeCareAnswers,
-  options: { row?: number; registryNationalId?: string | null } = {},
+  options: {
+    row?: number;
+    registryNationalId?: string | null;
+    /** 快速 KEY：社政／民政擇一後，身分證可暫缺（姓名＋身分＋日期＋電話仍要） */
+    allowMissingWorkerNationalId?: boolean;
+  } = {},
 ): MohwValidationResult {
   const row = options.row ?? 2;
   const errors: MohwValidationError[] = [];
@@ -485,13 +490,21 @@ export function validateMohwLifeCareRow(
   }
 
   if (hasSocial) {
-    for (const key of [
-      "social_worker_role",
-      "social_worker_name",
-      "social_worker_national_id",
-      "social_worker_phone",
-      "social_worker_date",
-    ] as const) {
+    const socialKeys: string[] = options.allowMissingWorkerNationalId
+      ? [
+          "social_worker_role",
+          "social_worker_name",
+          "social_worker_phone",
+          "social_worker_date",
+        ]
+      : [
+          "social_worker_role",
+          "social_worker_name",
+          "social_worker_national_id",
+          "social_worker_phone",
+          "social_worker_date",
+        ];
+    for (const key of socialKeys) {
       if (!hasValue(answers[key])) {
         pushError(errors, {
           key,
@@ -504,13 +517,21 @@ export function validateMohwLifeCareRow(
   }
 
   if (hasCivil) {
-    for (const key of [
-      "civil_worker_role",
-      "civil_worker_name",
-      "civil_worker_national_id",
-      "civil_worker_phone",
-      "civil_worker_date",
-    ] as const) {
+    const civilKeys: string[] = options.allowMissingWorkerNationalId
+      ? [
+          "civil_worker_role",
+          "civil_worker_name",
+          "civil_worker_phone",
+          "civil_worker_date",
+        ]
+      : [
+          "civil_worker_role",
+          "civil_worker_name",
+          "civil_worker_national_id",
+          "civil_worker_phone",
+          "civil_worker_date",
+        ];
+    for (const key of civilKeys) {
       if (!hasValue(answers[key])) {
         pushError(errors, {
           key,
