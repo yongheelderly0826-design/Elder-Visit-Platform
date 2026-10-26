@@ -38,6 +38,7 @@ import {
 } from "@/lib/domain/mohw-life-care-ui";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import {
+  CASE_PHONE_NONE,
   CASE_PHONE_REFUSED,
   digitsOnly,
   normalizeIndoorPhone,
@@ -1648,13 +1649,19 @@ function CareFormInput({
 
   const isElderPhoneField = field.mohwKey === "phone" || field.mohwKey === "mobile";
   const isEmergencyPhoneField = field.mohwKey === "emergency_contact_phone";
-  const refused = isElderPhoneField && rawText.replace(/\D/g, "") === CASE_PHONE_REFUSED;
+  const phoneDigitsValue = rawText.replace(/\D/g, "");
+  const nonePhone =
+    isElderPhoneField && phoneDigitsValue === CASE_PHONE_NONE;
+  const refused =
+    isElderPhoneField && phoneDigitsValue === CASE_PHONE_REFUSED;
+  const phoneLocked = nonePhone || refused;
+  const deskPhonePrefix = field.mohwKey === "phone" ? "02" : "09";
   const placeholder = isNameField
     ? "請填完整姓名"
     : isElderPhoneField && deskEntry
       ? field.mohwKey === "phone"
-        ? "02 開頭市話，空白則匯出 0000000000"
-        : "09 開頭手機，空白則匯出 0000000000"
+        ? "02 開頭市話，或勾下方「無電話／不願提供」"
+        : "09 開頭手機，或勾下方「無電話／不願提供」"
       : isElderPhoneField
         ? "0000000000 或 9999999999 或實際電話"
         : isEmergencyPhoneField
@@ -1667,9 +1674,9 @@ function CareFormInput({
   const phoneHint = isElderPhoneField
     ? deskEntry
       ? field.mohwKey === "phone"
-        ? "台北市話多為 02 開頭。留白送出→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
-        : "格式 0900123456。留白送出→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
-      : "無手機及電話請填 0000000000；不願提供請填 9999999999。"
+        ? "台北市話多為 02 開頭。勾「無電話」→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
+        : "格式 0900123456。勾「無電話」→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
+      : "無手機及電話請勾「無電話」或填 0000000000；不願提供請勾或填 9999999999。"
     : isEmergencyPhoneField
       ? "非必填，沒有可留空。"
       : isPhoneField
@@ -1685,8 +1692,10 @@ function CareFormInput({
         type="text"
         inputMode={isPhoneField || field.type === "number" ? "numeric" : undefined}
         placeholder={placeholder}
-        value={refused ? CASE_PHONE_REFUSED : rawText}
-        disabled={refused}
+        value={
+          refused ? CASE_PHONE_REFUSED : nonePhone ? CASE_PHONE_NONE : rawText
+        }
+        disabled={phoneLocked}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
@@ -1718,21 +1727,38 @@ function CareFormInput({
         }}
       />
       {deskEntry && isElderPhoneField ? (
-        <label className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground">
-          <input
-            type="checkbox"
-            className="h-4 w-4"
-            checked={refused}
-            onChange={(event) => {
-              if (event.target.checked) {
-                onChange(CASE_PHONE_REFUSED);
-                return;
-              }
-              onChange(field.mohwKey === "phone" ? "02" : "09");
-            }}
-          />
-          不願提供（匯出 9999999999）
-        </label>
+        <div className="mt-1 grid gap-1.5">
+          <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={nonePhone}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  onChange(CASE_PHONE_NONE);
+                  return;
+                }
+                onChange(deskPhonePrefix);
+              }}
+            />
+            無電話（匯出 0000000000）
+          </label>
+          <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={refused}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  onChange(CASE_PHONE_REFUSED);
+                  return;
+                }
+                onChange(deskPhonePrefix);
+              }}
+            />
+            不願提供（匯出 9999999999）
+          </label>
+        </div>
       ) : null}
       {phoneHint ? (
         <p className="text-xs font-normal leading-5 text-muted-foreground">{phoneHint}</p>
