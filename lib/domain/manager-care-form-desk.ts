@@ -47,12 +47,22 @@ export type DeskNewCaseInput = {
   mobile?: string;
 };
 
+export type DeskPrepareCaseRef = {
+  caseId: string;
+  caseName?: string;
+  caseCode?: string;
+};
+
 export type DeskPrepareInput = {
   caseId?: string;
   caseIds?: string[];
+  /** 帶名稱／編碼可少打 GAS cases.get，加速大量 KEY 準備 */
+  cases?: DeskPrepareCaseRef[];
   newCase?: DeskNewCaseInput;
   visitorId: string;
   companionVisitorIds?: string[];
+  visitorName?: string;
+  companionNames?: Record<string, string>;
   visitDate?: string;
   visitStartTime?: string;
   visitEndTime?: string;

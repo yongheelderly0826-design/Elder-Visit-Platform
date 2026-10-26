@@ -417,14 +417,31 @@ export function CareFormDeskPanel({
     setBusy(true);
     setMessage(null);
     try {
+      const selectedCases = villageCases.filter((item) => selectedCaseIds.includes(item.id));
+      setMessage(
+        creating
+          ? "正在建立個案並準備派案…"
+          : `正在準備 ${selectedCases.length || selectedCaseIds.length} 筆派案，請稍候…`,
+      );
       const response = await fetch("/api/manager/care-forms/prepare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          cases: creating
+            ? undefined
+            : selectedCases.map((item) => ({
+                caseId: item.id,
+                caseName: item.name,
+                caseCode: item.caseCode,
+              })),
           caseIds: creating ? undefined : selectedCaseIds,
           newCase: creating ? newCase : undefined,
           visitorId: primaryVisitorId,
+          visitorName: visitorNameById[primaryVisitorId] || "",
           companionVisitorIds,
+          companionNames: Object.fromEntries(
+            companionVisitorIds.map((id) => [id, visitorNameById[id] || ""]),
+          ),
         }),
       });
       const json = (await response.json()) as {

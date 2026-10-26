@@ -6,6 +6,7 @@ import {
   MANAGER_DESK_NOTE,
   toDeskElderCase,
   toDeskSchedule,
+  type DeskPrepareCaseRef,
   type DeskPrepareInput,
 } from "@/lib/domain/manager-care-form-desk";
 import { gasClient } from "@/lib/gas-client";
@@ -25,14 +26,25 @@ export async function POST(request: NextRequest) {
     ),
   ];
   const visitDate = String(body.visitDate ?? "").trim();
-  const caseIds = [
-    ...new Set(
-      [
-        ...(body.caseIds ?? []).map((id) => String(id ?? "").trim()),
-        String(body.caseId ?? "").trim(),
-      ].filter(Boolean),
-    ),
-  ];
+
+  const caseRefs: DeskPrepareCaseRef[] = [];
+  const seen = new Set<string>();
+  for (const item of body.cases ?? []) {
+    const caseId = String(item?.caseId ?? "").trim();
+    if (!caseId || seen.has(caseId)) continue;
+    seen.add(caseId);
+    caseRefs.push({
+      caseId,
+      caseName: String(item.caseName ?? "").trim(),
+      caseCode: String(item.caseCode ?? "").trim(),
+    });
+  }
+  for (const id of [...(body.caseIds ?? []), body.caseId]) {
+    const caseId = String(id ?? "").trim();
+    if (!caseId || seen.has(caseId)) continue;
+    seen.add(caseId);
+    caseRefs.push({ caseId });
+  }
 
   if (!visitorId) {
     return NextResponse.json(
@@ -42,30 +54,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const visitorRows = ((await gasClient.visitors.list({ slim: true })) as Record<
-      string,
-      unknown
-    >[]) ?? [];
-    const nameById = new Map(
-      visitorRows.map((row) => [
-        String(row.visitor_id ?? ""),
-        String(row.name ?? row.full_name ?? ""),
-      ]),
-    );
+    // 前端已帶訪查員姓名時略過 visitors.list，省一輪 GAS
+    let primaryName = String(body.visitorName ?? "").trim();
+    let companionNames: Record<string, string> = { ...(body.companionNames ?? {}) };
+    if (!primaryName || companionVisitorIds.some((id) => !companionNames[id])) {
+      const visitorRows = ((await gasClient.visitors.list({ slim: true })) as Record<
+        string,
+        unknown
+      >[]) ?? [];
+      const nameById = new Map(
+        visitorRows.map((row) => [
+          String(row.visitor_id ?? ""),
+          String(row.name ?? row.full_name ?? ""),
+        ]),
+      );
+      primaryName = primaryName || nameById.get(visitorId) || "";
+      companionNames = Object.fromEntries(
+        companionVisitorIds.map((id) => [id, companionNames[id] || nameById.get(id) || ""]),
+      );
+    }
+
     const notes = buildDeskAssignmentNotes({
       primaryVisitorId: visitorId,
-      primaryVisitorName: nameById.get(visitorId) || "",
+      primaryVisitorName: primaryName,
       companionVisitorIds,
-      companionNames: Object.fromEntries(
-        companionVisitorIds.map((id) => [id, nameById.get(id) || ""]),
-      ),
+      companionNames,
       visitDate: visitDate || undefined,
       visitStartTime: body.visitStartTime,
       visitEndTime: body.visitEndTime,
     });
 
-    const preparedCaseIds: string[] = [...caseIds];
-    if (!preparedCaseIds.length && body.newCase?.name?.trim()) {
+    if (!caseRefs.length && body.newCase?.name?.trim()) {
       const created = await gasClient.cases.create({
         name: body.newCase.name.trim(),
         id_number: body.newCase.idNumber?.trim() ?? "",
@@ -88,56 +107,63 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      preparedCaseIds.push(createdId);
+      caseRefs.push({
+        caseId: createdId,
+        caseName: String(created.name ?? body.newCase.name.trim()),
+        caseCode: String(created.encoded_id ?? created.external_id ?? createdId),
+      });
     }
 
-    if (!preparedCaseIds.length) {
+    if (!caseRefs.length) {
       return NextResponse.json(
         { error: { code: "VALIDATION", message: "請至少選擇一位個案。" } },
         { status: 400 },
       );
     }
 
+    const due = visitDate || new Date().toISOString().slice(0, 10);
     const items: Array<{
       caseId: string;
       caseName: string;
       caseCode: string;
       assignmentId: string;
       visitAttempt: number;
-      elderCase: ReturnType<typeof toDeskElderCase>;
+      elderCase?: ReturnType<typeof toDeskElderCase>;
       schedule: ReturnType<typeof toDeskSchedule>;
     }> = [];
 
-    for (const caseId of preparedCaseIds) {
-      const caseRow = (await gasClient.cases.get(caseId)) as Record<string, unknown> | null;
-      if (!caseRow?.case_id) {
-        return NextResponse.json(
-          { error: { code: "VALIDATION", message: `找不到個案 ${caseId}` } },
-          { status: 400 },
-        );
-      }
+    // 每案只打一次 dispatch（不再前後各 cases.get）；多案平行派案縮短等待
+    const settled = await Promise.all(
+      caseRefs.map(async (ref) => {
+        const saved = (await gasClient.assignments.dispatch({
+          case_id: ref.caseId,
+          visitor_id: visitorId,
+          due_date: visitDate || undefined,
+          notes,
+          auto_confirm: true,
+          allow_multi_active: true,
+        })) as Record<string, unknown>;
 
-      const saved = (await gasClient.assignments.dispatch({
-        case_id: caseId,
-        visitor_id: visitorId,
-        due_date: visitDate || undefined,
-        notes,
-        auto_confirm: true,
-        allow_multi_active: true,
-      })) as Record<string, unknown>;
+        const caseName =
+          ref.caseName ||
+          String(saved.elder_name ?? "") ||
+          ref.caseId;
+        const caseCode =
+          ref.caseCode ||
+          String(saved.encoded_id ?? "") ||
+          ref.caseId;
 
-      const latestCase =
-        ((await gasClient.cases.get(caseId)) as Record<string, unknown> | null) ?? caseRow;
-      items.push({
-        caseId,
-        caseName: String(latestCase.name ?? ""),
-        caseCode: String(latestCase.encoded_id ?? latestCase.external_id ?? caseId),
-        assignmentId: String(saved.assignment_id ?? ""),
-        visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
-        elderCase: toDeskElderCase(latestCase),
-        schedule: toDeskSchedule(saved, visitDate || new Date().toISOString().slice(0, 10)),
-      });
-    }
+        return {
+          caseId: ref.caseId,
+          caseName,
+          caseCode,
+          assignmentId: String(saved.assignment_id ?? ""),
+          visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
+          schedule: toDeskSchedule(saved, due),
+        };
+      }),
+    );
+    items.push(...settled);
 
     invalidateGasReadCaches();
 
@@ -148,10 +174,15 @@ export async function POST(request: NextRequest) {
         batch: true,
         count: items.length,
         items,
-        // 相容舊版單案回應
         assignmentId: first?.assignmentId ?? "",
         visitAttempt: first?.visitAttempt ?? 1,
-        elderCase: first?.elderCase,
+        elderCase: first
+          ? toDeskElderCase({
+              case_id: first.caseId,
+              name: first.caseName,
+              encoded_id: first.caseCode,
+            })
+          : undefined,
         schedule: first?.schedule,
         visitStartTime: body.visitStartTime ?? "",
         visitEndTime: body.visitEndTime ?? "",
