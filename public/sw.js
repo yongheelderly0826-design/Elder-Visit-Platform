@@ -1,4 +1,4 @@
-const CACHE_NAME = "elder-visit-platform-v3";
+const CACHE_NAME = "elder-visit-platform-v4";
 const APP_SHELL = [
   "/offline",
   "/manifest.webmanifest",

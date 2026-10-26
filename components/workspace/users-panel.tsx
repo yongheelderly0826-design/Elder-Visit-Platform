@@ -1798,7 +1798,7 @@ function ApprovedVisitorRegistry({
                     onClick={() => setCorrectingRequest(request)}
                   >
                     <PenLine className="h-4 w-4" />
-                    補正姓名／照片
+                    補正資料
                   </Button>
                 )}
                 <Button

@@ -147,9 +147,9 @@ export function VisitorCorrectionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <section className="w-full max-w-lg rounded-lg border bg-card p-4 shadow-lg">
-        <div className="flex items-start justify-between gap-3">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center sm:p-4">
+      <section className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-card shadow-lg">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b p-4">
           <div>
             <p className="text-sm font-medium text-primary">已通過訪員補正</p>
             <h2 className="mt-1 text-lg font-semibold">{request.fullName}</h2>
@@ -163,138 +163,144 @@ export function VisitorCorrectionDialog({
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-[7.5rem_1fr]">
-          <div className="grid gap-2">
-            <div className="mx-auto aspect-[3/4] w-[7.5rem] overflow-hidden rounded border bg-white">
-              {currentPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={currentPhoto} alt={`${request.fullName} 證件照`} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">缺照片</div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={photoBusy || saving}
-                onClick={() => cameraInputRef.current?.click()}
-              >
-                <Camera className="h-4 w-4" />
-                拍照
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={photoBusy || saving}
-                onClick={() => albumInputRef.current?.click()}
-              >
-                {photoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                相簿
-              </Button>
-            </div>
-            <input
-              ref={cameraInputRef}
-              className="hidden"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(event) => {
-                void handlePhoto(event.target.files?.[0]);
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={albumInputRef}
-              className="hidden"
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                void handlePhoto(event.target.files?.[0]);
-                event.target.value = "";
-              }}
-            />
-          </div>
-
-          <div className="grid gap-3">
-            <label className="grid gap-1 text-sm font-medium">
-              姓名
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="grid gap-4 sm:grid-cols-[7.5rem_1fr]">
+            <div className="grid gap-2">
+              <div className="mx-auto aspect-[3/4] w-[7.5rem] overflow-hidden rounded border bg-white">
+                {currentPhoto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={currentPhoto} alt={`${request.fullName} 證件照`} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">缺照片</div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={photoBusy || saving}
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="h-4 w-4" />
+                  拍照
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={photoBusy || saving}
+                  onClick={() => albumInputRef.current?.click()}
+                >
+                  {photoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  相簿
+                </Button>
+              </div>
               <input
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              手機
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                inputMode="numeric"
-                value={phone}
-                onChange={(event) => setPhone(normalizeTaiwanMobilePhone(event.target.value) || event.target.value)}
-                placeholder="09xxxxxxxx"
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              民政 / 社政
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={workerGroup}
-                onChange={(event) =>
-                  setWorkerGroup(event.target.value as VisitorRegistrationWorkerGroup)
-                }
-              >
-                <option value="civil_affairs">民政訪查人員</option>
-                <option value="social_affairs">社政訪查人員</option>
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              科室 / 單位別
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={departmentName}
+                ref={cameraInputRef}
+                className="hidden"
+                type="file"
+                accept="image/*"
+                capture="environment"
                 onChange={(event) => {
-                  const next = event.target.value;
-                  setDepartmentName(next);
-                  if (next !== "其他") setDepartmentOther("");
+                  void handlePhoto(event.target.files?.[0]);
+                  event.target.value = "";
                 }}
-              >
-                {visitorRegistrationDepartments.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {departmentName === "其他" ? (
+              />
+              <input
+                ref={albumInputRef}
+                className="hidden"
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  void handlePhoto(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+            </div>
+
+            <div className="grid gap-3">
+              <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                可改姓名、手機、證件照，以及下方<strong className="font-medium text-foreground">民政／社政</strong>與
+                <strong className="font-medium text-foreground">單位</strong>（含「其他」）。暱稱會依單位自動重算。
+              </p>
               <label className="grid gap-1 text-sm font-medium">
-                其他單位
+                民政 / 社政
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={workerGroup}
+                  onChange={(event) =>
+                    setWorkerGroup(event.target.value as VisitorRegistrationWorkerGroup)
+                  }
+                >
+                  <option value="civil_affairs">民政訪查人員</option>
+                  <option value="social_affairs">社政訪查人員</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                科室 / 單位別
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={departmentName}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setDepartmentName(next);
+                    if (next !== "其他") setDepartmentOther("");
+                  }}
+                >
+                  {visitorRegistrationDepartments.map((department) => (
+                    <option key={department} value={department}>
+                      {department}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {departmentName === "其他" ? (
+                <label className="grid gap-1 text-sm font-medium">
+                  其他單位
+                  <input
+                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                    value={departmentOther}
+                    onChange={(event) => setDepartmentOther(event.target.value)}
+                    placeholder="請填寫單位"
+                  />
+                </label>
+              ) : null}
+              <label className="grid gap-1 text-sm font-medium">
+                姓名
                 <input
                   className="h-10 rounded-md border bg-background px-3 text-sm"
-                  value={departmentOther}
-                  onChange={(event) => setDepartmentOther(event.target.value)}
-                  placeholder="請填寫單位"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
                 />
               </label>
-            ) : null}
-            <p className="text-xs leading-5 text-muted-foreground">
-              可補正姓名、電話、證件照、民政/社政與單位（含「其他」）。暱稱會依單位自動重算；舊照片留在雲端不刪。
-            </p>
+              <label className="grid gap-1 text-sm font-medium">
+                手機
+                <input
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={(event) =>
+                    setPhone(normalizeTaiwanMobilePhone(event.target.value) || event.target.value)
+                  }
+                  placeholder="09xxxxxxxx"
+                />
+              </label>
+            </div>
           </div>
         </div>
 
-        {message ? <p className="mt-3 text-sm text-destructive">{message}</p> : null}
-
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-            取消
-          </Button>
-          <Button type="button" onClick={() => void save()} disabled={saving || photoBusy}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "儲存中" : "儲存補正"}
-          </Button>
+        <div className="shrink-0 border-t p-4">
+          {message ? <p className="mb-3 text-sm text-destructive">{message}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => void save()} disabled={saving || photoBusy}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? "儲存中" : "儲存補正"}
+            </Button>
+          </div>
         </div>
       </section>
     </div>
