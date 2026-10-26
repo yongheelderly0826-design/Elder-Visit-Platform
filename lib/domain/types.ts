@@ -375,6 +375,8 @@ export type ElderCase = {
   name: string;
   age: number;
   gender: string | null;
+  /** 匯入／名冊出生日期（西元或民國字串皆可，建檔時轉 yyy/MM/dd） */
+  birthDate?: string | null;
   nationalId?: string | null;
   phone: string;
   mobilePhone: string | null;

@@ -1,3 +1,11 @@
+## Lesson: Desk care-form defaults favor paper KEY safety values
+
+- **Trigger:** Bulk paper KEY needed gender/birth from roster, 02/09 phone prefixes, and “none” questionnaire defaults.
+- **Cause:** Old desk defaults copied the MOHW sample row (diseases present, medical yes, living address unknown).
+- **Rule:** Desk init uses `createMohwDeskInitialAnswers`: gender from national-id digit 2, birth as ROC `yyy/MM/dd`, phone=`02` / mobile=`09` (blank→`0000000000`, refuse→`9999999999` on submit), living same as household, diseases/safety=`以上均無` with exclusive UI, medical/hearing/difficulties/worries/services = 否／無. Keep other sample fields until further product change.
+- **Evidence:** `lib/domain/mohw-desk-form-defaults.ts`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Desk case list follows Excel 里編號 (village_seq)
 
 - **Trigger:** Paper KEY staff need the on-screen case list to match the village booklet order.

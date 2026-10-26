@@ -18,7 +18,13 @@ import { visitQuestions } from "@/lib/domain/mock-data";
 import { createVisitDraft, getVisitDraftKey, type VisitDraft } from "@/lib/domain/offline-drafts";
 import { getVisitRequiredForms } from "@/lib/domain/visit-form-flow";
 import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
-import { createMohwDeskInitialAnswers } from "@/lib/domain/mohw-desk-form-defaults";
+import {
+  createMohwDeskInitialAnswers,
+  finalizeDeskContactPhones,
+  MOHW_EXCLUSIVE_NONE_MULTI_KEYS,
+  MOHW_NONE_OF_ABOVE,
+  toggleExclusiveNoneMulti,
+} from "@/lib/domain/mohw-desk-form-defaults";
 import {
   calculateMohwCareFormCompletion,
   createInitialMohwAnswers,
@@ -31,6 +37,7 @@ import {
 } from "@/lib/domain/mohw-life-care-ui";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import {
+  CASE_PHONE_REFUSED,
   digitsOnly,
   normalizeIndoorPhone,
   normalizeVisitorCareAnswers,
@@ -314,7 +321,7 @@ export function VisitDialogueForm({
     setResult(null);
     setMohwErrors([]);
 
-    const mohwAnswers = normalizeVisitorCareAnswers(
+    const synced = normalizeVisitorCareAnswers(
       normalizeMohwAnswersOptions(
         syncMohwConsentFromSubmission(
           syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
@@ -322,6 +329,7 @@ export function VisitDialogueForm({
         ),
       ),
     );
+    const mohwAnswers = isDeskEntry ? finalizeDeskContactPhones(synced) : synced;
     setCareFormAnswers(mohwAnswers);
 
     if (submission.visitResult !== "未遇") {
@@ -762,6 +770,7 @@ export function VisitDialogueForm({
                         value={careFormAnswers[field.key]}
                         error={mohwErrorByField.get(field.key)}
                         visitorDirectory={visitorDirectory}
+                        deskEntry={isDeskEntry}
                         onChange={(value) =>
                           setCareFormAnswers((current) => ({ ...current, [field.key]: value }))
                         }
@@ -1423,6 +1432,7 @@ function CareFormInput({
   value,
   error,
   visitorDirectory,
+  deskEntry = false,
   onChange,
   onPatchAnswers,
 }: {
@@ -1430,6 +1440,7 @@ function CareFormInput({
   value: MohwLifeCareAnswers[string];
   error?: MohwValidationError;
   visitorDirectory?: DeskVisitorOption[];
+  deskEntry?: boolean;
   onChange: (value: MohwLifeCareAnswers[string]) => void;
   onPatchAnswers?: (patch: MohwLifeCareAnswers) => void;
 }) {
@@ -1487,6 +1498,9 @@ function CareFormInput({
 
   if (field.type === "multi_choice") {
     const selectedValues = Array.isArray(value) ? value : [];
+    const exclusiveNone =
+      deskEntry && MOHW_EXCLUSIVE_NONE_MULTI_KEYS.has(field.mohwKey || field.key);
+    const noneSelected = exclusiveNone && selectedValues.includes(MOHW_NONE_OF_ABOVE);
     return (
       <div
         id={fieldId}
@@ -1502,18 +1516,26 @@ function CareFormInput({
           {field.options?.map((option, index) => {
             const selected = selectedValues.includes(option);
             const label = field.optionLabels?.[index] ?? option;
+            const disabledOther = noneSelected && option !== MOHW_NONE_OF_ABOVE;
             return (
               <button
                 key={`${field.key}-${option}`}
                 type="button"
+                disabled={disabledOther}
                 className={`rounded-md border px-2 py-1 text-xs ${
-                  selected ? "bg-primary text-primary-foreground" : "bg-card"
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : disabledOther
+                      ? "cursor-not-allowed bg-muted text-muted-foreground opacity-50"
+                      : "bg-card"
                 }`}
                 onClick={() =>
                   onChange(
-                    selected
-                      ? selectedValues.filter((item) => item !== option)
-                      : [...selectedValues, option],
+                    exclusiveNone
+                      ? toggleExclusiveNoneMulti(selectedValues, option)
+                      : selected
+                        ? selectedValues.filter((item) => item !== option)
+                        : [...selectedValues, option],
                   )
                 }
               >
@@ -1522,6 +1544,11 @@ function CareFormInput({
             );
           })}
         </div>
+        {exclusiveNone ? (
+          <p className="mt-2 text-xs font-normal leading-5 text-muted-foreground">
+            選「以上均無」時其他選項會反灰；取消後即可再勾其他項。
+          </p>
+        ) : null}
         {errorText ? <div className="mt-2">{errorText}</div> : null}
       </div>
     );
@@ -1592,19 +1619,28 @@ function CareFormInput({
 
   const isElderPhoneField = field.mohwKey === "phone" || field.mohwKey === "mobile";
   const isEmergencyPhoneField = field.mohwKey === "emergency_contact_phone";
+  const refused = isElderPhoneField && rawText.replace(/\D/g, "") === CASE_PHONE_REFUSED;
   const placeholder = isNameField
     ? "請填完整姓名"
-    : isElderPhoneField
-      ? "0000000000 或 9999999999 或實際電話"
-      : isEmergencyPhoneField
-        ? "沒有可留空"
-        : isPhoneField
-          ? "只填數字，O 會自動改成 0"
-          : isIdField
-            ? "1 碼英文 + 9 碼數字；數字裡的 O 會改成 0"
-            : undefined;
+    : isElderPhoneField && deskEntry
+      ? field.mohwKey === "phone"
+        ? "02 開頭市話，空白則匯出 0000000000"
+        : "09 開頭手機，空白則匯出 0000000000"
+      : isElderPhoneField
+        ? "0000000000 或 9999999999 或實際電話"
+        : isEmergencyPhoneField
+          ? "沒有可留空"
+          : isPhoneField
+            ? "只填數字，O 會自動改成 0"
+            : isIdField
+              ? "1 碼英文 + 9 碼數字；數字裡的 O 會改成 0"
+              : undefined;
   const phoneHint = isElderPhoneField
-    ? "無手機及電話請填 0000000000；不願提供請填 9999999999。"
+    ? deskEntry
+      ? field.mohwKey === "phone"
+        ? "台北市話多為 02 開頭。留白送出→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
+        : "格式 0900123456。留白送出→0000000000；勾「不願提供」→9999999999。電話、手機擇一必填。"
+      : "無手機及電話請填 0000000000；不願提供請填 9999999999。"
     : isEmergencyPhoneField
       ? "非必填，沒有可留空。"
       : isPhoneField
@@ -1620,7 +1656,8 @@ function CareFormInput({
         type="text"
         inputMode={isPhoneField || field.type === "number" ? "numeric" : undefined}
         placeholder={placeholder}
-        value={rawText}
+        value={refused ? CASE_PHONE_REFUSED : rawText}
+        disabled={refused}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
@@ -1651,6 +1688,23 @@ function CareFormInput({
           }
         }}
       />
+      {deskEntry && isElderPhoneField ? (
+        <label className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={refused}
+            onChange={(event) => {
+              if (event.target.checked) {
+                onChange(CASE_PHONE_REFUSED);
+                return;
+              }
+              onChange(field.mohwKey === "phone" ? "02" : "09");
+            }}
+          />
+          不願提供（匯出 9999999999）
+        </label>
+      ) : null}
       {phoneHint ? (
         <p className="text-xs font-normal leading-5 text-muted-foreground">{phoneHint}</p>
       ) : null}
