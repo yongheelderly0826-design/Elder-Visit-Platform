@@ -41,6 +41,7 @@ import {
   CASE_PHONE_NONE,
   CASE_PHONE_REFUSED,
   digitsOnly,
+  formatRocDate,
   normalizeIndoorPhone,
   normalizeVisitorCareAnswers,
   normalizeVisitorNationalId,
@@ -182,10 +183,20 @@ export function VisitDialogueForm({
     const initial = useDeskFormDefaults
       ? createMohwDeskInitialAnswers(elderCase, schedule)
       : createInitialMohwAnswers(elderCase, schedule);
+    const timedVisitDate = initialTimes?.visitDate
+      ? (() => {
+          const formatted = formatRocDate(initialTimes.visitDate);
+          return formatted &&
+            formatted !== "INVALID_DATE" &&
+            /^\d{3}\/\d{2}\/\d{2}$/.test(formatted)
+            ? formatted
+            : initialTimes.visitDate;
+        })()
+      : undefined;
     const withTimes: MohwLifeCareAnswers = {
       ...initial,
       ...initialAnswers,
-      ...(initialTimes?.visitDate ? { visit_date: initialTimes.visitDate } : {}),
+      ...(timedVisitDate ? { visit_date: timedVisitDate } : {}),
       ...(initialTimes?.visitStartTime ? { visit_start_time: initialTimes.visitStartTime } : {}),
       ...(initialTimes?.visitEndTime ? { visit_end_time: initialTimes.visitEndTime } : {}),
     };
@@ -206,7 +217,7 @@ export function VisitDialogueForm({
   const draftKey = getVisitDraftKey(schedule.id);
   // desk 預設換 key，避免舊訪員草稿蓋掉性別／電話等建檔預設
   const careFormDraftKey = `${draftKey}:mohw_life_care_form${
-    useDeskFormDefaults ? ":desk_defaults" : ""
+    useDeskFormDefaults ? ":desk_defaults_v2" : ""
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   const deskPaperSlotsOk =
@@ -1788,14 +1799,30 @@ function CareFormInput({
 
 function splitRocDateParts(raw: string): [string, string, string] {
   if (!raw.trim()) return ["", "", ""];
+  // 西元 ISO／四碼年必須先轉民國，不可 digitsOnly(年, 3) 否則 2026→202
   if (/^\d{4}-\d{2}-\d{2}/.test(raw) || /^\d{4}\/\d{1,2}\/\d{1,2}/.test(raw)) {
     const official = normalizeVisitorRocDate(raw);
     if (/^\d{3}\/\d{2}\/\d{2}$/.test(official)) {
       const [year, month, day] = official.split("/");
       return [year, month, day];
     }
+    const formatted = formatRocDate(raw);
+    if (/^\d{3}\/\d{2}\/\d{2}$/.test(formatted)) {
+      const [year, month, day] = formatted.split("/");
+      return [year, month, day];
+    }
   }
   const parts = raw.replace(/[-．。]/g, "/").split("/");
+  const yearPart = String(parts[0] ?? "").replace(/\D/g, "");
+  if (yearPart.length === 4 && Number(yearPart) >= 1912) {
+    const formatted = formatRocDate(
+      `${yearPart}-${digitsOnly(parts[1] ?? "", 2) || "01"}-${digitsOnly(parts[2] ?? "", 2) || "01"}`,
+    );
+    if (/^\d{3}\/\d{2}\/\d{2}$/.test(formatted)) {
+      const [year, month, day] = formatted.split("/");
+      return [year, month, day];
+    }
+  }
   return [digitsOnly(parts[0] ?? "", 3), digitsOnly(parts[1] ?? "", 2), digitsOnly(parts[2] ?? "", 2)];
 }
 

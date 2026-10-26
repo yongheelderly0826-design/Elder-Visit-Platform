@@ -5,6 +5,7 @@ import {
   type MohwLifeCareAnswers,
   type MohwLifeCareColumn,
 } from "@/lib/domain/mohw-life-care-form";
+import { formatRocDate } from "@/lib/domain/mohw-life-care-export";
 import {
   displayOfficialOption,
   parseOfficialAllowedValues,
@@ -210,12 +211,29 @@ export function createInitialMohwAnswers(
   const livingSameAsHousehold =
     !elderCase.residenceAddress || elderCase.residenceAddress === elderCase.address;
 
+  // 訪查日期欄位為民國 yyy/MM/dd；勿直接塞 ISO（會被三碼年框截成 202/…）
+  const visitDateRaw = String(schedule.visitDate ?? "").trim();
+  const visitDateRoc = visitDateRaw
+    ? formatRocDate(visitDateRaw)
+    : "";
+  const visitDate =
+    visitDateRoc && visitDateRoc !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(visitDateRoc)
+      ? visitDateRoc
+      : visitDateRaw;
+
+  const birthRaw = elderCase.birthDate ? String(elderCase.birthDate) : "";
+  const birthRoc = birthRaw ? formatRocDate(birthRaw) : "";
+  const birthDate =
+    birthRoc && birthRoc !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(birthRoc)
+      ? birthRoc
+      : birthRaw;
+
   return {
-    visit_date: schedule.visitDate,
+    visit_date: visitDate,
     visit_status: "已完成",
     name: elderCase.name,
     gender: elderCase.gender ?? "",
-    birth_date: elderCase.birthDate ? String(elderCase.birthDate) : "",
+    birth_date: birthDate,
     national_id: elderCase.nationalId ?? "",
     phone: elderCase.phone,
     mobile: elderCase.mobilePhone ?? "",
