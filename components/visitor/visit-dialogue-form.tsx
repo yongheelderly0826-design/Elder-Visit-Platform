@@ -142,6 +142,7 @@ export function VisitDialogueForm({
   initialTimes,
   initialAnswers,
   deskReturnPath,
+  listReturnPath,
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
@@ -153,6 +154,8 @@ export function VisitDialogueForm({
   initialTimes?: { visitDate?: string; visitStartTime?: string; visitEndTime?: string };
   initialAnswers?: MohwLifeCareAnswers;
   deskReturnPath?: string;
+  /** 送出後回待訪／快速 KEY 名單（可帶 query） */
+  listReturnPath?: string;
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
@@ -1108,20 +1111,25 @@ export function VisitDialogueForm({
         <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-primary">本次訪查已完成</p>
           <h2 className="mt-1 text-base font-semibold">
-            {isDeskEntry ? "紙本已 KEY 送出，可回清單繼續下一家" : "紀錄已送出，下一步可返回任務清單"}
+            {listReturnPath || isDeskEntry
+              ? "已 KEY 送出，可回名單繼續下一案"
+              : "紀錄已送出，下一步可返回任務清單"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {isDeskEntry
-              ? "系統已清除本機草稿。請回關懷表建檔待 KEY 清單，確認下一案時間後繼續。"
+            {listReturnPath || isDeskEntry
+              ? "系統已清除本機草稿。請回待訪名單，再點下一案「確認」繼續 KEY。"
               : "系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex">
-            {isDeskEntry ? (
+            {listReturnPath || isDeskEntry ? (
               <Button asChild className="w-full sm:w-auto">
                 <a
-                  href={`${deskReturnPath || "/desk/care-forms"}?done=${encodeURIComponent(schedule.id)}`}
+                  href={
+                    listReturnPath ||
+                    `${deskReturnPath || "/desk/care-forms"}?done=${encodeURIComponent(schedule.id)}`
+                  }
                 >
-                  回待 KEY 清單
+                  回待訪名單
                 </a>
               </Button>
             ) : (

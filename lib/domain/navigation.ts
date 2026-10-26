@@ -3,6 +3,7 @@ import {
   BarChart3,
   CalendarCheck2,
   ClipboardList,
+  ClipboardPen,
   ContactRound,
   FileText,
   FileSignature,
@@ -32,6 +33,7 @@ export type NavKey =
   | "dashboard"
   | "badge"
   | "tasks"
+  | "quickKey"
   | "drafts"
   | "payments"
   | "profile"
@@ -95,6 +97,15 @@ export const navItems: NavItem[] = [
     label: "任務",
     href: "/visitor/tasks",
     icon: ListChecks,
+    requiredCapabilities: ["visits.submit"],
+    allowedRoles: VISITOR_ONLY,
+    group: "daily",
+  },
+  {
+    key: "quickKey",
+    label: "快速 KEY",
+    href: "/visitor/quick-key",
+    icon: ClipboardPen,
     requiredCapabilities: ["visits.submit"],
     allowedRoles: VISITOR_ONLY,
     group: "daily",
@@ -173,6 +184,15 @@ export const navItems: NavItem[] = [
     label: "關懷表建檔",
     href: "/desk/care-forms",
     icon: FileText,
+    requiredCapabilities: ["visits.submit"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
+    group: "operations",
+  },
+  {
+    key: "quickKey",
+    label: "快速 KEY",
+    href: "/desk/quick-key",
+    icon: ClipboardPen,
     requiredCapabilities: ["visits.submit"],
     allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",

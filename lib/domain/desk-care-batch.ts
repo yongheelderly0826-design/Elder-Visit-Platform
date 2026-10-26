@@ -182,6 +182,9 @@ export function findOverlappingWindow(
   return existing.find((item) => windowsOverlap(candidate, item)) ?? null;
 }
 
+export const DESK_PAPER_SOURCE_NOTE = "公所代填・紙本";
+export const FIELD_SELF_SOURCE_NOTE = "訪員自領・實訪";
+
 export function buildDeskAssignmentNotes(input: {
   primaryVisitorId: string;
   primaryVisitorName?: string;
@@ -190,8 +193,12 @@ export function buildDeskAssignmentNotes(input: {
   visitDate?: string;
   visitStartTime?: string;
   visitEndTime?: string;
+  /** 預設紙本代填；快速 KEY／訪員自領用 field_self */
+  source?: "desk_paper" | "field_self";
 }) {
-  const parts = ["公所代填・紙本"];
+  const parts = [
+    input.source === "field_self" ? FIELD_SELF_SOURCE_NOTE : DESK_PAPER_SOURCE_NOTE,
+  ];
   const primaryLabel = input.primaryVisitorName
     ? `${input.primaryVisitorId}:${input.primaryVisitorName}`
     : input.primaryVisitorId;

@@ -10,11 +10,14 @@ import { getRepository } from "@/lib/repositories";
 
 export default async function VisitDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ schedule_id: string }>;
+  searchParams: Promise<{ return?: string; villageCode?: string }>;
 }) {
   const session = await requireVisitorSession();
   const { schedule_id: scheduleId } = await params;
+  const query = await searchParams;
   const task = await getRepository().getVisitTask(scheduleId);
 
   if (!task) {
@@ -31,14 +34,23 @@ export default async function VisitDetailPage({
     ? parseCareformAnswers(await gasClient.careform.get(scheduleId).catch(() => null))
     : undefined;
 
+  const villageCode = String(query.villageCode ?? "").trim();
+  const listReturnPath =
+    query.return === "/visitor/quick-key"
+      ? villageCode
+        ? `/visitor/quick-key?villageCode=${encodeURIComponent(villageCode)}`
+        : "/visitor/quick-key"
+      : undefined;
+
   return (
-    <AppShell active="tasks">
+    <AppShell active={listReturnPath ? "quickKey" : "tasks"}>
       <VisitorWorkflowBar active="visit" />
       <VisitDialogueForm
         elderCase={task.elderCase}
         schedule={task.schedule}
         readonly={readonly}
         initialAnswers={submittedAnswers}
+        listReturnPath={listReturnPath}
       />
     </AppShell>
   );

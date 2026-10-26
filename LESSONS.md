@@ -1,3 +1,11 @@
+## Lesson: Quick KEY uses village code + pending list on one page
+
+- **Trigger:** Field visitors need fast multi-case KEY; unregistered staff need on-site create then KEY.
+- **Cause:** Full desk batch wizard is heavy; visitor tasks assume cases already assigned.
+- **Rule:** `/visitor/quick-key` locks the logged-in visitor; `/desk/quick-key` allows search or desk_minimal create. Enter 6-digit `village_code`, load pending by `village_seq`, tap 確認 to dispatch (`訪員自領・實訪`) and open the care form; return to the same list for the next case. No separate「今日路線」page.
+- **Evidence:** `components/manage/quick-key-panel.tsx`, `app/api/manager/care-forms/quick-pending/route.ts`, `app/api/visitor/quick-confirm/route.ts`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Desk batch KEY times use slot + 5-min travel gap
 
 - **Trigger:** Paper KEY staff need auto-spaced visit windows between cases, not back-to-back slots.

@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
       visitDate: visitDate || undefined,
       visitStartTime: body.visitStartTime,
       visitEndTime: body.visitEndTime,
+      source: body.source === "field_self" ? "field_self" : "desk_paper",
     });
 
     if (!caseRefs.length && body.newCase?.name?.trim()) {

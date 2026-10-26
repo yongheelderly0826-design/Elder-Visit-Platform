@@ -11,7 +11,13 @@ export default async function ManagerCareFormFillPage({
   searchParams,
 }: {
   params: Promise<{ assignmentId: string }>;
-  searchParams: Promise<{ date?: string; start?: string; end?: string; return?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    start?: string;
+    end?: string;
+    return?: string;
+    villageCode?: string;
+  }>;
 }) {
   const role = (await cookies()).get("demo_role")?.value;
   if (role === "visitor") redirect("/visitor/home");
@@ -25,13 +31,24 @@ export default async function ManagerCareFormFillPage({
     .map(mapDeskVisitor)
     .filter((item) => item.id && item.name);
   const visitor = visitors.find((item) => item.id === task.schedule.visitorId);
-  const deskReturnPath =
-    query.return === "/manager/care-forms" || query.return === "/desk/care-forms"
-      ? query.return
-      : "/desk/care-forms";
+  const allowedReturns = new Set([
+    "/manager/care-forms",
+    "/desk/care-forms",
+    "/desk/quick-key",
+  ]);
+  const deskReturnPath = allowedReturns.has(String(query.return ?? ""))
+    ? String(query.return)
+    : "/desk/care-forms";
+  const villageCode = String(query.villageCode ?? "").trim();
+  const listReturnPath =
+    deskReturnPath === "/desk/quick-key"
+      ? villageCode
+        ? `/desk/quick-key?villageCode=${encodeURIComponent(villageCode)}`
+        : "/desk/quick-key"
+      : undefined;
 
   return (
-    <AppShell active="careForms">
+    <AppShell active={deskReturnPath === "/desk/quick-key" ? "quickKey" : "careForms"}>
       <VisitDialogueForm
         elderCase={task.elderCase}
         schedule={{
@@ -43,6 +60,7 @@ export default async function ManagerCareFormFillPage({
         visitorDirectory={visitors}
         selectedVisitor={visitor}
         deskReturnPath={deskReturnPath}
+        listReturnPath={listReturnPath}
         initialTimes={{
           visitDate: query.date || task.schedule.visitDate,
           visitStartTime: query.start,

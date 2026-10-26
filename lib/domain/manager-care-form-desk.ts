@@ -66,6 +66,8 @@ export type DeskPrepareInput = {
   visitDate?: string;
   visitStartTime?: string;
   visitEndTime?: string;
+  /** field_self＝訪員自領／現場 KEY；預設紙本代填 */
+  source?: "desk_paper" | "field_self";
 };
 
 export function isActiveAssignmentStatus(status: string) {
