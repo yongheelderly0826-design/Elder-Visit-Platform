@@ -91,11 +91,23 @@ export function CareFormDeskPanel({
   const [visitorsLoading, setVisitorsLoading] = useState(true);
   const [batch, setBatch] = useState<DeskBatchState | null>(null);
   const [timeDraft, setTimeDraft] = useState<TimeDraft | null>(null);
+  const [conflictAlert, setConflictAlert] = useState<string | null>(null);
   const [batchTimeDraft, setBatchTimeDraft] = useState({
     visitDate: "",
     visitStartTime: "09:00",
     visitEndTime: addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) || "09:10",
   });
+
+  function showTimeConflict(message: string) {
+    setConflictAlert(message);
+    setMessage(message);
+  }
+
+  function isTimeConflictError(error?: { code?: string; message?: string }) {
+    if (!error) return false;
+    if (error.code === "TIME_CONFLICT") return true;
+    return String(error.message ?? "").includes("衝突");
+  }
 
   useEffect(() => {
     const saved = readDeskBatchState();
@@ -585,9 +597,13 @@ export function CareFormDeskPanel({
           })),
         }),
       });
-      const json = (await response.json()) as { error?: { message?: string } };
+      const json = (await response.json()) as {
+        error?: { code?: string; message?: string };
+      };
       if (!response.ok) {
-        setMessage(json.error?.message ?? "整批時段無法套用");
+        const failMessage = json.error?.message ?? "整批時段無法套用";
+        if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
+        else setMessage(failMessage);
         return;
       }
 
@@ -648,9 +664,13 @@ export function CareFormDeskPanel({
           siblingWindows,
         }),
       });
-      const json = (await response.json()) as { error?: { message?: string } };
+      const json = (await response.json()) as {
+        error?: { code?: string; message?: string };
+      };
       if (!response.ok) {
-        setMessage(json.error?.message ?? "時段無法確認");
+        const failMessage = json.error?.message ?? "時段無法確認";
+        if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
+        else setMessage(failMessage);
         return;
       }
 
@@ -1236,6 +1256,39 @@ export function CareFormDeskPanel({
         </section>
       ) : null}
 
+      {conflictAlert ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-3 sm:items-center"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="desk-time-conflict-title"
+        >
+          <section className="w-full max-w-md rounded-lg border border-destructive/40 bg-card p-4 shadow-lg">
+            <h3 id="desk-time-conflict-title" className="text-lg font-semibold text-destructive">
+              時段衝突，請修改時間
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              主填「
+              {batch
+                ? batch.visitorNames[batch.primaryVisitorId] || batch.primaryVisitorId
+                : "訪查員"}
+              」當日已有其他派案時段，與本次排程重疊，無法套用（核銷不可重複）。
+            </p>
+            <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-relaxed">
+              {conflictAlert}
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              請把第 1 筆開始時間改到衝突時段之後，或先處理／調整舊派案時段後再套用。
+            </p>
+            <div className="mt-4 flex justify-end">
+              <Button type="button" onClick={() => setConflictAlert(null)}>
+                知道了，我去改時間
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {timeDraft ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
           <section className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg">
@@ -1296,8 +1349,16 @@ export function CareFormDeskPanel({
         </div>
       ) : null}
 
-      {message && !timeDraft ? (
-        <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">{message}</p>
+      {message && !timeDraft && !conflictAlert ? (
+        <p
+          className={
+            message.includes("衝突")
+              ? "rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+              : "rounded-md bg-secondary p-3 text-sm text-muted-foreground"
+          }
+        >
+          {message}
+        </p>
       ) : null}
     </div>
   );
