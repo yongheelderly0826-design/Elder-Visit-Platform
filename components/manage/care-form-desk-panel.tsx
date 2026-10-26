@@ -7,7 +7,7 @@ import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import {
   DESK_BATCH_SLOT_MINUTES,
-  DESK_BATCH_STAGGER_MINUTES,
+  DESK_BATCH_TRAVEL_GAP_MINUTES,
   addMinutesToTime,
   buildStaggeredVisitWindows,
   clearDeskBatchState,
@@ -520,7 +520,7 @@ export function CareFormDeskPanel({
       firstStart: batchTimeDraft.visitStartTime,
       firstEnd: batchTimeDraft.visitEndTime,
       count: batch.items.length,
-      staggerMinutes: DESK_BATCH_STAGGER_MINUTES,
+      travelGapMinutes: DESK_BATCH_TRAVEL_GAP_MINUTES,
     });
   }, [batch, batchTimeDraft]);
 
@@ -559,7 +559,7 @@ export function CareFormDeskPanel({
       firstStart: batchTimeDraft.visitStartTime,
       firstEnd: batchTimeDraft.visitEndTime,
       count: batch.items.length,
-      staggerMinutes: DESK_BATCH_STAGGER_MINUTES,
+      travelGapMinutes: DESK_BATCH_TRAVEL_GAP_MINUTES,
     });
     if (!built.ok) {
       setMessage(built.message);
@@ -601,7 +601,7 @@ export function CareFormDeskPanel({
       writeDeskBatchState(nextBatch);
       setBatch(nextBatch);
       setMessage(
-        `已套用整批時段（間距 ${DESK_BATCH_STAGGER_MINUTES} 分）。請留在清單逐案「進表 KEY」。`,
+        `已套用整批時段（每案 ${built.durationMinutes} 分、移動間隔 ${built.travelGapMinutes} 分）。請留在清單逐案「進表 KEY」。`,
       );
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -722,7 +722,7 @@ export function CareFormDeskPanel({
         icon={ClipboardPen}
         eyebrow={entry === "desk" ? "里責填表入口" : "承辦後台"}
         title="關懷表建檔"
-        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；整批套用訪視時間（第 1 筆起迄、後案 +10 分）後留在清單進表。同組時段不可衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
+        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；整批套用訪視時間（第 1 筆起迄，後案＝時長＋移動 5 分）後留在清單進表。同組時段不可衝突。非未遇不必三次；僅未遇才需陸續 KEY 滿三張。"
       />
 
       {batch ? (
@@ -1115,8 +1115,9 @@ export function CareFormDeskPanel({
           <div className="mt-4 rounded-md border border-dashed bg-secondary/40 p-3">
             <p className="text-sm font-medium">整批訪視時間</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              填第 1 筆日期與起迄；後案同日、整段自動 +{DESK_BATCH_STAGGER_MINUTES}{" "}
-              分（預設時長 {DESK_BATCH_SLOT_MINUTES} 分）。套用後留在清單自行進表。
+              填第 1 筆日期與起迄；後案同日自動往後排（時長{" "}
+              {DESK_BATCH_SLOT_MINUTES} 分＋移動間隔 {DESK_BATCH_TRAVEL_GAP_MINUTES}{" "}
+              分）。例：09:00–09:10 → 09:15–09:25 → 09:30–09:40。套用後留在清單自行進表。
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Field label="訪視日期 *">

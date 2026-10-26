@@ -1,9 +1,9 @@
-## Lesson: Desk batch KEY times stagger by 10 minutes
+## Lesson: Desk batch KEY times use slot + 5-min travel gap
 
-- **Trigger:** Paper KEY staff selected multiple cases but hated confirming visit time one by one.
-- **Cause:** Per-case modal + 60-minute default windows would overlap if only the start time advanced by 10 minutes.
-- **Rule:** Batch step-4 uses first-case date/start/end; later cases shift by +10 minutes with default duration 10 minutes (duration must be ≤ stagger). Apply writes all assignment notes once, then stay on the queue for “進表 KEY”.
-- **Evidence:** `lib/domain/desk-care-batch.ts` (`buildStaggeredVisitWindows`), `app/api/manager/care-forms/confirm-time-batch/route.ts`, `components/manage/care-form-desk-panel.tsx`.
+- **Trigger:** Paper KEY staff need auto-spaced visit windows between cases, not back-to-back slots.
+- **Cause:** First stagger used start-to-start +10 with 10-min duration (adjacent, no travel buffer).
+- **Rule:** Default duration 10 minutes; between cases add travel gap 5 minutes. Example: 09:00–09:10 → 09:15–09:25 → 09:30–09:40. Apply writes all assignment notes once, then stay on the queue for “進表 KEY”.
+- **Evidence:** `lib/domain/desk-care-batch.ts` (`buildStaggeredVisitWindows`, `DESK_BATCH_TRAVEL_GAP_MINUTES`), `app/api/manager/care-forms/confirm-time-batch/route.ts`, `components/manage/care-form-desk-panel.tsx`.
 - **Added on:** 2026-10-26
 
 ## Lesson: Desk care-form defaults favor paper KEY safety values

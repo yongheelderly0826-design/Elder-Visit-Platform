@@ -2,9 +2,9 @@ import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
 export const DESK_BATCH_STORAGE_KEY = "elder-desk-care-batch-v1";
 
-/** 場生 KEY：預設每案時段長度與整批錯開間距（分鐘） */
+/** 場生 KEY：預設每案時段長度；案與案之間預留移動時間（分鐘） */
 export const DESK_BATCH_SLOT_MINUTES = 10;
-export const DESK_BATCH_STAGGER_MINUTES = 10;
+export const DESK_BATCH_TRAVEL_GAP_MINUTES = 5;
 
 export type DeskVisitWindow = {
   visitDate: string;
@@ -93,24 +93,32 @@ export type DeskStaggeredVisitSlot = {
 };
 
 /**
- * 以第 1 筆起迄為基準，後案同日、整段平移 staggerMinutes。
- * 時長須 ≤ 間距，否則同組訪查員時段會重疊（核銷稽核）。
+ * 以第 1 筆起迄為基準，後案同日、依「時長 + 移動間隔」往後排。
+ * 例：09:00–09:10、間隔 5 分 → 09:15–09:25、09:30–09:40。
  */
 export function buildStaggeredVisitWindows(input: {
   visitDate: string;
   firstStart: string;
   firstEnd: string;
   count: number;
-  staggerMinutes?: number;
+  travelGapMinutes?: number;
 }):
-  | { ok: true; slots: DeskStaggeredVisitSlot[]; durationMinutes: number }
+  | {
+      ok: true;
+      slots: DeskStaggeredVisitSlot[];
+      durationMinutes: number;
+      travelGapMinutes: number;
+      stepMinutes: number;
+    }
   | { ok: false; message: string } {
   const visitDate = String(input.visitDate || "").trim();
   const firstStart = String(input.firstStart || "").trim().slice(0, 5);
   const firstEnd = String(input.firstEnd || "").trim().slice(0, 5);
   const count = Math.max(0, Math.floor(input.count));
-  const stagger =
-    input.staggerMinutes == null ? DESK_BATCH_STAGGER_MINUTES : Number(input.staggerMinutes);
+  const travelGap =
+    input.travelGapMinutes == null
+      ? DESK_BATCH_TRAVEL_GAP_MINUTES
+      : Number(input.travelGapMinutes);
 
   if (!visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
     return { ok: false, message: "請填寫訪視日期。" };
@@ -118,8 +126,8 @@ export function buildStaggeredVisitWindows(input: {
   if (count < 1) {
     return { ok: false, message: "沒有可排程的個案。" };
   }
-  if (!Number.isFinite(stagger) || stagger < 1) {
-    return { ok: false, message: "間距分鐘數無效。" };
+  if (!Number.isFinite(travelGap) || travelGap < 0) {
+    return { ok: false, message: "移動間隔分鐘數無效。" };
   }
 
   const startMin = toMinutes(firstStart);
@@ -132,16 +140,11 @@ export function buildStaggeredVisitWindows(input: {
   }
 
   const durationMinutes = endMin - startMin;
-  if (durationMinutes > stagger) {
-    return {
-      ok: false,
-      message: `每案時長 ${durationMinutes} 分大於間距 ${stagger} 分，後案會與前案重疊。請縮短為 ${stagger} 分以內（建議 ${firstStart}–${addMinutesToTime(firstStart, stagger) ?? ""}）。`,
-    };
-  }
+  const stepMinutes = durationMinutes + travelGap;
 
   const slots: DeskStaggeredVisitSlot[] = [];
   for (let index = 0; index < count; index += 1) {
-    const offset = index * stagger;
+    const offset = index * stepMinutes;
     const visitStartTime = addMinutesToTime(firstStart, offset);
     const visitEndTime = addMinutesToTime(firstEnd, offset);
     if (!visitStartTime || !visitEndTime) {
@@ -153,7 +156,7 @@ export function buildStaggeredVisitWindows(input: {
     slots.push({ visitDate, visitStartTime, visitEndTime });
   }
 
-  return { ok: true, slots, durationMinutes };
+  return { ok: true, slots, durationMinutes, travelGapMinutes: travelGap, stepMinutes };
 }
 
 export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {
