@@ -2,7 +2,12 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { gasErrorResponse } from "@/lib/attendance/session";
+import {
+  DESK_BATCH_SLOT_MINUTES,
+  addMinutesToTime,
+} from "@/lib/domain/desk-care-batch";
 import { mapGasAttendanceRecord, mapGasClockStatus } from "@/lib/domain/gas-attendance";
+import { formatRocDate } from "@/lib/domain/mohw-life-care-export";
 import {
   mockClockAttendance,
   mockVisitClockStatus,
@@ -28,16 +33,34 @@ function taipeiHm(iso: string) {
   }).format(date);
 }
 
+/** 到宅簽到後：關懷表用民國日＋簽到；尚未簽退時簽退預設＝簽到＋10 分（與建檔時段一致）。 */
+function visitTimesFromRecord(record: AttendanceRecord | null | undefined) {
+  if (!record?.checkinAt) {
+    return { visitDate: "", visitStartTime: "", visitEndTime: "" };
+  }
+  const visitStartTime = taipeiHm(record.checkinAt);
+  const visitEndTime = record.checkoutAt
+    ? taipeiHm(record.checkoutAt)
+    : addMinutesToTime(visitStartTime, DESK_BATCH_SLOT_MINUTES) || visitStartTime;
+  const roc = formatRocDate(record.sessionDate || record.checkinAt);
+  const visitDate =
+    roc && roc !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(roc)
+      ? roc
+      : record.sessionDate || "";
+  return { visitDate, visitStartTime, visitEndTime };
+}
+
 function payloadFromRecords(open: AttendanceRecord | null, latest: AttendanceRecord | null) {
   const record = open ?? latest;
+  const times = visitTimesFromRecord(record);
   return {
     open,
     latest,
     checkedIn: Boolean(open),
     completed: Boolean(latest?.checkoutAt),
-    visitDate: record?.sessionDate ?? "",
-    visitStartTime: record?.checkinAt ? taipeiHm(record.checkinAt) : "",
-    visitEndTime: record?.checkoutAt ? taipeiHm(record.checkoutAt) : "",
+    visitDate: times.visitDate,
+    visitStartTime: times.visitStartTime,
+    visitEndTime: times.visitEndTime,
     checkinPhotoUrl: record?.checkinPhotoUrl ?? "",
   };
 }
@@ -125,18 +148,12 @@ export async function POST(request: NextRequest) {
 
   try {
     if (getSystemStatus().dataMode === "gas_ready") {
-      // Probe open session: checkout does not need photo; checkin does.
+      // Probe open session so checkout skips photo; check-in photo is optional helper.
       const status = await gasClient.attendance.status({
         assignment_id: assignmentId,
         session_type: VISIT_SESSION_TYPE,
       });
       const open = status.open as Record<string, unknown> | null | undefined;
-      if (!open && !doorplatePhoto) {
-        return NextResponse.json(
-          { error: { code: "VALIDATION_ERROR", message: "到宅簽到請先拍攝門牌或門口照片" } },
-          { status: 400 },
-        );
-      }
 
       const result = await gasClient.attendance.clock({
         assignment_id: assignmentId,
@@ -147,7 +164,7 @@ export async function POST(request: NextRequest) {
         source: "visit",
         lat,
         lng,
-        checkin_photo_base64: open ? undefined : doorplatePhoto,
+        checkin_photo_base64: open ? undefined : doorplatePhoto || undefined,
       });
       const visitor = mapGasClockStatus({
         visitor: (result.visitor as Record<string, unknown> | undefined) ?? result,
@@ -156,6 +173,7 @@ export async function POST(request: NextRequest) {
       }).visitor;
       const record = mapGasAttendanceRecord(result.record as Record<string, unknown>);
       const action = result.action === "checkout" ? "checkout" : "checkin";
+      const times = visitTimesFromRecord(record);
       invalidateVisitorAttendanceCaches();
       return NextResponse.json({
         data: {
@@ -163,9 +181,9 @@ export async function POST(request: NextRequest) {
           action,
           record,
           visitor,
-          visitDate: record?.sessionDate ?? "",
-          visitStartTime: record?.checkinAt ? taipeiHm(record.checkinAt) : "",
-          visitEndTime: record?.checkoutAt ? taipeiHm(record.checkoutAt) : "",
+          visitDate: times.visitDate,
+          visitStartTime: times.visitStartTime,
+          visitEndTime: times.visitEndTime,
           checkinPhotoUrl: record?.checkinPhotoUrl ?? "",
         },
       });
@@ -182,13 +200,14 @@ export async function POST(request: NextRequest) {
       lng,
       checkinPhotoBase64: doorplatePhoto || undefined,
     });
+    const times = visitTimesFromRecord(result.record);
     return NextResponse.json({
       data: {
         mode: "demo",
         ...result,
-        visitDate: result.record.sessionDate,
-        visitStartTime: result.record.checkinAt ? taipeiHm(result.record.checkinAt) : "",
-        visitEndTime: result.record.checkoutAt ? taipeiHm(result.record.checkoutAt) : "",
+        visitDate: times.visitDate,
+        visitStartTime: times.visitStartTime,
+        visitEndTime: times.visitEndTime,
         checkinPhotoUrl: result.record.checkinPhotoUrl ?? "",
       },
     });
@@ -197,12 +216,6 @@ export async function POST(request: NextRequest) {
       error instanceof Error && error.message
         ? error.message
         : "訪查簽到退失敗";
-    if (message.includes("門牌")) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message } },
-        { status: 400 },
-      );
-    }
     return gasErrorResponse(error instanceof GasApiError ? error : error, "訪查簽到退失敗");
   }
 }

@@ -2,6 +2,10 @@
  * 關懷表建檔（desk）問卷預設值。
  * 紙本大量 KEY：個資由名冊／身分證帶入；問卷採安全預設（無疾病、無住院等）。
  */
+import {
+  DESK_BATCH_SLOT_MINUTES,
+  addMinutesToTime,
+} from "@/lib/domain/desk-care-batch";
 import { formatRocDate, CASE_PHONE_NONE, CASE_PHONE_REFUSED } from "@/lib/domain/mohw-life-care-export";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { createInitialMohwAnswers } from "@/lib/domain/mohw-life-care-ui";
@@ -167,7 +171,7 @@ export function finalizeDeskContactPhones(answers: MohwLifeCareAnswers): MohwLif
   };
 }
 
-/** 現場現在：民國訪查日＋開始／結束（預設時長 10 分）。 */
+/** 現場現在：民國訪查日＋開始／結束（預設時長與建檔批次相同，10 分）。 */
 export function getDeskNowVisitClock(now: Date = new Date()): {
   visitDate: string;
   visitStartTime: string;
@@ -179,12 +183,14 @@ export function getDeskNowVisitClock(now: Date = new Date()): {
       ? visitDate
       : formatRocDate(now);
   const startTotal = now.getHours() * 60 + now.getMinutes();
-  const endTotal = Math.min(startTotal + 10, 23 * 60 + 59);
   const pad = (n: number) => String(n).padStart(2, "0");
+  const visitStartTime = `${pad(Math.floor(startTotal / 60))}:${pad(startTotal % 60)}`;
+  const visitEndTime =
+    addMinutesToTime(visitStartTime, DESK_BATCH_SLOT_MINUTES) || visitStartTime;
   return {
     visitDate: safeDate === "INVALID_DATE" ? "" : safeDate,
-    visitStartTime: `${pad(Math.floor(startTotal / 60))}:${pad(startTotal % 60)}`,
-    visitEndTime: `${pad(Math.floor(endTotal / 60))}:${pad(endTotal % 60)}`,
+    visitStartTime,
+    visitEndTime,
   };
 }
 

@@ -176,11 +176,6 @@ export function mockClockAttendance(input: {
   }
 
   const isVisit = sessionType === "訪查";
-  if (isVisit && !String(input.checkinPhotoBase64 || "").trim()) {
-    throw Object.assign(new Error("到宅簽到請先拍攝門牌或門口照片"), {
-      code: "VALIDATION_ERROR",
-    });
-  }
   const isKiosk = input.channel === "barcode" || input.source === "office_kiosk";
   const site = isVisit
     ? { id: "SITE-VISIT", name: "到宅訪查", groupId: "elder_care" as const }

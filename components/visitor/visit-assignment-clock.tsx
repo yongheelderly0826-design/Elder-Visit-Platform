@@ -135,7 +135,7 @@ export function VisitAssignmentClock({
     try {
       const compact = await compressDoorplatePhoto(file);
       setDoorplatePreview(compact);
-      setMessage("門牌／門口照片已就緒，可進行到宅簽到");
+      setMessage("門牌／門口照片已就緒（輔助佐證）");
     } catch {
       setMessage("照片處理失敗，請改用較小的圖片再試");
     } finally {
@@ -145,11 +145,7 @@ export function VisitAssignmentClock({
   }
 
   async function clock() {
-    const needsPhoto = !state?.checkedIn && !state?.completed;
-    if (needsPhoto && !doorplatePreview) {
-      setMessage("請先拍攝或選擇門牌／門口照片，再按到宅簽到");
-      return;
-    }
+    const isCheckin = !state?.checkedIn && !state?.completed;
 
     setBusy(true);
     setMessage(null);
@@ -161,7 +157,7 @@ export function VisitAssignmentClock({
         body: JSON.stringify({
           assignmentId,
           visitorId: visitorId || undefined,
-          doorplatePhoto: needsPhoto ? doorplatePreview : undefined,
+          doorplatePhoto: isCheckin && doorplatePreview ? doorplatePreview : undefined,
           ...gps,
         }),
       });
@@ -180,8 +176,29 @@ export function VisitAssignmentClock({
         setMessage(json.error?.message ?? "簽到退失敗");
         return;
       }
-      setMessage(json.data.action === "checkout" ? "到宅簽退成功" : "到宅簽到成功（已記錄門牌照片）");
-      if (json.data.checkinPhotoUrl) setDoorplatePreview(json.data.checkinPhotoUrl);
+      const data = json.data;
+      setMessage(
+        data.action === "checkout"
+          ? "到宅簽退成功"
+          : data.checkinPhotoUrl || doorplatePreview
+            ? "到宅簽到成功（已附門牌照片）"
+            : "到宅簽到成功",
+      );
+      if (data.checkinPhotoUrl) setDoorplatePreview(data.checkinPhotoUrl);
+      // 成功後立即帶入日期／簽到／簽退（簽退預設＝簽到＋10 分），再向後端重讀狀態
+      applyTimes({
+        checkedIn: data.action === "checkin",
+        completed: data.action === "checkout",
+        visitDate: data.visitDate,
+        visitStartTime: data.visitStartTime,
+        visitEndTime: data.visitEndTime,
+        checkinPhotoUrl: data.checkinPhotoUrl,
+        open:
+          data.action === "checkin" && data.record
+            ? { attendanceId: data.record.attendanceId, checkinAt: data.record.checkinAt }
+            : null,
+        latest: data.record ?? null,
+      });
       await load();
     } catch {
       setMessage("網路異常，請稍後再試");
@@ -203,7 +220,7 @@ export function VisitAssignmentClock({
             訪查簽到退（綁此派案）
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            到宅簽到需拍攝門牌／門口，並記錄定位；與志工集合點出勤分開。
+            沒有照片也可以到宅簽到；門牌照與定位為輔助建議。與志工集合點出勤分開。
           </p>
         </div>
         <Button type="button" onClick={() => void clock()} disabled={busy || done || photoBusy}>
@@ -224,9 +241,9 @@ export function VisitAssignmentClock({
 
       {needsDoorplate ? (
         <div className="mt-3 rounded-md border border-dashed p-3">
-          <p className="text-sm font-medium">門牌／門口照片（簽到必填）</p>
+          <p className="text-sm font-medium">門牌／門口照片（輔助／建議）</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            請對準門牌或大門拍攝，供核對到宅位置；不需辨識文字。
+            可對準門牌或大門拍攝，方便核對到宅位置；沒有照片仍可按到宅簽到。
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button

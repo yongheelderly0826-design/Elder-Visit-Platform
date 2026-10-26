@@ -33,6 +33,14 @@ type Props = {
   returnPath: string;
 };
 
+/** 輸入中只保留最多六位數字（含全形０–９）；勿在此呼叫 formatYongheVillageCode。 */
+function villageCodeDigitsWhileTyping(raw: string): string {
+  return raw
+    .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30))
+    .replace(/\D/g, "")
+    .slice(0, 6);
+}
+
 export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props) {
   const router = useRouter();
   const [villageCodeInput, setVillageCodeInput] = useState("");
@@ -65,7 +73,9 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
   }, []);
 
   useEffect(() => {
-    if (!/^\d{6}$/.test(formatYongheVillageCode(villageCodeInput))) return;
+    // 必須等使用者打滿六碼再自動載入；formatYongheVillageCode 會把「0」補成 040000，
+    // 若用格式化結果當門檻，每一鍵都會觸發載入並干擾輸入。
+    if (!/^\d{6}$/.test(villageCodeInput)) return;
     if (!selectedVisitorId) return;
     if (loadedCode) return;
     void loadPending();
@@ -144,7 +154,9 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
         setMessage(json.error?.message ?? "無法載入待訪名單");
         return;
       }
-      setLoadedCode(json.data?.villageCode ?? code);
+      const resolved = json.data?.villageCode ?? code;
+      setLoadedCode(resolved);
+      setVillageCodeInput(resolved);
       setVillageNames(json.data?.villageNames ?? []);
       setItems(json.data?.items ?? []);
       if (!(json.data?.items ?? []).length) {
@@ -307,10 +319,20 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
             里編碼（六碼）
             <input
               className="h-11 rounded-md border px-3 text-sm"
+              type="text"
               inputMode="numeric"
+              autoComplete="off"
               placeholder="例如 040051"
               value={villageCodeInput}
-              onChange={(event) => setVillageCodeInput(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(event) =>
+                setVillageCodeInput(villageCodeDigitsWhileTyping(event.target.value))
+              }
+              onBlur={() => {
+                // 僅在已滿六碼時正規化（004001→040001）；不足六碼不補齊，避免打一半就被改寫
+                if (!/^\d{6}$/.test(villageCodeInput)) return;
+                const formatted = formatYongheVillageCode(villageCodeInput);
+                if (formatted !== villageCodeInput) setVillageCodeInput(formatted);
+              }}
             />
           </label>
 

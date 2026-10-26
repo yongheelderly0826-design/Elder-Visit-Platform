@@ -31,7 +31,7 @@ export default async function VisitorTasksPage() {
         <h1 className="text-2xl font-semibold">訪員任務</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {name ? `${name} 的` : "今日"}
-          任務依 Workspace、訪員資格、風險等級與訪視次數排序。到宅請先拍門牌簽到。
+          任務依 Workspace、訪員資格、風險等級與訪視次數排序。到宅可先簽到（門牌照建議、選填）。
         </p>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
           流程：完成關懷表填報 → 可匯出衛福部資料 → 稽核核銷；未遇則不同時段拍照，滿三次可結案。

@@ -187,10 +187,7 @@ var AttendanceModule = (function () {
         }
       }
       if (!visitor) throwError_('NOT_FOUND', '派案尚未指定訪員');
-      var photoInput = data.checkin_photo_base64 || data.doorplate_photo || '';
-      if (!String(photoInput).trim()) {
-        throwError_('VALIDATION_ERROR', '到宅簽到請先拍攝門牌或門口照片');
-      }
+      // 門牌／門口照片為輔助佐證，沒有照片也可到宅簽到
     }
 
     var open = findOpen_(visitor.visitor_id, sessionDate, {
