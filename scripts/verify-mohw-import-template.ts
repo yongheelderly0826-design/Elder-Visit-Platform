@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
+  buildMohwLifeCareExportRow,
   digitsOnly,
   formatMohwPhone,
   formatRocDate,
@@ -9,6 +10,7 @@ import {
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "../lib/domain/mohw-life-care-export";
+import { normalizeTaiwanMobilePhone } from "../lib/domain/phone";
 import { MOHW_LIFE_CARE_HEADERS } from "../lib/domain/mohw-life-care-form";
 import { mohwLifeCareSampleAnswers } from "../lib/domain/mohw-life-care-ui";
 import {
@@ -67,6 +69,10 @@ expect(normalizeVisitorNationalId("o123456789") === "O123456789", `id first O ${
 expect(isIndoorPhone("0229282828") && isIndoorPhone("0912345678") && isIndoorPhone("912345678"), "indoor phone 0 or 9");
 expect(normalizeIndoorPhone("912345678") === "0912345678", `indoor prepend ${normalizeIndoorPhone("912345678")}`);
 expect(normalizeIndoorPhone("O912345678") === "0912345678", `indoor O ${normalizeIndoorPhone("O912345678")}`);
+expect(normalizeIndoorPhone("9123456789") === "0912345678", `indoor 10d missing 0 ${normalizeIndoorPhone("9123456789")}`);
+expect(normalizeIndoorPhone("09123456789") === "0912345678", `indoor 11d trim ${normalizeIndoorPhone("09123456789")}`);
+expect(normalizeTaiwanMobilePhone(9123456789) === "0912345678", `mobile number type ${normalizeTaiwanMobilePhone(9123456789)}`);
+expect(normalizeTaiwanMobilePhone("09123456789") === "0912345678", `mobile 11d ${normalizeTaiwanMobilePhone("09123456789")}`);
 expect(normalizeIndoorPhone("9999999999") === "9999999999", "keep 10 nines");
 expect(normalizeIndoorPhone("0000000000") === "0000000000", "keep 10 zeros");
 expect(isIndoorPhone("9999999999") && isIndoorPhone("0000000000"), "sentinels are valid phones");
@@ -105,6 +111,28 @@ const nineStartPhone = validateMohwLifeCareRow(
 expect(
   !nineStartPhone.errorLines.some((line) => line.includes("室內電話")),
   `9-prefix indoor phone must pass: ${nineStartPhone.errorLines.join(" | ")}`,
+);
+
+const missingZeroWorkerPhone = validateMohwLifeCareRow(
+  {
+    ...mohwLifeCareSampleAnswers,
+    civil_worker_phone: "9123456789",
+  },
+  { row: 2, registryNationalId: "A123456789" },
+);
+expect(
+  !missingZeroWorkerPhone.errorLines.some((line) => line.includes("電話格式不正確")),
+  `civil worker 10d missing 0 must pass: ${missingZeroWorkerPhone.errorLines.join(" | ")}`,
+);
+const exportedWorkerPhone = buildMohwLifeCareExportRow({
+  mohwAnswers: {
+    ...mohwLifeCareSampleAnswers,
+    civil_worker_phone: 9123456789 as unknown as string,
+  },
+}).keyed.civil_worker_phone;
+expect(
+  exportedWorkerPhone === "0912345678",
+  `export restores leading 0: ${exportedWorkerPhone}`,
 );
 
 const typoVillage = validateMohwLifeCareRow(

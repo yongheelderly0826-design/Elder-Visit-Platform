@@ -148,7 +148,12 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
       setVillageNames(json.data?.villageNames ?? []);
       setItems(json.data?.items ?? []);
       if (!(json.data?.items ?? []).length) {
-        setMessage("此里目前沒有待訪個案（或皆已完成／不訪）。");
+        const names = json.data?.villageNames ?? [];
+        setMessage(
+          names.length
+            ? "此里目前沒有待訪個案（或皆已完成／不訪）。"
+            : "查無此里編碼對應的里別。永和區六碼為 040＋里序（例如上林里 040051；里序 1 → 040001）。",
+        );
       }
     } catch {
       setMessage("目前無法連線，請稍後再試。");

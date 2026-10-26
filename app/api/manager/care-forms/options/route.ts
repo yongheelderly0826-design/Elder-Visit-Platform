@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (part === "visitors") {
       const visitors = await cachedRead(
-        ["desk-care-form-visitors-slim-v2"],
+        ["desk-care-form-visitors-slim-v3"],
         [GAS_READ_TAGS.deskCareFormOptions],
         () => loadDeskVisitors(),
         GAS_READ_CACHE_SECONDS_DESK,

@@ -560,10 +560,16 @@ var UserAccountModule = (function () {
   }
 
   function normalizeVisitorPhone_(value) {
+    if (typeof PhoneUtils !== 'undefined' && PhoneUtils.normalizeMobile) {
+      return PhoneUtils.normalizeMobile(value);
+    }
     var digits = String(value || '').replace(/[０-９]/g, function (ch) {
       return String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30);
     }).replace(/\D/g, '');
+    if (/^09\d{8}$/.test(digits)) return digits;
     if (/^9\d{8}$/.test(digits)) return '0' + digits;
+    if (/^9\d{9}$/.test(digits)) return ('0' + digits).slice(0, 10);
+    if (/^09\d{9}$/.test(digits)) return digits.slice(0, 10);
     return digits;
   }
 

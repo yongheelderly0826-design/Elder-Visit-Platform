@@ -1,5 +1,7 @@
 import { normalizeDeskWorkerGroup } from "@/lib/domain/desk-care-batch";
+import { normalizeVisitorCareAnswers } from "@/lib/domain/mohw-life-care-export";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type {
   ElderCase,
   VisitSchedule,
@@ -78,13 +80,13 @@ export function parseCareformAnswers(row: unknown): MohwLifeCareAnswers | undefi
   if (!row || typeof row !== "object") return undefined;
   const record = row as Record<string, unknown>;
   if (record.answers && typeof record.answers === "object" && !Array.isArray(record.answers)) {
-    return record.answers as MohwLifeCareAnswers;
+    return normalizeVisitorCareAnswers(record.answers as MohwLifeCareAnswers);
   }
   if (typeof record.answers_json === "string" && record.answers_json.trim()) {
     try {
       const parsed = JSON.parse(record.answers_json) as unknown;
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as MohwLifeCareAnswers;
+        return normalizeVisitorCareAnswers(parsed as MohwLifeCareAnswers);
       }
     } catch {
       return undefined;
@@ -128,13 +130,14 @@ export function compareDeskCasesByVillageSeq(a: DeskCaseOption, b: DeskCaseOptio
 }
 
 export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption {
+  const rawPhone = row.phone ?? row.primary_phone ?? row.mobile ?? "";
   return {
     id: String(row.visitor_id ?? ""),
     name: String(row.name ?? row.full_name ?? ""),
     badgeNo: String(row.badge_no ?? row.visitor_code ?? ""),
     status: String(row.status ?? ""),
     nationalId: String(row.id_number ?? "").trim().toUpperCase(),
-    phone: String(row.phone ?? row.primary_phone ?? row.mobile ?? "").trim(),
+    phone: normalizeTaiwanMobilePhone(rawPhone as string | number | null | undefined),
     workerGroup: normalizeDeskWorkerGroup(
       row.volunteer_group ?? row.worker_group ?? row.workerGroup,
     ),

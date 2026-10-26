@@ -47,13 +47,24 @@ export default async function VisitDetailPage({
       : "/visitor/quick-key"
     : undefined;
 
+  // 完整清單（含身分證）：社政／民政姓名欄搜尋帶入。slim 需 GAS slim2 才有 id_number。
+  const visitorDirectory = (
+    (await gasClient.visitors.list().catch(() => [])) as Record<string, unknown>[]
+  )
+    .map(mapDeskVisitor)
+    .filter((item) => item.id && item.name)
+    .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
+
   let selectedVisitor = null as ReturnType<typeof mapDeskVisitor> | null;
   if (visitorId) {
-    try {
-      const row = (await gasClient.visitors.get(visitorId)) as Record<string, unknown> | null;
-      if (row) selectedVisitor = mapDeskVisitor(row);
-    } catch {
-      selectedVisitor = null;
+    selectedVisitor = visitorDirectory.find((item) => item.id === visitorId) ?? null;
+    if (!selectedVisitor) {
+      try {
+        const row = (await gasClient.visitors.get(visitorId)) as Record<string, unknown> | null;
+        if (row) selectedVisitor = mapDeskVisitor(row);
+      } catch {
+        selectedVisitor = null;
+      }
     }
   }
   if (!selectedVisitor && (visitorId || visitorName)) {
@@ -78,6 +89,7 @@ export default async function VisitDetailPage({
         initialAnswers={submittedAnswers}
         listReturnPath={listReturnPath}
         visitorName={selectedVisitor?.name || visitorName || session.name}
+        visitorDirectory={visitorDirectory}
         selectedVisitor={selectedVisitor ?? undefined}
         formDefaults={useDeskDefaults ? "desk" : "roster"}
       />

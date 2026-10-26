@@ -10,6 +10,7 @@ import {
   type MohwLifeCareColumn,
   type MohwVisitMeta,
 } from "@/lib/domain/mohw-life-care-form";
+import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 
 export type MohwLifeCareExportInput = {
   /** Preferred: already keyed by MOHW column keys. */
@@ -141,7 +142,9 @@ export function formatMohwCell(value: MohwLifeCareAnswers[string], column: MohwL
     return String(value); // 不猜測非布林選項的意義。
   }
   const text = String(value).trim();
-  if (PHONE_KEYS.has(column.key)) return formatMohwPhone(text);
+  if (PHONE_KEYS.has(column.key)) {
+    return formatMohwPhone(normalizeIndoorPhone(text));
+  }
   return text;
 }
 
@@ -342,11 +345,16 @@ export function formatMohwPhone(input: string) {
   return text.replace(/[ ()-]/g, "");
 }
 
-/** 室內電話送出前：9 開頭 9 碼補上前導 0；10 個 0／10 個 9 原樣保留。 */
+/** 室內電話／手機送出前：補前導 0；10 個 0／10 個 9 原樣保留。 */
 export function normalizeIndoorPhone(value: string): string {
   const cleaned = formatMohwPhone(value);
   const digits = cleaned.replace(/\D/g, "");
   if (isCasePhoneSentinel(digits)) return digits;
+  // 手機：與訪員主檔同一套規則（含 Excel 吃掉前導 0）
+  if (/^09\d{8}$/.test(digits) || /^9\d{8,9}$/.test(digits) || /^09\d{9}$/.test(digits)) {
+    const mobile = normalizeTaiwanMobilePhone(digits);
+    if (/^09\d{8}$/.test(mobile)) return mobile;
+  }
   if (/^9\d{8}$/.test(digits)) return `0${digits}`;
   if (/^0\d{8,9}$/.test(digits)) return digits;
   return cleaned;
@@ -392,8 +400,10 @@ export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwL
   }
   for (const key of VISITOR_PHONE_KEYS) {
     const value = next[key];
-    if (typeof value === "string" && value.trim()) {
-      next[key] = normalizeIndoorPhone(value);
+    // JSON／Sheets 可能是 number（前導 0 已丟）；一律轉字串再補回
+    if (typeof value === "string" || typeof value === "number") {
+      const text = String(value).trim();
+      if (text) next[key] = normalizeIndoorPhone(text);
     }
   }
   for (const key of VISITOR_ID_KEYS) {

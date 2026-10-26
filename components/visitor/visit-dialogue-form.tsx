@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -50,6 +51,7 @@ import {
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "@/lib/domain/mohw-life-care-export";
+import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import {
@@ -227,14 +229,16 @@ export function VisitDialogueForm({
             workerGroup: workerKind === "civil" ? "civil_affairs" : "social_affairs",
           }
         : null);
+    // 訪員自填（含 roster）與 desk：有登入訪查員就帶入社政／民政電話（含前導 0）
     const seeded =
-      useDeskFormDefaults &&
       visitorForSeed &&
       !withTimes.social_worker_name &&
-      !withTimes.civil_worker_name
+      !withTimes.civil_worker_name &&
+      (useDeskFormDefaults || Boolean(selectedVisitor))
         ? applyVisitorToWorkerAnswers(withTimes, visitorForSeed, workerKind)
         : {};
-    return { ...withTimes, ...seeded };
+    // 草稿／主檔數字化可能丟前導 0；進畫面前記得補回
+    return normalizeVisitorCareAnswers({ ...withTimes, ...seeded });
   });
   const [openSectionTitles, setOpenSectionTitles] = useState<string[]>(() =>
     mohwLifeCareSections
@@ -242,9 +246,9 @@ export function VisitDialogueForm({
       .map((section) => section.title),
   );
   const draftKey = getVisitDraftKey(schedule.id);
-  // desk 預設換 key，避免舊訪員草稿蓋掉性別／電話／錯誤西元年
+  // 換 key：避開舊草稿把缺前導 0 的電話蓋回畫面（desk_defaults_v3／無後綴）
   const careFormDraftKey = `${draftKey}:mohw_life_care_form${
-    useDeskFormDefaults ? ":desk_defaults_v3" : ""
+    useDeskFormDefaults ? ":desk_defaults_v4" : ":phone_lead0_v1"
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   const deskPaperSlotsOk =
@@ -358,9 +362,14 @@ export function VisitDialogueForm({
 
     const storedCareForm = window.localStorage.getItem(careFormDraftKey);
     if (storedCareForm) {
-      setCareFormAnswers(JSON.parse(storedCareForm) as MohwLifeCareAnswers);
+      try {
+        const parsed = JSON.parse(storedCareForm) as MohwLifeCareAnswers;
+        setCareFormAnswers(normalizeVisitorCareAnswers(parsed));
+      } catch {
+        // 損壞草稿略過，保留 useState 初始值
+      }
     } else if (schedule.id === "schedule_ntpc_demo") {
-      setCareFormAnswers(mohwLifeCareSampleAnswers);
+      setCareFormAnswers(normalizeVisitorCareAnswers(mohwLifeCareSampleAnswers));
     }
   }, [careFormDraftKey, draftKey, readonly, schedule.id]);
 
@@ -830,10 +839,27 @@ export function VisitDialogueForm({
                         visitorDirectory={visitorDirectory}
                         deskEntry={useDeskFormDefaults}
                         onChange={(value) =>
-                          setCareFormAnswers((current) => ({ ...current, [field.key]: value }))
+                          setCareFormAnswers((current) => {
+                            const next = { ...current, [field.key]: value };
+                            // 電話欄一律走補前導 0，避免只改畫面、answers 仍缺 0
+                            if (
+                              field.key === "phone" ||
+                              field.key === "mobile" ||
+                              field.key === "emergency_contact_phone" ||
+                              field.key === "social_worker_phone" ||
+                              field.key === "civil_worker_phone"
+                            ) {
+                              return normalizeVisitorCareAnswers(next);
+                            }
+                            return next;
+                          })
                         }
-                        onPatchAnswers={(patch) =>
-                          setCareFormAnswers((current) => ({ ...current, ...patch }))
+                        onPatchAnswers={(patchOrFn) =>
+                          setCareFormAnswers((current) => {
+                            const patch =
+                              typeof patchOrFn === "function" ? patchOrFn(current) : patchOrFn;
+                            return normalizeVisitorCareAnswers({ ...current, ...patch });
+                          })
                         }
                       />
                     ))}
@@ -1455,13 +1481,24 @@ function WorkerNamePicker({
   );
 }
 
+function defaultWorkerRole(kind: "social" | "civil", currentRole: unknown): string {
+  const existing = String(currentRole ?? "").trim();
+  if (existing) return existing;
+  // 社政選項含「志工」但產品用語優先「社會局/處」；民政預設公所人員
+  return kind === "civil" ? "公所人員" : "社會局/處";
+}
+
 function applyVisitorToWorkerAnswers(
   current: MohwLifeCareAnswers,
   visitor: DeskVisitorOption,
   kind: "social" | "civil",
 ): MohwLifeCareAnswers {
   const visitDate = String(current.visit_date ?? "").trim();
-  const phone = String(visitor.phone || "").trim() || CASE_PHONE_NONE;
+  const phone =
+    normalizeTaiwanMobilePhone(visitor.phone) ||
+    normalizeIndoorPhone(String(visitor.phone || "").trim()) ||
+    CASE_PHONE_NONE;
+  const nationalId = normalizeVisitorNationalId(visitor.nationalId || "");
   if (kind === "civil") {
     return {
       social_worker_role: "",
@@ -1470,9 +1507,9 @@ function applyVisitorToWorkerAnswers(
       social_worker_national_id: "",
       social_worker_phone: "",
       social_worker_date: "",
-      civil_worker_role: String(current.civil_worker_role || "公所人員"),
+      civil_worker_role: defaultWorkerRole("civil", current.civil_worker_role),
       civil_worker_name: visitor.name,
-      civil_worker_national_id: visitor.nationalId || "",
+      civil_worker_national_id: nationalId,
       civil_worker_phone: phone,
       civil_worker_date: String(current.civil_worker_date || visitDate),
     };
@@ -1483,9 +1520,9 @@ function applyVisitorToWorkerAnswers(
     civil_worker_national_id: "",
     civil_worker_phone: "",
     civil_worker_date: "",
-    social_worker_role: String(current.social_worker_role || "志工"),
+    social_worker_role: defaultWorkerRole("social", current.social_worker_role),
     social_worker_name: visitor.name,
-    social_worker_national_id: visitor.nationalId || "",
+    social_worker_national_id: nationalId,
     social_worker_phone: phone,
     social_worker_date: String(current.social_worker_date || visitDate),
   };
@@ -1506,7 +1543,9 @@ function CareFormInput({
   visitorDirectory?: DeskVisitorOption[];
   deskEntry?: boolean;
   onChange: (value: MohwLifeCareAnswers[string]) => void;
-  onPatchAnswers?: (patch: MohwLifeCareAnswers) => void;
+  onPatchAnswers?: (
+    patch: MohwLifeCareAnswers | ((current: MohwLifeCareAnswers) => MohwLifeCareAnswers),
+  ) => void;
 }) {
   const requiredMark = field.required ? <span className="text-destructive"> *</span> : null;
   const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
@@ -1517,7 +1556,6 @@ function CareFormInput({
       ? "border border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
       : "border"
   }`;
-  const rawText = typeof value === "string" ? value : Array.isArray(value) ? value.join(";") : "";
   const isNameField =
     field.key === "name" ||
     field.mohwKey === "name" ||
@@ -1530,6 +1568,14 @@ function CareFormInput({
     "social_worker_phone",
     "civil_worker_phone",
   ].includes(field.mohwKey);
+  const rawText = (() => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return String(value);
+    if (Array.isArray(value)) return value.join(";");
+    return "";
+  })();
+  // 畫面顯示前補前導 0（草稿／number 化後常見 9123456789）
+  const phoneText = isPhoneField && rawText.trim() ? normalizeIndoorPhone(rawText) || rawText : rawText;
   const isIdField = field.mohwKey.endsWith("national_id");
   const isDecimalNumber = field.mohwKey === "height_cm" || field.mohwKey === "weight_kg";
   const workerKind =
@@ -1538,6 +1584,14 @@ function CareFormInput({
       : field.mohwKey === "civil_worker_name"
         ? "civil"
         : null;
+
+  // 把補好的前導 0 寫回 answers，避免畫面有 0、狀態仍缺 0 → 紅字
+  useLayoutEffect(() => {
+    if (!isPhoneField || phoneText === rawText || !phoneText) return;
+    onChange(phoneText);
+    // onChange 每 render 新建；只在 raw／補完值不同時修復
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [isPhoneField, phoneText, rawText]);
 
   const errorText = error ? (
     <p id={errorId} role="alert" className="text-sm leading-6 text-destructive">
@@ -1555,7 +1609,9 @@ function CareFormInput({
         directory={visitorDirectory}
         kind={workerKind}
         onChange={onChange}
-        onPick={(visitor) => onPatchAnswers(applyVisitorToWorkerAnswers({}, visitor, workerKind))}
+        onPick={(visitor) =>
+          onPatchAnswers((current) => applyVisitorToWorkerAnswers(current, visitor, workerKind))
+        }
       />
     );
   }
@@ -1711,7 +1767,7 @@ function CareFormInput({
 
   const isElderPhoneField = field.mohwKey === "phone" || field.mohwKey === "mobile";
   const isEmergencyPhoneField = field.mohwKey === "emergency_contact_phone";
-  const phoneDigitsValue = rawText.replace(/\D/g, "");
+  const phoneDigitsValue = phoneText.replace(/\D/g, "");
   const nonePhone =
     isElderPhoneField && phoneDigitsValue === CASE_PHONE_NONE;
   const refused =
@@ -1755,7 +1811,7 @@ function CareFormInput({
         inputMode={isPhoneField || field.type === "number" ? "numeric" : undefined}
         placeholder={placeholder}
         value={
-          refused ? CASE_PHONE_REFUSED : nonePhone ? CASE_PHONE_NONE : rawText
+          refused ? CASE_PHONE_REFUSED : nonePhone ? CASE_PHONE_NONE : phoneText
         }
         disabled={phoneLocked}
         aria-invalid={Boolean(error)}
@@ -1763,7 +1819,15 @@ function CareFormInput({
         onChange={(event) => {
           const next = event.target.value;
           if (isPhoneField) {
-            onChange(digitsOnly(next, 10));
+            const asMobile = normalizeTaiwanMobilePhone(next);
+            if (asMobile && /^09\d{8}$/.test(asMobile)) {
+              onChange(asMobile);
+              return;
+            }
+            // 市話／輸入中：最多 10 碼數字，勿吃掉前導 0
+            const digits = digitsOnly(next, 10);
+            const repaired = normalizeIndoorPhone(digits);
+            onChange(repaired && /^0\d{8,9}$/.test(repaired) ? repaired : digits);
             return;
           }
           if (isIdField) {
@@ -1779,7 +1843,7 @@ function CareFormInput({
         onBlur={(event) => {
           if (isPhoneField) {
             const normalized = normalizeIndoorPhone(event.target.value);
-            if (normalized !== rawText) onChange(normalized);
+            if (normalized !== phoneText) onChange(normalized);
             return;
           }
           if (isIdField) {

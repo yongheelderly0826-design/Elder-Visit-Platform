@@ -6,13 +6,18 @@
 /** 去掉空白、連字號等，手機缺前導 0 時補上（9xxxxxxxx → 09xxxxxxxx）。 */
 export function normalizeTaiwanMobilePhone(input: string | number | null | undefined): string {
   if (input == null || input === "") return "";
+  // 數字型別會丟前導 0（Excel／JSON）；一律先當字串再只留數字
   const digits = String(input)
     .trim()
     .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30))
     .replace(/[^\d]/g, "");
   if (!digits) return "";
   if (/^09\d{8}$/.test(digits)) return digits;
+  // 缺前導 0 的 10 碼手機（9 + 9 碼，常見於試算表吃掉 0）
   if (/^9\d{8}$/.test(digits)) return `0${digits}`;
+  if (/^9\d{9}$/.test(digits)) return `0${digits}`.slice(0, 10);
+  // 多打一碼的 09…（11 碼）→ 取前 10 碼
+  if (/^09\d{9}$/.test(digits)) return digits.slice(0, 10);
   return digits;
 }
 

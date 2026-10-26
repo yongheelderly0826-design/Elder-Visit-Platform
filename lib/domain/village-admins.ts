@@ -85,10 +85,11 @@ export type VillageAdminRow = {
 };
 
 /**
- * 永和區里編碼：官方六碼，如上林里 `040051`。
- * - 已是 6 碼（040051）→ 原樣
- * - 僅里序（51／051）→ 補成 `040` + 三碼
- * - 縣市碼 65000040 + 里序 → 取末三碼 `040` + 里序三碼
+ * 永和區里編碼：官方六碼，如上林里 `040051`（縣市末三碼 `040` + 里序三碼）。
+ * - 已是正確 6 碼（040051）→ 原樣
+ * - 僅里序（51／051／1）→ 補成 `040` + 三碼
+ * - 縣市碼 65000040 + 里序 → 取末六碼後再正規化
+ * - 常見誤鍵：左補零成六碼（000051）或前綴錯位（004001）→ 改為 `040` + 末三碼
  */
 export function formatYongheVillageCode(
   villageCodeOrSeq: string | number | null | undefined,
@@ -96,13 +97,22 @@ export function formatYongheVillageCode(
 ): string {
   const raw = String(villageCodeOrSeq ?? "").trim();
   if (!raw) return "";
-  if (/^\d{6}$/.test(raw)) return raw;
-  const seq = raw.replace(/\D/g, "");
-  if (!seq) return "";
-  if (seq.length >= 6) return seq.slice(-6);
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+
   const district = String(districtCode ?? "65000040").replace(/\D/g, "") || "65000040";
   const prefix = district.slice(-3).padStart(3, "0");
-  return `${prefix}${seq.padStart(3, "0")}`;
+
+  if (digits.length >= 6) {
+    const six = digits.slice(-6);
+    if (six.startsWith(prefix)) return six;
+    // 000051／004001 等：不當成正式六碼，改解讀為里序末三碼
+    if (six.startsWith("00")) return `${prefix}${six.slice(-3)}`;
+    return six;
+  }
+
+  // 里序不足六碼：只取末三碼再補齊（避免 0001 → 七碼）
+  return `${prefix}${digits.slice(-3).padStart(3, "0")}`;
 }
 
 /** 由匯入檔縣市碼＋里別組成六碼里編碼。 */

@@ -283,7 +283,7 @@ var MohwLifeCareMapper = (function () {
       return value.map(function (v) { return String(v).trim(); }).join(';');
     }
     var text = String(value).trim();
-    if (PHONE_KEYS[key]) return formatPhone(text);
+    if (PHONE_KEYS[key]) return formatPhone(normalizeIndoorPhone_(text));
     // 不替換自由文字或選項中的逗號。多選只接受陣列或半形分號。
     return text;
   }
@@ -355,11 +355,26 @@ var MohwLifeCareMapper = (function () {
     return pad_(rocYear, 3) + '/' + pad_(month, 2) + '/' + pad_(day, 2);
   }
 
-  /** 只清理明確電話分隔符；不刪字母、不猜測遺失的前導 0。 */
+  /** 只清理明確電話分隔符；不刪字母。 */
   function formatPhone(input) {
     var text = String(input == null ? '' : input).trim();
     if (!text || !/^[0-9 ()-]+$/.test(text)) return text;
     return text.replace(/[ ()-]/g, '');
+  }
+
+  /** 市話／手機送出前補前導 0（對齊 TS normalizeIndoorPhone）。 */
+  function normalizeIndoorPhone_(value) {
+    var cleaned = formatPhone(value);
+    var digits = String(cleaned).replace(/\D/g, '');
+    if (digits === '0000000000' || digits === '9999999999') return digits;
+    if (typeof PhoneUtils !== 'undefined' && PhoneUtils.normalizeMobile &&
+        (/^09\d{8,9}$/.test(digits) || /^9\d{8,9}$/.test(digits))) {
+      var mobile = PhoneUtils.normalizeMobile(digits);
+      if (/^09\d{8}$/.test(mobile)) return mobile;
+    }
+    if (/^9\d{8}$/.test(digits)) return '0' + digits;
+    if (/^0\d{8,9}$/.test(digits)) return digits;
+    return cleaned;
   }
 
   function formatTime(input) {

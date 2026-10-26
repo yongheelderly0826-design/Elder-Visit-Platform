@@ -24,7 +24,9 @@ export function VisitorCorrectionDialog({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const albumInputRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState(request.fullName);
-  const [phone, setPhone] = useState(profile?.phone ?? "");
+  const [phone, setPhone] = useState(
+    () => normalizeTaiwanMobilePhone(profile?.phone) || profile?.phone || "",
+  );
   const [workerGroup, setWorkerGroup] = useState<VisitorRegistrationWorkerGroup>(
     profile?.workerGroup ?? "civil_affairs",
   );
@@ -38,7 +40,7 @@ export function VisitorCorrectionDialog({
 
   useEffect(() => {
     setFullName(request.fullName);
-    setPhone(profile?.phone ?? "");
+    setPhone(normalizeTaiwanMobilePhone(profile?.phone) || profile?.phone || "");
     setWorkerGroup(profile?.workerGroup ?? "civil_affairs");
     setDepartmentName(profile?.departmentName ?? "其他");
     setDepartmentOther(profile?.departmentOther ?? "");

@@ -29,7 +29,8 @@ export default async function ManagerCareFormFillPage({
 
   const visitors = ((await gasClient.visitors.list().catch(() => [])) as Record<string, unknown>[])
     .map(mapDeskVisitor)
-    .filter((item) => item.id && item.name);
+    .filter((item) => item.id && item.name)
+    .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
   const visitor = visitors.find((item) => item.id === task.schedule.visitorId);
   const allowedReturns = new Set([
     "/manager/care-forms",

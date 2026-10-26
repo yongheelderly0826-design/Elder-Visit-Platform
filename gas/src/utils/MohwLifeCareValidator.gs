@@ -315,10 +315,20 @@ var MohwLifeCareValidator = (function () {
           pushErr(errors, k2, row, idLabel.replace(/\s*\*+$/, '') + '格式不正確（須 1 碼英文 + 9 碼數字；勿填案號或姓名）');
         }
       }
-      // 室內電話允許 0 開頭（市話或 09）或 9 開頭 9 碼；先把 O 改成 0 再去掉分隔符。
+      // 室內電話允許 0 開頭（市話或 09）或 9 開頭缺 0；先把 O 改成 0 再補前導 0。
       var phoneText = lookalikeToZero(text);
       if (/^[0-9 ()\-]+$/.test(phoneText)) phoneText = phoneText.replace(/[ ()\-]/g, '');
-      if (/^9\d{8}$/.test(phoneText)) phoneText = '0' + phoneText;
+      if (typeof PhoneUtils !== 'undefined' && PhoneUtils.normalizeMobile &&
+          (/^09\d{8,9}$/.test(phoneText) || /^9\d{8,9}$/.test(phoneText))) {
+        var mobileNorm = PhoneUtils.normalizeMobile(phoneText);
+        if (/^09\d{8}$/.test(mobileNorm)) phoneText = mobileNorm;
+      } else if (/^9\d{8}$/.test(phoneText)) {
+        phoneText = '0' + phoneText;
+      } else if (/^9\d{9}$/.test(phoneText)) {
+        phoneText = ('0' + phoneText).slice(0, 10);
+      } else if (/^09\d{9}$/.test(phoneText)) {
+        phoneText = phoneText.slice(0, 10);
+      }
       var casePhoneSentinel = phoneText === '0000000000' || phoneText === '9999999999';
       if (k2 === 'mobile' && !casePhoneSentinel && !/^09\d{8}$/.test(phoneText)) {
         pushErr(errors, k2, row, '手機格式不正確（請填 09 開頭的 10 碼，無電話填 0000000000，不願提供填 9999999999）');

@@ -1,3 +1,27 @@
+## Lesson: Worker phone `9123456789` needs display+state leading-0 repair
+
+- **Trigger:** Visitor「民政訪查人-電話」showed `9123456789` with red「請填含前導 0」even after domain normalize helpers were added.
+- **Cause:** (1) Old `normalizeIndoorPhone` only fixed 9-digit `9xxxxxxxx`, not Sheets-eaten 10-digit `9123456789`. (2) `normalizeVisitorCareAnswers` skipped non-string phones. (3) Seed ran only for `formDefaults=desk`, so roster self-fill skipped. (4) Bad localStorage drafts under `desk_defaults_v3` could reload the bare number into UI state; validation could still fail while the input showed the raw value.
+- **Rule:** Treat `9`+9 digits like mobile missing `0` (`→0912345678`). Coerce number phones in `normalizeVisitorCareAnswers`. Seed 社政／民政 from `selectedVisitor` for visitor login too. Bump care-form draft key when phone rules change. Phone inputs must display `normalizeIndoorPhone` and write the repaired value back into answers (layout effect / onChange), not only validate after export.
+- **Evidence:** `lib/domain/phone.ts`, `lib/domain/mohw-life-care-export.ts`, `components/visitor/visit-dialogue-form.tsx` (`civil_worker_phone` / `social_worker_phone`).
+- **Added on:** 2026-10-26
+
+## Lesson: Visitor care form needs visitorDirectory for 社政／民政 search-fill
+
+- **Trigger:** Logged-in visitor typing partial name in「社政訪查人-姓名」got validation for empty phone/date; expected search of 已建檔訪查員.
+- **Cause:** `WorkerNamePicker` already existed for both 社政／民政 name fields, but only renders when `visitorDirectory?.length`. Manager desk passed the directory; `/visitor/visits/[schedule_id]` did not. Slim `visitors.list` also omitted `id_number`, so pick could not fill 身分證.
+- **Rule:** Pass `visitorDirectory` (slim list + `mapDeskVisitor`) on visitor visit pages too. Keep slim payload with `id_number` + phone. On pick, merge via `applyVisitorToWorkerAnswers(current, …)` so `visit_date` seeds worker date; normalize phone with `normalizeTaiwanMobilePhone` / `normalizeIndoorPhone`.
+- **Evidence:** `app/visitor/visits/[schedule_id]/page.tsx`, `components/visitor/visit-dialogue-form.tsx` (`WorkerNamePicker`), `gas/src/modules/VisitorModule.gs` slim2.
+- **Added on:** 2026-10-26
+
+## Lesson: Yonghe village codes are 040xxx (not left-padded 00xxxx)
+
+- **Trigger:** Quick KEY showed 0 cases for input `004001` even though the village still had pending cases under `040001`.
+- **Cause:** `formatYongheVillageCode` treated any 6-digit string as final, so typos like left-padded seq (`000051`) or transposed prefix (`004001`) never matched roster/`village_code` (`040xxx`).
+- **Rule:** Normalize Yonghe codes to district prefix `040` + 3-digit village seq. Rewrite `00xxxx` six-digit mistakes to `040` + last three digits. Pending list excludes only `已完成`／`不訪`; visitor ownership does not hide rows (blocked cases still listed).
+- **Evidence:** `lib/domain/village-admins.ts` (`formatYongheVillageCode`), `app/api/manager/care-forms/quick-pending/route.ts`.
+- **Added on:** 2026-10-26
+
 ## Lesson: Quick KEY uses village code + pending list on one page
 
 - **Trigger:** Field visitors need fast multi-case KEY; unregistered staff need on-site create then KEY.

@@ -4,6 +4,7 @@ import {
   isElderMobile,
   isEmergencyContactPhone,
   isIndoorPhone,
+  normalizeIndoorPhone,
   normalizeVisitorNationalId,
   toOfficialRocDateText,
 } from "@/lib/domain/mohw-life-care-export";
@@ -413,7 +414,8 @@ export function validateMohwLifeCareRow(
   // 電話格式檢查對齊匯出後字串（只清空白／括號／連字號）。
   for (const key of ["phone", "mobile", "emergency_contact_phone", "social_worker_phone", "civil_worker_phone"] as const) {
     if (hasValue(answers[key])) {
-      answers[key] = formatMohwPhone(asString(answers[key]));
+      // 先補前導 0，再清分隔符，避免試算表／JSON 數字化後缺 0
+      answers[key] = formatMohwPhone(normalizeIndoorPhone(asString(answers[key])));
     }
   }
   const visitStatus = asString(answers.visit_status);

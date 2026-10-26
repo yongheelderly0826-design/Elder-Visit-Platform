@@ -4,8 +4,9 @@ var VisitorModule = (function () {
   function list(params) {
     params = params || {};
     var slim = params.slim === true || params.slim === 'true';
+    // slim2：含 id_number，供關懷表社政／民政搜尋帶入
     var cacheKey = ReadCache.key(
-      'visL:' + String(params.status || '') + ':' + (slim ? 'slim' : 'full')
+      'visL:' + String(params.status || '') + ':' + (slim ? 'slim2' : 'full')
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
@@ -23,6 +24,7 @@ var VisitorModule = (function () {
           name: r.name || r.full_name || '',
           email: r.email || '',
           phone: r.phone || '',
+          id_number: r.id_number || '',
           status: r.status || '',
           badge_no: r.badge_no || '',
           volunteer_group: r.volunteer_group || '',
