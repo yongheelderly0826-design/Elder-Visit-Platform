@@ -19,10 +19,11 @@ import { createVisitDraft, getVisitDraftKey, type VisitDraft } from "@/lib/domai
 import { getVisitRequiredForms } from "@/lib/domain/visit-form-flow";
 import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
 import {
+  asMultiChoiceValues,
   createMohwDeskInitialAnswers,
   finalizeDeskContactPhones,
-  MOHW_EXCLUSIVE_NONE_MULTI_KEYS,
   MOHW_NONE_OF_ABOVE,
+  multiIncludesNoneOfAbove,
   toggleExclusiveNoneMulti,
 } from "@/lib/domain/mohw-desk-form-defaults";
 import {
@@ -1497,14 +1498,15 @@ function CareFormInput({
   }
 
   if (field.type === "multi_choice") {
-    const selectedValues = Array.isArray(value) ? value : [];
-    const fieldKey = field.mohwKey || field.key;
-    const hasNoneOption = Boolean(field.options?.includes(MOHW_NONE_OF_ABOVE));
-    const exclusiveNone =
-      hasNoneOption &&
-      (MOHW_EXCLUSIVE_NONE_MULTI_KEYS.has(fieldKey) ||
-        (deskEntry && hasNoneOption));
-    const noneSelected = exclusiveNone && selectedValues.includes(MOHW_NONE_OF_ABOVE);
+    const selectedValues = asMultiChoiceValues(value);
+    const hasNoneOption = Boolean(
+      field.options?.some(
+        (option) => option === MOHW_NONE_OF_ABOVE || option.includes(MOHW_NONE_OF_ABOVE),
+      ),
+    );
+    // 凡選項含「以上均無」一律互斥，預設選中時其他項必須反灰
+    const exclusiveNone = hasNoneOption;
+    const noneSelected = exclusiveNone && multiIncludesNoneOfAbove(selectedValues);
     return (
       <div
         id={fieldId}
@@ -1526,20 +1528,28 @@ function CareFormInput({
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {field.options?.map((option, index) => {
+            const isNoneOption =
+              option === MOHW_NONE_OF_ABOVE || option.includes(MOHW_NONE_OF_ABOVE);
             const selected = selectedValues.includes(option);
             const label = field.optionLabels?.[index] ?? option;
-            const disabledOther = noneSelected && option !== MOHW_NONE_OF_ABOVE;
+            const disabledOther = noneSelected && !isNoneOption;
             return (
               <button
                 key={`${field.key}-${option}`}
                 type="button"
                 disabled={disabledOther}
                 aria-pressed={selected}
-                className={`rounded-md border px-2 py-1 text-xs ${
+                aria-disabled={disabledOther}
+                title={
+                  disabledOther
+                    ? "已選「以上均無」。請先再按一次「以上均無」取消後，才能勾其他項。"
+                    : undefined
+                }
+                className={`rounded-md border px-2 py-1 text-xs transition-opacity ${
                   selected
                     ? "bg-primary text-primary-foreground"
                     : disabledOther
-                      ? "cursor-not-allowed bg-muted text-muted-foreground opacity-50"
+                      ? "pointer-events-none cursor-not-allowed border-muted bg-muted/80 text-muted-foreground opacity-40"
                       : "bg-card"
                 }`}
                 onClick={() =>
@@ -1564,7 +1574,7 @@ function CareFormInput({
             }`}
           >
             {noneSelected
-              ? "目前為「以上均無」：其他選項已反灰。再按一次「以上均無」即可取消，然後可勾其他項。"
+              ? "目前為「以上均無」：其他選項已反灰（不可點）。再按一次「以上均無」即可取消，然後可勾其他項。"
               : "選「以上均無」會清掉其他項並反灰；再按一次「以上均無」即可取消。"}
           </p>
         ) : null}

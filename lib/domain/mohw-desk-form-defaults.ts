@@ -98,6 +98,26 @@ export function formatDeskBirthDate(raw: string | Date | number | null | undefin
   return formatted;
 }
 
+/** 多選答案可能是陣列或 `;` 字串（草稿／匯入）。 */
+export function asMultiChoiceValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  const text = String(value ?? "").trim();
+  if (!text) return [];
+  return text
+    .split(/[;；]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function multiIncludesNoneOfAbove(
+  values: string[],
+  noneLabel: string = MOHW_NONE_OF_ABOVE,
+) {
+  return values.some((item) => item === noneLabel || item.includes(noneLabel));
+}
+
 export function toggleExclusiveNoneMulti(
   current: string[],
   option: string,
