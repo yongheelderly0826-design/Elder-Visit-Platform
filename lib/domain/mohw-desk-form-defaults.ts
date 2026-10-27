@@ -9,6 +9,7 @@ import {
 import { formatRocDate, CASE_PHONE_NONE, CASE_PHONE_REFUSED } from "@/lib/domain/mohw-life-care-export";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { createInitialMohwAnswers } from "@/lib/domain/mohw-life-care-ui";
+import { normalizeTaiwanBirthToRocText } from "@/lib/domain/taiwan-birth-date";
 import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
 
 export const MOHW_DESK_FORM_DEFAULTS_SOURCE = "紙本建檔預設（2026-10 定案）";
@@ -93,13 +94,9 @@ export function inferGenderFromNationalId(nationalId: string | null | undefined)
   return Number(digit) % 2 === 1 ? "男" : "女";
 }
 
-/** 匯入出生日期 → 官方民國 `yyy/MM/dd`。 */
+/** 匯入出生日期 → 官方民國 `yyy/MM/dd`（兩碼年一律當民國，避免 Sheets 把 24/01/01 收成 2024）。 */
 export function formatDeskBirthDate(raw: string | Date | number | null | undefined): string {
-  if (raw == null || raw === "") return "";
-  const formatted = formatRocDate(raw as string | Date | number);
-  if (!formatted || formatted === "INVALID_DATE") return "";
-  if (/^\d{3}\/\d{2}\/\d{2}$/.test(formatted)) return formatted;
-  return formatted;
+  return normalizeTaiwanBirthToRocText(raw);
 }
 
 /** 多選答案可能是陣列或 `;` 字串（草稿／匯入）。 */
@@ -276,6 +273,11 @@ export function createMohwDeskInitialAnswers(
     visitStartTime: seedTimes?.visitStartTime,
     visitEndTime: seedTimes?.visitEndTime,
   };
+  const hasBatchSeed = Boolean(
+    seededFromSchedule.visitDate ||
+      seededFromSchedule.visitStartTime ||
+      seededFromSchedule.visitEndTime,
+  );
   // 有 URL／整批時段就用它；完全沒 seed 才退回現場時鐘（快速 KEY）
   const withTimes = mergeDeskSeededVisitTimes(
     {
@@ -283,11 +285,16 @@ export function createMohwDeskInitialAnswers(
       ...fromCase,
     },
     seededFromSchedule,
-    { fallbackToClock: true },
+    { fallbackToClock: !hasBatchSeed },
   );
+  const visitDateRoc = String(withTimes.visit_date || "").trim();
 
   return {
     ...withTimes,
+    // 訪查人日期與訪查日一致，避免仍顯示「今天」
+    ...(visitDateRoc
+      ? { social_worker_date: visitDateRoc, civil_worker_date: visitDateRoc }
+      : {}),
     gender: inferredGender || String(fromCase.gender || elderCase.gender || ""),
     birth_date: birthDate,
     living_address_type: "與戶籍地址相同",

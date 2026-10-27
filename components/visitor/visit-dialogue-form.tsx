@@ -263,9 +263,9 @@ export function VisitDialogueForm({
       .map((section) => section.title),
   );
   const draftKey = getVisitDraftKey(schedule.id);
-  // 換 key：避開舊草稿把缺前導 0 的電話蓋回畫面（desk_defaults_v3／無後綴）
+  // 換 key：避開舊草稿蓋掉批次時段／錯誤生日（desk_defaults_v4 以前）
   const careFormDraftKey = `${draftKey}:mohw_life_care_form${
-    useDeskFormDefaults ? ":desk_defaults_v4" : ":phone_lead0_v1"
+    useDeskFormDefaults ? ":desk_defaults_v5" : ":phone_lead0_v1"
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   /** 紙本一張＝一次訪視：至少勾本趟 1 個時段；現場外勤仍要 3–5 個不同時段照片。 */

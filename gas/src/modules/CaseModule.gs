@@ -64,7 +64,7 @@ var CaseModule = (function () {
       name: String(data.name || '').trim(),
       id_number: String(data.id_number || '').trim().toUpperCase(),
       gender: String(data.gender || '').trim(),
-      birth_date: String(data.birth_date || '').trim(),
+      birth_date: normalizeBirthDate_(data.birth_date),
       case_type: String(data.case_type || '獨老').trim() || '獨老',
       household_district: String(data.household_district || '永和區').trim() || '永和區',
       household_village: String(data.household_village || data.visit_village || '').trim(),
@@ -86,6 +86,30 @@ var CaseModule = (function () {
 
   function normalizeId_(value) {
     return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  /** 名冊出生：1～3 碼年斜線＝民國，補成 yyy/MM/dd 文字，避免 Sheets 把 24/01/01 收成 2024。 */
+  function normalizeBirthDate_(value) {
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      var y = value.getFullYear() - 1911;
+      var m = value.getMonth() + 1;
+      var d = value.getDate();
+      if (y < 1 || y > 999) return '';
+      return ('000' + y).slice(-3) + '/' + ('0' + m).slice(-2) + '/' + ('0' + d).slice(-2);
+    }
+    var text = String(value == null ? '' : value).trim();
+    if (!text) return '';
+    var roc = text.match(/^(\d{1,3})\/(\d{1,2})\/(\d{1,2})$/);
+    if (roc) {
+      return (
+        ('000' + String(Number(roc[1]))).slice(-3) +
+        '/' +
+        ('0' + String(Number(roc[2]))).slice(-2) +
+        '/' +
+        ('0' + String(Number(roc[3]))).slice(-2)
+      );
+    }
+    return text;
   }
 
   function importBatch(data) {
@@ -134,6 +158,9 @@ var CaseModule = (function () {
     rows.forEach(function (row) {
       var idNumber = normalizeId_(row.id_number);
       row.id_number = idNumber;
+      if (row.birth_date != null && row.birth_date !== '') {
+        row.birth_date = normalizeBirthDate_(row.birth_date);
+      }
       if (row.village_seq != null && row.village_seq !== '') {
         row.village_seq = Number(row.village_seq) || String(row.village_seq).trim();
       }
@@ -146,7 +173,10 @@ var CaseModule = (function () {
         var patch = {
           name: row.name != null ? row.name : prev.name,
           gender: row.gender != null ? row.gender : prev.gender,
-          birth_date: row.birth_date != null ? row.birth_date : prev.birth_date,
+          birth_date:
+            row.birth_date != null && row.birth_date !== ''
+              ? row.birth_date
+              : prev.birth_date,
           case_type: row.case_type || prev.case_type || '獨老',
           household_district: row.household_district || prev.household_district || '永和區',
           household_village: row.household_village != null ? row.household_village : prev.household_village,
@@ -207,6 +237,11 @@ var CaseModule = (function () {
       sheet.getRange(idx + 1, 1, 1, headers.length).setValues([grid[idx]]);
     });
     if (toAppend.length) SheetHelper.appendRows(SHEET, toAppend);
+    // 出生欄強制文字，避免下次再被 Sheets 收成西元日期
+    var birthIdx = headers.indexOf('birth_date');
+    if (birthIdx >= 0 && sheet.getLastRow() >= 2) {
+      sheet.getRange(2, birthIdx + 1, sheet.getLastRow() - 1, 1).setNumberFormat('@');
+    }
     ReadCache.bump();
     return {
       imported: imported.length,

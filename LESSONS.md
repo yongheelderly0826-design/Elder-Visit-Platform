@@ -141,6 +141,15 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Excel 兩碼民國生日不可原樣寫入 Sheets
+
+- **Trigger:** 關懷表顯示出生 `113/01/01`（西元 2024），與名冊長者不符。
+- **Cause:** 來源 Excel 為民國兩碼 `24/01/01`；寫入 Google Sheets 後被當成西元兩碼年窗（00–29→20xx），讀回 ISO `2024-01-01` 再轉民國變成 113。
+- **Rule:** 匯入前一律 `normalizeTaiwanBirthToRocText` 成 `yyy/MM/dd`；GAS `importBatch` 同樣正規化並將 `birth_date` 欄設為文字格式 `@`。修復用 `scripts/repair-case-birth-dates-from-xlsx.mjs`。
+- **Evidence:** `lib/domain/taiwan-birth-date.ts`, `gas/src/modules/CaseModule.gs`, `scripts/import-village-desk-p0.mjs`
+- **Added on:** 2026-10-27
+
+
 ## Lesson: Visitor KEY auto-shifts overlapping visit windows; desk stays strict
 
 - **Trigger:** 訪查員 quick KEY / field_self forms seed “now +10m” (or clock) times that often overlap other same-day cases for the same visitor; a blocking conflict modal strand them.

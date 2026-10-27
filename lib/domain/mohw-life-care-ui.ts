@@ -6,6 +6,7 @@ import {
   type MohwLifeCareColumn,
 } from "@/lib/domain/mohw-life-care-form";
 import { formatRocDate } from "@/lib/domain/mohw-life-care-export";
+import { normalizeTaiwanBirthToRocText } from "@/lib/domain/taiwan-birth-date";
 import {
   displayOfficialOption,
   parseOfficialAllowedValues,
@@ -221,12 +222,7 @@ export function createInitialMohwAnswers(
       ? visitDateRoc
       : visitDateRaw;
 
-  const birthRaw = elderCase.birthDate ? String(elderCase.birthDate) : "";
-  const birthRoc = birthRaw ? formatRocDate(birthRaw) : "";
-  const birthDate =
-    birthRoc && birthRoc !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(birthRoc)
-      ? birthRoc
-      : birthRaw;
+  const birthDate = normalizeTaiwanBirthToRocText(elderCase.birthDate ?? "");
 
   return {
     visit_date: visitDate,

@@ -106,11 +106,20 @@ function parseCases() {
       const name = String(row["姓名"] || "").trim();
       if (!id || !name) return null;
       const village = String(row["戶籍里"] || "").trim();
-      const birth = String(row["出生日期"] || "").trim();
+      const birthRaw = String(row["出生日期"] || "").trim();
+      // 兩碼／三碼斜線＝民國年；寫入前先補成 yyy/MM/dd，避免 Sheets 把 24/01/01 收成 2024-01-01
+      const birthRoc = (() => {
+        const m = birthRaw.match(/^(\d{1,3})\/(\d{1,2})\/(\d{1,2})$/);
+        if (!m) return birthRaw;
+        const y = String(Number(m[1])).padStart(3, "0");
+        const mo = String(Number(m[2])).padStart(2, "0");
+        const d = String(Number(m[3])).padStart(2, "0");
+        return `${y}/${mo}/${d}`;
+      })();
       return {
         name,
         id_number: id,
-        birth_date: birth,
+        birth_date: birthRoc,
         case_type: "獨老",
         household_district: String(row["戶籍區"] || "永和區").trim() || "永和區",
         household_village: village,
