@@ -12,7 +12,7 @@ import {
   buildDeskCareFormPath,
   buildStaggeredVisitWindows,
   clearDeskBatchState,
-  deskStaleAssignmentMessage,
+  deskStaleAssignmentClearedMessage,
   findNextReadyDeskBatchItem,
   isAssignmentNotFoundError,
   readDeskBatchState,
@@ -106,11 +106,42 @@ export function CareFormDeskPanel({
   const [batch, setBatch] = useState<DeskBatchState | null>(null);
   const [timeDraft, setTimeDraft] = useState<TimeDraft | null>(null);
   const [conflictAlert, setConflictAlert] = useState<string | null>(null);
+  /** After auto-clear of dead ASGs: show CTA to re-prepare */
+  const [showPrepareAgainCta, setShowPrepareAgainCta] = useState(false);
   const [batchTimeDraft, setBatchTimeDraft] = useState({
     visitDate: "",
     visitStartTime: "09:00",
     visitEndTime: addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) || "09:10",
   });
+
+  async function checkAssignmentsExist(
+    assignmentIds: string[],
+  ): Promise<{ exists: boolean; missing: string[] } | null> {
+    const ids = [...new Set(assignmentIds.map((id) => String(id ?? "").trim()).filter(Boolean))];
+    if (!ids.length) return null;
+    try {
+      const response = await fetch(
+        `/api/manager/care-forms/assignment-status?assignmentIds=${encodeURIComponent(ids.join(","))}`,
+      );
+      const json = (await response.json()) as {
+        data?: { exists?: boolean; missing?: string[]; uncertain?: boolean };
+      };
+      if (!response.ok) return null;
+      if (json.data?.uncertain) return null;
+      return {
+        exists: Boolean(json.data?.exists),
+        missing: Array.isArray(json.data?.missing) ? json.data!.missing! : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function assignmentStillExists(assignmentId: string): Promise<boolean | null> {
+    const result = await checkAssignmentsExist([assignmentId]);
+    if (!result) return null;
+    return result.exists;
+  }
 
   function showTimeConflict(message: string) {
     setConflictAlert(message);
@@ -125,25 +156,38 @@ export function CareFormDeskPanel({
 
   useEffect(() => {
     const saved = readDeskBatchState();
-    if (saved?.items?.length) {
-      setBatch(saved);
-      setIdentityKey(saved.identityKey);
-      setVillageFilter(saved.village);
-      setPrimaryVisitorId(saved.primaryVisitorId);
-      const companions = saved.companionVisitorIds;
-      // 還原勾選需等 visitors 載入後再分欄；先記主填
-      setMessage(`已恢復待 KEY 清單（${saved.items.length} 案）。可整批套用時間後進表。`);
-      const firstTimed = saved.items.find((item) => item.visitDate && item.visitStartTime);
-      setBatchTimeDraft({
-        visitDate: firstTimed?.visitDate || new Date().toISOString().slice(0, 10),
-        visitStartTime: firstTimed?.visitStartTime || "09:00",
-        visitEndTime:
-          firstTimed?.visitEndTime ||
-          addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) ||
-          "09:10",
-      });
-      void companions;
-    }
+    if (!saved?.items?.length) return;
+
+    setBatch(saved);
+    setIdentityKey(saved.identityKey);
+    setVillageFilter(saved.village);
+    setPrimaryVisitorId(saved.primaryVisitorId);
+    // 還原勾選需等 visitors 載入後再分欄；先記主填
+    setMessage(`已恢復待 KEY 清單（${saved.items.length} 案）。可整批套用時間後進表。`);
+    const firstTimed = saved.items.find((item) => item.visitDate && item.visitStartTime);
+    setBatchTimeDraft({
+      visitDate: firstTimed?.visitDate || new Date().toISOString().slice(0, 10),
+      visitStartTime: firstTimed?.visitStartTime || "09:00",
+      visitEndTime:
+        firstTimed?.visitEndTime ||
+        addMinutesToTime("09:00", DESK_BATCH_SLOT_MINUTES) ||
+        "09:10",
+    });
+
+    let cancelled = false;
+    void (async () => {
+      const status = await checkAssignmentsExist(saved.items.map((item) => item.assignmentId));
+      if (cancelled || !status || status.exists) return;
+      // ANY missing ASG → wipe stale queue so steps 1–3 unlock immediately
+      clearDeskBatchState();
+      setBatch(null);
+      setTimeDraft(null);
+      setShowPrepareAgainCta(true);
+      setMessage(deskStaleAssignmentClearedMessage(status.missing[0]));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -529,6 +573,7 @@ export function CareFormDeskPanel({
       };
       writeDeskBatchState(next);
       setBatch(next);
+      setShowPrepareAgainCta(false);
       setBatchTimeDraft({
         visitDate: new Date().toISOString().slice(0, 10),
         visitStartTime: "09:00",
@@ -574,19 +619,30 @@ export function CareFormDeskPanel({
     setMessage(null);
   }
 
-  function enterFormWithTime(item: DeskBatchQueueItem) {
+  async function enterFormWithTime(item: DeskBatchQueueItem) {
     if (!item.visitDate || !item.visitStartTime || !item.visitEndTime) {
       openTimeConfirm(item);
       return;
     }
-    router.push(
-      buildDeskCareFormPath(item.assignmentId, {
-        visitDate: item.visitDate,
-        visitStartTime: item.visitStartTime,
-        visitEndTime: item.visitEndTime,
-        returnPath,
-      }),
-    );
+    setBusy(true);
+    setMessage(null);
+    try {
+      const exists = await assignmentStillExists(item.assignmentId);
+      if (exists === false) {
+        recoverStaleAssignmentQueue(item.assignmentId);
+        return;
+      }
+      router.push(
+        buildDeskCareFormPath(item.assignmentId, {
+          visitDate: item.visitDate,
+          visitStartTime: item.visitStartTime,
+          visitEndTime: item.visitEndTime,
+          returnPath,
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function applyBatchTimes() {
@@ -605,7 +661,15 @@ export function CareFormDeskPanel({
 
     setBusy(true);
     setMessage(null);
+    setShowPrepareAgainCta(false);
     try {
+      // Fail fast before confirm-time-batch so dead ASGs never leave UI locked mid-apply
+      const preflight = await checkAssignmentsExist(batch.items.map((item) => item.assignmentId));
+      if (preflight && !preflight.exists) {
+        recoverStaleAssignmentQueue(preflight.missing[0]);
+        return;
+      }
+
       const response = await fetch("/api/manager/care-forms/confirm-time-batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -634,7 +698,7 @@ export function CareFormDeskPanel({
       if (!response.ok) {
         const failMessage = json.error?.message ?? "整批時段無法套用";
         if (isAssignmentNotFoundError(json.error)) {
-          recoverStaleAssignmentQueue(json.error?.assignmentId, failMessage);
+          recoverStaleAssignmentQueue(json.error?.assignmentId);
           return;
         }
         if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
@@ -642,6 +706,7 @@ export function CareFormDeskPanel({
         return;
       }
 
+      // Only persist preview slots after Sheets confirm succeeds
       const nextItems = batch.items.map((item, index) => ({
         ...item,
         visitDate: built.slots[index].visitDate,
@@ -731,10 +796,7 @@ export function CareFormDeskPanel({
       if (!response.ok) {
         const failMessage = json.error?.message ?? "時段無法確認";
         if (isAssignmentNotFoundError(json.error)) {
-          recoverStaleAssignmentQueue(
-            json.error?.assignmentId || timeDraft.assignmentId,
-            failMessage,
-          );
+          recoverStaleAssignmentQueue(json.error?.assignmentId || timeDraft.assignmentId);
           return;
         }
         if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
@@ -777,19 +839,28 @@ export function CareFormDeskPanel({
     setBatch(next);
   }
 
-  function clearBatch() {
+  function clearBatch(opts?: { message?: string; showPrepareCta?: boolean }) {
     clearDeskBatchState();
     setBatch(null);
     setTimeDraft(null);
-    setMessage("已清空待 KEY 清單。訪查組仍保留，可再勾個案準備。");
+    setShowPrepareAgainCta(Boolean(opts?.showPrepareCta));
+    setMessage(opts?.message ?? "已清空待 KEY 清單。訪查組仍保留，可再勾個案準備。");
   }
 
-  /** Sheets 已無該派案列 → 整批 sessionStorage 佇列視為過期，避免逐筆再卡 */
-  function recoverStaleAssignmentQueue(assignmentId?: string, serverMessage?: string) {
+  /** Sheets 已無該派案列 → 整批 sessionStorage 佇列視為過期，解鎖步驟 1–3 */
+  function recoverStaleAssignmentQueue(assignmentId?: string) {
     clearDeskBatchState();
     setBatch(null);
     setTimeDraft(null);
-    setMessage(serverMessage || deskStaleAssignmentMessage(assignmentId));
+    setShowPrepareAgainCta(true);
+    setMessage(deskStaleAssignmentClearedMessage(assignmentId));
+  }
+
+  function scrollToCaseSection() {
+    document.getElementById("desk-case-section")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   }
 
   // 從表單返回：done= 標記已 KEY；batchDone=1 顯示連續 KEY 完成提示
@@ -850,7 +921,7 @@ export function CareFormDeskPanel({
               >
                 跳到待 KEY 清單
               </Button>
-              <Button type="button" onClick={clearBatch}>
+              <Button type="button" onClick={() => clearBatch()}>
                 清空清單（解鎖）
               </Button>
             </div>
@@ -1024,7 +1095,7 @@ export function CareFormDeskPanel({
         ) : null}
       </section>
 
-      <section className="rounded-lg border bg-card p-4">
+      <section id="desk-case-section" className="rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold">3. 勾選個案並準備派案</h2>
@@ -1206,7 +1277,7 @@ export function CareFormDeskPanel({
                   .join("、")}
               </p>
             </div>
-            <Button type="button" variant="outline" onClick={clearBatch}>
+            <Button type="button" variant="outline" onClick={() => clearBatch()}>
               清空清單／更換訪查組
             </Button>
           </div>
@@ -1452,15 +1523,22 @@ export function CareFormDeskPanel({
       ) : null}
 
       {message && !timeDraft && !conflictAlert ? (
-        <p
+        <div
           className={
             message.includes("衝突")
               ? "rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-              : "rounded-md bg-secondary p-3 text-sm text-muted-foreground"
+              : showPrepareAgainCta
+                ? "rounded-md border border-sky-300 bg-sky-50 p-4 text-sm text-sky-950"
+                : "rounded-md bg-secondary p-3 text-sm text-muted-foreground"
           }
         >
-          {message}
-        </p>
+          <p>{message}</p>
+          {showPrepareAgainCta && !batch ? (
+            <Button type="button" className="mt-3 h-11" onClick={scrollToCaseSection}>
+              重新準備派案（已解鎖）
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

@@ -18,8 +18,8 @@
 
 - **Trigger:** 關懷表建檔 modal「通過稽核並儲存時段」shows red `Assignment not found: ASG-a35128c2`; batch still「尚未套用時間」after restore.
 - **Cause:** 待 KEY 清單 lives in browser `sessionStorage` (`elder-desk-care-batch-v1`). Confirm calls GAS `assignments.confirm` → `SheetHelper.updateByKey(派案紀錄)`. If that row was deleted (清測資 / re-init / spreadsheet switch) or the tab restored an old queue, the ASG id is valid-looking but missing. Not an ID-format bug; prepare still mints `ASG-` + 8 hex.
-- **Rule:** Treat as stale client queue. Map to `ASSIGNMENT_NOT_FOUND` + Chinese recover copy; desk UI clears the whole batch so user re-勾選 and「一次準備派案」. Immediate workaround without deploy:「清空清單（解鎖）」then prepare again.
-- **Evidence:** `gas/src/modules/AssignmentModule.gs` `confirm`, `app/api/manager/care-forms/confirm-time/route.ts`, `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`.
+- **Rule:** Treat as stale client queue. On mount / apply / confirm / enter-form: probe `assignment-status`; if ANY ASG missing → `clearDeskBatchState` + `setBatch(null)` (unlock steps 1–3) + message「已自動清除失效待 KEY 清單…」+ CTA「重新準備派案（已解鎖）」. Never tell user to hunt「清空清單」after auto-clear already ran. Write staggered slots into sessionStorage only after confirm-time-batch succeeds.
+- **Evidence:** `gas/src/modules/AssignmentModule.gs` `confirm`, `app/api/manager/care-forms/assignment-status/route.ts`, `confirm-time/route.ts`, `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`.
 - **Added on:** 2026-10-27
 
 ## Lesson: Worker phone `9123456789` needs display+state leading-0 repair

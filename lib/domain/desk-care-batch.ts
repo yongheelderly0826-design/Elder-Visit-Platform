@@ -467,11 +467,18 @@ export function isAssignmentNotFoundError(error?: {
   );
 }
 
-/** 待 KEY 佇列在 sessionStorage，Sheets 派案列卻已刪／重派時的提示 */
+/** API／偵測：待 KEY 佇列在 sessionStorage，Sheets 派案列卻已刪／重派 */
 export function deskStaleAssignmentMessage(assignmentId?: string) {
   const id = String(assignmentId ?? "").trim();
   const suffix = id ? `（${id}）` : "";
-  return `派案已不在表上${suffix}。瀏覽器還留著舊的「待 KEY 清單」，但 Sheets「派案紀錄」已找不到該列（常見於清測資、重派、或換試算表）。請按「清空清單（解鎖）」後再勾個案「一次準備派案」。`;
+  return `派案已不在表上${suffix}。瀏覽器「待 KEY 清單」已失效（常見於清測資、重派、或換試算表）。`;
+}
+
+/** 桌面端已自動 clear sessionStorage 佇列後的成功回復文案 */
+export function deskStaleAssignmentClearedMessage(assignmentId?: string) {
+  const id = String(assignmentId ?? "").trim();
+  const suffix = id ? `（曾見 ${id}）` : "";
+  return `已自動清除失效待 KEY 清單${suffix}，請重新勾選個案後按一次準備派案。`;
 }
 
 /** 民國 yyy/MM/dd 或 ISO yyyy-MM-dd → ISO；無法解析則 null。 */
