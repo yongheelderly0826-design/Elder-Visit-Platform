@@ -80,14 +80,19 @@ import {
   MANAGER_DESK_NOTE,
 } from "@/lib/domain/manager-care-form-desk";
 import {
+  DESK_VISIT_DURATION_OPTIONS,
+  addMinutesToTime,
   buildDeskCareFormPath,
+  chainDeskBatchAfterKeyed,
+  endTimeFromStartAndDuration,
   findNextReadyDeskBatchItem,
+  inferDeskVisitDurationMinutes,
   insertDeskBatchItemsAfter,
-  markDeskBatchItemKeyed,
   normalizeDeskVisitDateToIso,
   readDeskBatchState,
   writeDeskBatchState,
   type DeskBatchQueueItem,
+  type DeskVisitDurationMinutes,
 } from "@/lib/domain/desk-care-batch";
 
 type MissedSlotPhoto = {
@@ -265,7 +270,7 @@ export function VisitDialogueForm({
   const draftKey = getVisitDraftKey(schedule.id);
   // 換 key：避開舊草稿蓋掉批次時段／錯誤生日（desk_defaults_v4 以前）
   const careFormDraftKey = `${draftKey}:mohw_life_care_form${
-    useDeskFormDefaults ? ":desk_defaults_v5" : ":phone_lead0_v1"
+    useDeskFormDefaults ? ":desk_defaults_v6" : ":phone_lead0_v1"
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
   /** 紙本一張＝一次訪視：至少勾本趟 1 個時段；現場外勤仍要 3–5 個不同時段照片。 */
@@ -632,6 +637,8 @@ export function VisitDialogueForm({
           normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
           normalizeDeskVisitDateToIso(schedule.visitDate) ||
           "",
+        visitStartTime: String(mohwAnswers.visit_start_time || "").trim().slice(0, 5),
+        visitEndTime: String(mohwAnswers.visit_end_time || "").trim().slice(0, 5),
         returnPath: deskReturnPath || "/desk/care-forms",
       });
       if (continuous.toastMessage) {
@@ -664,6 +671,8 @@ export function VisitDialogueForm({
     caseCode: string;
     visitResult: VisitSubmission["visitResult"];
     visitDateRaw: string;
+    visitStartTime?: string;
+    visitEndTime?: string;
     returnPath: string;
   }): Promise<{
     nextHref: string | null;
@@ -676,7 +685,27 @@ export function VisitDialogueForm({
     let toastMessage: string | null = null;
 
     if (batch) {
-      batch = markDeskBatchItemKeyed(batch, input.assignmentId);
+      const visitDate =
+        normalizeDeskVisitDateToIso(input.visitDateRaw) ||
+        String(input.visitDateRaw || "").trim();
+      const visitStartTime = String(input.visitStartTime || "").trim().slice(0, 5);
+      const visitEndTime = String(input.visitEndTime || "").trim().slice(0, 5);
+      batch =
+        visitDate && visitStartTime && visitEndTime
+          ? chainDeskBatchAfterKeyed(batch, input.assignmentId, {
+              visitDate,
+              visitStartTime,
+              visitEndTime,
+            })
+          : {
+              ...batch,
+              items: batch.items.map((item) =>
+                item.assignmentId === input.assignmentId
+                  ? { ...item, status: "keyed" as const }
+                  : item,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
       writeDeskBatchState(batch);
     }
 
@@ -769,7 +798,8 @@ export function VisitDialogueForm({
       afterAssignmentId: input.assignmentId,
       excludeAssignmentIds: [input.assignmentId],
     });
-    if (next?.visitDate && next.visitStartTime && next.visitEndTime) {
+    // 下一案：有日期＋起始即可（結束在表內勾 1／5／10）
+    if (next?.visitDate && next.visitStartTime) {
       return {
         nextHref: buildDeskCareFormPath(next.assignmentId, {
           visitDate: next.visitDate,
@@ -781,14 +811,13 @@ export function VisitDialogueForm({
         toastMessage,
       };
     }
-    // 下一筆尚未套用整批時段：回清單，勿開無 date/start/end 的表單（會被現場鐘蓋掉）
     if (next) {
       return {
         nextHref: null,
         listHref: `${listHrefBase}?${doneQuery}`,
         toastMessage:
           toastMessage ||
-          "下一筆尚未套用時間，請回清單按「套用整批時段」或「先填時間」。",
+          "下一筆尚無起始時間，請回清單按「開始連續 KEY」或「先填時間」。",
       };
     }
 
@@ -1174,6 +1203,8 @@ export function VisitDialogueForm({
                         error={mohwErrorByField.get(field.key)}
                         visitorDirectory={visitorDirectory}
                         deskEntry={useDeskFormDefaults}
+                        deskVisitStart={String(careFormAnswers.visit_start_time ?? "")}
+                        deskVisitEnd={String(careFormAnswers.visit_end_time ?? "")}
                         onChange={(value) =>
                           setCareFormAnswers((current) => {
                             const next = { ...current, [field.key]: value };
@@ -1903,6 +1934,8 @@ function CareFormInput({
   error,
   visitorDirectory,
   deskEntry = false,
+  deskVisitStart = "",
+  deskVisitEnd = "",
   onChange,
   onPatchAnswers,
 }: {
@@ -1911,6 +1944,8 @@ function CareFormInput({
   error?: MohwValidationError;
   visitorDirectory?: DeskVisitorOption[];
   deskEntry?: boolean;
+  deskVisitStart?: string;
+  deskVisitEnd?: string;
   onChange: (value: MohwLifeCareAnswers[string]) => void;
   onPatchAnswers?: (
     patch: MohwLifeCareAnswers | ((current: MohwLifeCareAnswers) => MohwLifeCareAnswers),
@@ -2096,6 +2131,45 @@ function CareFormInput({
   }
 
   if (isTimeField) {
+    const isStartField = field.mohwKey === "visit_start_time";
+    const isEndField = field.mohwKey === "visit_end_time";
+    const selectedDuration =
+      deskEntry && isStartField
+        ? inferDeskVisitDurationMinutes(deskVisitStart || rawText, deskVisitEnd)
+        : null;
+
+    function applyDeskDuration(minutes: DeskVisitDurationMinutes) {
+      if (!onPatchAnswers) return;
+      onPatchAnswers((current) => {
+        const start = String(current.visit_start_time || rawText || "")
+          .trim()
+          .slice(0, 5);
+        const end = endTimeFromStartAndDuration(start, minutes);
+        if (!end) return current;
+        return { ...current, visit_start_time: start, visit_end_time: end };
+      });
+    }
+
+    function onDeskStartChange(nextStart: string) {
+      if (!deskEntry || !onPatchAnswers) {
+        onChange(nextStart);
+        return;
+      }
+      onPatchAnswers((current) => {
+        const start = String(nextStart || "").trim().slice(0, 5);
+        const prevDuration = inferDeskVisitDurationMinutes(
+          String(current.visit_start_time || ""),
+          String(current.visit_end_time || ""),
+        );
+        const next: MohwLifeCareAnswers = { ...current, visit_start_time: start };
+        if (prevDuration != null) {
+          const end = addMinutesToTime(start, prevDuration);
+          if (end) next.visit_end_time = end;
+        }
+        return next;
+      });
+    }
+
     return (
       <div id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
         <span>
@@ -2106,8 +2180,40 @@ function CareFormInput({
           value={rawText}
           invalid={Boolean(error)}
           describedBy={error ? errorId : undefined}
-          onChange={onChange}
+          onChange={isStartField && deskEntry ? onDeskStartChange : onChange}
         />
+        {deskEntry && isStartField && onPatchAnswers ? (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-xs font-normal text-muted-foreground">
+              訪視時長（勾選後自動算出結束時間）
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {DESK_VISIT_DURATION_OPTIONS.map((minutes) => {
+                const active = selectedDuration === minutes;
+                return (
+                  <button
+                    key={minutes}
+                    type="button"
+                    className={`h-9 min-w-[3.25rem] rounded-md border px-3 text-sm font-medium transition-colors ${
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "bg-card hover:bg-secondary"
+                    }`}
+                    aria-pressed={active}
+                    onClick={() => applyDeskDuration(minutes)}
+                  >
+                    {minutes} 分
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        {deskEntry && isEndField ? (
+          <p className="text-xs font-normal leading-5 text-muted-foreground">
+            由時長 1／5／10 自動帶入，仍可手改。
+          </p>
+        ) : null}
         {errorText}
       </div>
     );

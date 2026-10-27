@@ -3,9 +3,13 @@ import type { MissedVisitTimeSlot } from "@/lib/domain/visits";
 
 export const DESK_BATCH_STORAGE_KEY = "elder-desk-care-batch-v1";
 
-/** 場生 KEY：預設每案時段長度；案與案之間預留移動時間（分鐘） */
+/** 場生 KEY：預設每案時段長度（簽到／快速 KEY 後備）；連續 KEY 改由 1／5／10 勾選 */
 export const DESK_BATCH_SLOT_MINUTES = 10;
+/** 案與案之間預留移動時間（分鐘） */
 export const DESK_BATCH_TRAVEL_GAP_MINUTES = 5;
+/** 紙本連續 KEY：關懷表內訪視時長單選（分鐘） */
+export const DESK_VISIT_DURATION_OPTIONS = [1, 5, 10] as const;
+export type DeskVisitDurationMinutes = (typeof DESK_VISIT_DURATION_OPTIONS)[number];
 
 /**
  * 剛 prepare 寫入的佇列：Sheets / GAS 讀取可能短暫落後。
@@ -133,6 +137,43 @@ export function addMinutesToTime(time: string, deltaMinutes: number) {
   return minutesToTime(base + deltaMinutes);
 }
 
+/** 起始＋時長 → 結束；超出當日則 null。 */
+export function endTimeFromStartAndDuration(
+  start: string,
+  durationMinutes: number,
+): string | null {
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
+  return addMinutesToTime(String(start || "").trim().slice(0, 5), durationMinutes);
+}
+
+/** 上一案結束＋移動間隔 → 下一案起始。 */
+export function nextVisitStartAfterEnd(
+  end: string,
+  gapMinutes: number = DESK_BATCH_TRAVEL_GAP_MINUTES,
+): string | null {
+  if (!Number.isFinite(gapMinutes) || gapMinutes < 0) return null;
+  return addMinutesToTime(String(end || "").trim().slice(0, 5), gapMinutes);
+}
+
+/** 若起迄差恰為 1／5／10，回傳該時長；否則 null（表示手改過）。 */
+export function inferDeskVisitDurationMinutes(
+  start: string,
+  end: string,
+): DeskVisitDurationMinutes | null {
+  const startMin = toMinutes(String(start || "").trim().slice(0, 5));
+  const endMin = toMinutes(String(end || "").trim().slice(0, 5));
+  if (startMin == null || endMin == null) return null;
+  const delta = endMin - startMin;
+  if (
+    delta === 1 ||
+    delta === 5 ||
+    delta === 10
+  ) {
+    return delta;
+  }
+  return null;
+}
+
 export type DeskStaggeredVisitSlot = {
   visitDate: string;
   visitStartTime: string;
@@ -140,8 +181,8 @@ export type DeskStaggeredVisitSlot = {
 };
 
 /**
+ * @deprecated 連續 KEY 改為表內勾 1／5／10 再鏈接；保留給舊腳本／測試。
  * 以第 1 筆起迄為基準，後案同日、依「時長 + 移動間隔」往後排。
- * 例：09:00–09:10、間隔 5 分 → 09:15–09:25、09:30–09:40。
  */
 export function buildStaggeredVisitWindows(input: {
   visitDate: string;
@@ -204,6 +245,111 @@ export function buildStaggeredVisitWindows(input: {
   }
 
   return { ok: true, slots, durationMinutes, travelGapMinutes: travelGap, stepMinutes };
+}
+
+/**
+ * 批次只定「日期＋第 1 案起始」：全部寫入日期；僅第一筆 ready 寫起始；清掉結束與後案起始。
+ */
+export function seedDeskBatchDateAndFirstStart(
+  state: DeskBatchState,
+  visitDate: string,
+  firstStart: string,
+):
+  | { ok: true; state: DeskBatchState; first: DeskBatchQueueItem }
+  | { ok: false; message: string } {
+  const date = String(visitDate || "").trim();
+  const start = String(firstStart || "").trim().slice(0, 5);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { ok: false, message: "請填寫訪視日期。" };
+  }
+  if (toMinutes(start) == null) {
+    return { ok: false, message: "請填寫第 1 筆開始時間。" };
+  }
+  const readyIndex = state.items.findIndex((item) => item.status === "ready");
+  if (readyIndex < 0) {
+    return { ok: false, message: "沒有可 KEY 的個案。" };
+  }
+  const items = state.items.map((item, index) => ({
+    ...item,
+    visitDate: date,
+    visitStartTime: index === readyIndex ? start : undefined,
+    visitEndTime: undefined,
+  }));
+  const next: DeskBatchState = {
+    ...state,
+    items,
+    updatedAt: new Date().toISOString(),
+  };
+  return { ok: true, state: next, first: items[readyIndex]! };
+}
+
+/**
+ * 送出後：寫入本案起迄並標 keyed；下一 ready 起始＝本案結束＋移動間隔（同日）。
+ */
+export function chainDeskBatchAfterKeyed(
+  state: DeskBatchState,
+  keyedAssignmentId: string,
+  keyedTimes: {
+    visitDate: string;
+    visitStartTime: string;
+    visitEndTime: string;
+  },
+  options?: { travelGapMinutes?: number },
+): DeskBatchState {
+  const gap =
+    options?.travelGapMinutes == null
+      ? DESK_BATCH_TRAVEL_GAP_MINUTES
+      : Number(options.travelGapMinutes);
+  const visitDate = String(keyedTimes.visitDate || "").trim();
+  const visitStartTime = String(keyedTimes.visitStartTime || "").trim().slice(0, 5);
+  const visitEndTime = String(keyedTimes.visitEndTime || "").trim().slice(0, 5);
+  const nextStart = nextVisitStartAfterEnd(visitEndTime, gap);
+
+  let marked = false;
+  const items = state.items.map((item) => {
+    if (item.assignmentId !== keyedAssignmentId) return item;
+    marked = true;
+    return {
+      ...item,
+      status: "keyed" as const,
+      visitDate: visitDate || item.visitDate,
+      visitStartTime: visitStartTime || item.visitStartTime,
+      visitEndTime: visitEndTime || item.visitEndTime,
+    };
+  });
+
+  if (!marked) {
+    return { ...state, items, updatedAt: new Date().toISOString() };
+  }
+
+  const afterIndex = items.findIndex((item) => item.assignmentId === keyedAssignmentId);
+  const nextReady =
+    afterIndex >= 0
+      ? items.find(
+          (item, index) => index > afterIndex && item.status === "ready",
+        ) ?? items.find((item) => item.status === "ready")
+      : items.find((item) => item.status === "ready");
+
+  if (nextReady && nextStart) {
+    const nextId = nextReady.assignmentId;
+    return {
+      ...state,
+      items: items.map((item) =>
+        item.assignmentId === nextId
+          ? {
+              ...item,
+              visitDate: visitDate || item.visitDate,
+              visitStartTime: nextStart,
+              // 下一案時長需重新勾選
+              visitEndTime: undefined,
+            }
+          : item,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return { ...state, items, updatedAt: new Date().toISOString() };
 }
 
 export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {

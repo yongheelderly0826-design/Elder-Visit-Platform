@@ -218,8 +218,9 @@ function normalizeDeskSeedTime(value?: string | null): string | undefined {
 }
 
 /**
- * 紙本／批次 KEY：URL 或整批時段優先於「當下」時鐘。
+ * 紙本／批次 KEY：URL 或批次起始優先於「當下」時鐘。
  * - 有 seed 的欄位一律蓋過 answers／clock
+ * - 僅有起始、無結束：結束清空（關懷表內勾 1／5／10 後再算）
  * - `fallbackToClock`：缺漏欄位才補現場時間（快速 KEY）；草稿還原請傳 false
  */
 export function mergeDeskSeededVisitTimes(
@@ -231,6 +232,7 @@ export function mergeDeskSeededVisitTimes(
   const seededStart = normalizeDeskSeedTime(seed?.visitStartTime);
   const seededEnd = normalizeDeskSeedTime(seed?.visitEndTime);
   const clock = options?.fallbackToClock ? getDeskNowVisitClock() : null;
+  const startOnly = Boolean(seededStart) && !seededEnd;
 
   return {
     ...answers,
@@ -242,10 +244,11 @@ export function mergeDeskSeededVisitTimes(
       seededStart ||
       (clock ? clock.visitStartTime : undefined) ||
       answers.visit_start_time,
-    visit_end_time:
-      seededEnd ||
-      (clock ? clock.visitEndTime : undefined) ||
-      answers.visit_end_time,
+    visit_end_time: startOnly
+      ? ""
+      : seededEnd ||
+        (clock ? clock.visitEndTime : undefined) ||
+        answers.visit_end_time,
   };
 }
 

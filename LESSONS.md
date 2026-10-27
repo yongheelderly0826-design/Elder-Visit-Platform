@@ -1,9 +1,17 @@
+## Lesson: Desk continuous KEY uses per-case 1／5／10 duration chain
+
+- **Trigger:** Paper KEY staff should not pre-assign every case end time; duration varies per paper.
+- **Cause:** Old flow required batch end + `buildStaggeredVisitWindows` /「套用整批時段」before entering forms.
+- **Rule:** Batch UI only stores visit date + first start. Care form desk shows duration chips 1／5／10 → end = start + N (end still editable). On submit, `chainDeskBatchAfterKeyed` writes keyed times and sets next ready start = end + `DESK_BATCH_TRAVEL_GAP_MINUTES` (5). Keep single-case「先填時間」modal. Do not change 未遇 D-2/D-1/D windows. `mergeDeskSeededVisitTimes`: start-only seed clears end so chips are required.
+- **Evidence:** `lib/domain/desk-care-batch.ts`, `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-desk-form-defaults.ts`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk batch KEY times must beat clock「當下」
 
 - **Trigger:** 「套用整批時段」preview shows 09:00–09:10… but list stays「尚未套用時間」, or care form shows now instead of batch slot.
 - **Cause:** (1) Stale `sessionStorage` ASG → `assignments.confirm` NOT_FOUND, local queue never updated. (2) `createMohwDeskInitialAnswers` / draft restore preferred `getDeskNowVisitClock()` over URL `date/start/end`.
-- **Rule:** Confirm-time-batch success must write slots into queue then continuous KEY with query params. Form init + draft restore: `mergeDeskSeededVisitTimes` so URL/batch wins; never overwrite seeded times with clock. Stale ASG → `ASSIGNMENT_NOT_FOUND` + clear queue.
-- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-desk-form-defaults.ts`, `confirm-time-batch/route.ts`.
+- **Rule:** Continuous KEY seeds date/start into queue then opens form with query params. Form init + draft restore: `mergeDeskSeededVisitTimes` so URL/batch wins; never overwrite seeded times with clock. Stale ASG → `ASSIGNMENT_NOT_FOUND` + clear queue.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-desk-form-defaults.ts`.
 - **Added on:** 2026-10-27
 
 ## Lesson: Fresh desk KEY queue must not auto-clear on Sheets lag
@@ -72,9 +80,9 @@
 
 ## Lesson: Desk continuous KEY + 未遇 U2 three papers
 
-- **Trigger:** Paper KEY staff need apply-batch → first form, then auto-advance; 未遇 must become three dated papers (早／中／晚), not one form with three attempts.
-- **Cause:** Batch apply only wrote times and stayed on the list; desk 未遇 still asked for 3 slots on one paper.
-- **Rule:** After `confirm-time-batch`, navigate to first ready. After desk submit, mark `elder-desk-care-batch-v1` keyed and open next ready (or list + `batchDone=1`). On 未遇 submit: treat current as D 晚（第 3 次）, `POST expand-missed` creates D-2 早／D-1 中 with `allow_multi_active`, insert as ready before continuing; skip if case already has ≥3 desk papers. Desk 未遇 needs ≥1 MissedVisitTimeSlot (早→上午、中→中午、晚→夜間). Order desk `visitAttempt` by `due_date` when notes are 公所代填.
+- **Trigger:** Paper KEY staff need start-continuous → first form, then auto-advance; 未遇 must become three dated papers (早／中／晚), not one form with three attempts.
+- **Cause:** Old batch apply only wrote times and stayed on the list; desk 未遇 still asked for 3 slots on one paper.
+- **Rule:** After「開始連續 KEY」, navigate to first ready with date+start. After desk submit, `chainDeskBatchAfterKeyed` then open next ready (or list + `batchDone=1`). On 未遇 submit: treat current as D 晚（第 3 次）, `POST expand-missed` creates D-2 早／D-1 中 with `allow_multi_active`, insert as ready before continuing; skip if case already has ≥3 desk papers. Desk 未遇 needs ≥1 MissedVisitTimeSlot (早→上午、中→中午、晚→夜間). Order desk `visitAttempt` by `due_date` when notes are 公所代填.
 - **Evidence:** `lib/domain/desk-care-batch.ts`, `app/api/manager/care-forms/expand-missed/route.ts`, `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-27
 
@@ -82,8 +90,8 @@
 
 - **Trigger:** Paper KEY staff need auto-spaced visit windows between cases, not back-to-back slots.
 - **Cause:** First stagger used start-to-start +10 with 10-min duration (adjacent, no travel buffer).
-- **Rule:** Default duration 10 minutes; between cases add travel gap 5 minutes. Example: 09:00–09:10 → 09:15–09:25 → 09:30–09:40. Apply writes all assignment notes once, then navigate into the first ready form for continuous KEY.
-- **Evidence:** `lib/domain/desk-care-batch.ts` (`buildStaggeredVisitWindows`, `DESK_BATCH_TRAVEL_GAP_MINUTES`), `app/api/manager/care-forms/confirm-time-batch/route.ts`, `components/manage/care-form-desk-panel.tsx`.
+- **Rule:** Between cases add travel gap 5 minutes (`DESK_BATCH_TRAVEL_GAP_MINUTES`). Duration is chosen per case (1／5／10) in the care form; next start = previous end + 5. Example: 09:00–09:10 → next 09:15… Clock／快速 KEY 後備仍可用 `DESK_BATCH_SLOT_MINUTES` (10).
+- **Evidence:** `lib/domain/desk-care-batch.ts` (`chainDeskBatchAfterKeyed`, `DESK_BATCH_TRAVEL_GAP_MINUTES`), `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-26
 
 ## Lesson: Desk care-form defaults favor paper KEY safety values
