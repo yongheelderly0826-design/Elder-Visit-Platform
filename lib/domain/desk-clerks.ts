@@ -96,21 +96,28 @@ export async function listDeskClerks() {
   return rows.map(mapClerk);
 }
 
-export async function createDeskClerkBatch(input?: {
-  count?: number;
+function parseDeskClerkIndex(clerkId: string) {
+  const match = /^TEMP-(\d{1,2})$/.exec(String(clerkId || "").trim().toUpperCase());
+  return match ? Number(match[1]) : null;
+}
+
+async function upsertDeskClerkRange(input: {
+  startIndex: number;
+  endIndex: number;
   validUntil?: string | null;
   displayNames?: Record<string, string>;
 }): Promise<DeskClerkCredential[]> {
-  const count = Math.min(99, Math.max(1, Math.floor(input?.count ?? DESK_CLERK_BATCH_SIZE)));
-  const validUntil = input?.validUntil ? String(input.validUntil) : "";
+  const startIndex = Math.min(99, Math.max(1, Math.floor(input.startIndex)));
+  const endIndex = Math.min(99, Math.max(startIndex, Math.floor(input.endIndex)));
+  const validUntil = input.validUntil ? String(input.validUntil) : "";
   const credentials: DeskClerkCredential[] = [];
   const items: Record<string, unknown>[] = [];
 
-  for (let index = 1; index <= count; index += 1) {
+  for (let index = startIndex; index <= endIndex; index += 1) {
     const clerkId = formatDeskClerkId(index);
     const passcode = generatePasscode();
     const hashed = await hashGasPassword(passcode);
-    const displayName = String(input?.displayNames?.[clerkId] ?? "").trim();
+    const displayName = String(input.displayNames?.[clerkId] ?? "").trim();
     items.push({
       clerk_id: clerkId,
       display_name: displayName,
@@ -146,6 +153,50 @@ export async function createDeskClerkBatch(input?: {
     const savedRow = savedById.get(item.clerkId);
     return savedRow ? { ...savedRow, passcode: item.passcode } : item;
   });
+}
+
+/** 建立／重設 TEMP-01～TEMP-N（會覆寫該範圍通行碼）。 */
+export async function createDeskClerkBatch(input?: {
+  count?: number;
+  validUntil?: string | null;
+  displayNames?: Record<string, string>;
+}): Promise<DeskClerkCredential[]> {
+  const count = Math.min(99, Math.max(1, Math.floor(input?.count ?? DESK_CLERK_BATCH_SIZE)));
+  return upsertDeskClerkRange({
+    startIndex: 1,
+    endIndex: count,
+    validUntil: input?.validUntil,
+    displayNames: input?.displayNames,
+  });
+}
+
+/** 從現有最大號之後增開，不改動既有帳密。上限 TEMP-99。 */
+export async function appendDeskClerks(input?: {
+  count?: number;
+  validUntil?: string | null;
+}): Promise<{ credentials: DeskClerkCredential[]; fromId: string; toId: string }> {
+  const existing = await listDeskClerks();
+  let maxIndex = 0;
+  for (const row of existing) {
+    const index = parseDeskClerkIndex(row.clerkId);
+    if (index != null) maxIndex = Math.max(maxIndex, index);
+  }
+  if (maxIndex >= 99) {
+    throw new Error("已達 TEMP-99 上限，無法再增開。");
+  }
+  const requested = Math.min(40, Math.max(1, Math.floor(input?.count ?? 5)));
+  const startIndex = maxIndex + 1;
+  const endIndex = Math.min(99, startIndex + requested - 1);
+  const credentials = await upsertDeskClerkRange({
+    startIndex,
+    endIndex,
+    validUntil: input?.validUntil,
+  });
+  return {
+    credentials,
+    fromId: formatDeskClerkId(startIndex),
+    toId: formatDeskClerkId(endIndex),
+  };
 }
 
 export async function setDeskClerkStatus(input: {

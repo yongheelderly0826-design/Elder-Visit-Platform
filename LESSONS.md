@@ -1,3 +1,11 @@
+## Lesson: Append more TEMP clerks without resetting 01–20
+
+- **Trigger:** Already issued TEMP-01～20 but need more staff mid-campaign.
+- **Cause:**「重新產生」always rewrites TEMP-01～N passcodes; there was no append path.
+- **Rule:** Use `action: append` /「增開並下載」— starts after max existing index (e.g. TEMP-21), leaves old codes intact, auto CSV. Cap TEMP-99. Do not tell managers to regenerate when they only need more seats.
+- **Evidence:** `appendDeskClerks` in `lib/domain/desk-clerks.ts`, `components/workspace/desk-clerks-panel.tsx`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Desk clerk passcodes are one-shot; use regenerate + multi-select status
 
 - **Trigger:** Manager lost the TEMP passcode CSV; also needed to re-enable many clerks after disable-all without clicking one-by-one.

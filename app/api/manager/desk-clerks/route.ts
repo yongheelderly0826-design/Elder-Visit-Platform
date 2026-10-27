@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import {
+  appendDeskClerks,
   createDeskClerkBatch,
   disableAllDeskClerks,
   listDeskClerkStats,
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
   if (forbidden) return forbidden;
   try {
     const body = (await request.json()) as {
-      action?: "create_batch" | "set_status" | "set_status_batch" | "disable_all";
+      action?: "create_batch" | "append" | "set_status" | "set_status_batch" | "disable_all";
       count?: number;
       validUntil?: string | null;
       clerkId?: string;
@@ -68,6 +69,21 @@ export async function POST(request: NextRequest) {
     if (action === "disable_all") {
       const result = await disableAllDeskClerks();
       return NextResponse.json({ data: result });
+    }
+
+    if (action === "append") {
+      const result = await appendDeskClerks({
+        count: body.count,
+        validUntil: body.validUntil,
+      });
+      return NextResponse.json({
+        data: {
+          credentials: result.credentials,
+          fromId: result.fromId,
+          toId: result.toId,
+          warning: `已增開 ${result.fromId}～${result.toId}（既有帳密不變）。通行碼僅顯示／下載一次，請立即存檔。`,
+        },
+      });
     }
 
     if (action === "set_status_batch") {

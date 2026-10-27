@@ -53,6 +53,7 @@ export function DeskClerksPanel() {
   const [pieceTotal, setPieceTotal] = useState(0);
   const [keyTotal, setKeyTotal] = useState(0);
   const [validUntil, setValidUntil] = useState("");
+  const [appendCount, setAppendCount] = useState(5);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [freshCredentials, setFreshCredentials] = useState<DeskClerkCredential[] | null>(null);
@@ -160,6 +161,58 @@ export function DeskClerksPanel() {
       setMessage(
         json.data.warning ??
           "已重新產生 20 組通行碼，並自動下載 CSV。請立即存檔；舊碼已失效。",
+      );
+      await load();
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function appendBatch() {
+    const count = Math.min(40, Math.max(1, Math.floor(appendCount || 1)));
+    if (
+      !window.confirm(
+        `將從現有最大號之後增開 ${count} 組（例如已有 TEMP-20 則開 TEMP-21 起）。既有帳密不變。確定繼續？`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/manager/desk-clerks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "append",
+          count,
+          validUntil: validUntil ? new Date(`${validUntil}T23:59:59+08:00`).toISOString() : null,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: {
+          credentials?: DeskClerkCredential[];
+          fromId?: string;
+          toId?: string;
+          warning?: string;
+        };
+        error?: { message?: string };
+      };
+      if (!response.ok || !json.data?.credentials) {
+        setMessage(json.error?.message ?? "增開失敗。");
+        return;
+      }
+      const credentials = json.data.credentials;
+      setFreshCredentials(credentials);
+      triggerCsvDownload(
+        buildCredentialsCsv(credentials),
+        `desk-clerks-append-${json.data.fromId || "new"}-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+      setMessage(
+        json.data.warning ??
+          `已增開 ${json.data.fromId}～${json.data.toId}，並自動下載 CSV。`,
       );
       await load();
     } catch {
@@ -370,8 +423,9 @@ export function DeskClerksPanel() {
           <div>
             <h2 className="font-semibold">臨時登打帳號</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              批次開 TEMP-01～TEMP-20，從 /temp-key 登入只做關懷表建檔。計件：每送出 1 張＝1
-              件；同一案「未遇」多張只算 1 件。通行碼無法事後查回，遺失請重新產生並下載。
+              先開 TEMP-01～TEMP-20；人數不夠再用「增開」從下一號繼續（上限 TEMP-99）。從
+              /temp-key 登入只做關懷表建檔。計件：每送出 1 張＝1 件；同一案「未遇」多張只算 1
+              件。通行碼無法事後查回，遺失請重新產生並下載（會重設 01～20）。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -401,26 +455,48 @@ export function DeskClerksPanel() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 rounded-md border border-dashed bg-secondary/40 p-3 sm:flex-row sm:items-end">
-          <label className="block flex-1 text-sm font-medium">
-            到期日（選填，當天 23:59 台北時間）
-            <input
-              type="date"
-              className="mt-2 h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={validUntil}
-              onChange={(event) => setValidUntil(event.target.value)}
-            />
-          </label>
-          <Button type="button" disabled={busy} onClick={() => void createBatch()}>
-            <ClipboardPen className="h-4 w-4" />
-            {busy ? "處理中…" : "重新產生並下載"}
-          </Button>
-          <Button type="button" variant="outline" disabled={busy || !tableRows.length} onClick={() => void enableAll()}>
-            全部啟用
-          </Button>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => void disableAll()}>
-            全部停用
-          </Button>
+        <div className="mt-4 flex flex-col gap-3 rounded-md border border-dashed bg-secondary/40 p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="block flex-1 text-sm font-medium">
+              到期日（選填，當天 23:59 台北時間）
+              <input
+                type="date"
+                className="mt-2 h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={validUntil}
+                onChange={(event) => setValidUntil(event.target.value)}
+              />
+            </label>
+            <Button type="button" disabled={busy} onClick={() => void createBatch()}>
+              <ClipboardPen className="h-4 w-4" />
+              {busy ? "處理中…" : "重新產生 01～20"}
+            </Button>
+            <Button type="button" variant="outline" disabled={busy || !tableRows.length} onClick={() => void enableAll()}>
+              全部啟用
+            </Button>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void disableAll()}>
+              全部停用
+            </Button>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-dashed pt-3 sm:flex-row sm:items-end">
+            <label className="block w-full text-sm font-medium sm:w-40">
+              增開組數（既有帳密不變）
+              <input
+                type="number"
+                min={1}
+                max={40}
+                className="mt-2 h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={appendCount}
+                onChange={(event) => setAppendCount(Number(event.target.value) || 1)}
+              />
+            </label>
+            <Button type="button" disabled={busy} onClick={() => void appendBatch()}>
+              <Download className="h-4 w-4" />
+              增開並下載
+            </Button>
+            <p className="text-xs text-muted-foreground sm:pb-2">
+              例：已有 TEMP-20，增開 5 → 產生 TEMP-21～TEMP-25 並下載 CSV。
+            </p>
+          </div>
         </div>
 
         {message ? (
