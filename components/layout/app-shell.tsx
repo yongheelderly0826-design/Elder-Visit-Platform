@@ -118,11 +118,11 @@ export async function AppShell({
             href={
               roleKey === "visitor"
                 ? "/api/auth/logout?next=/visitor/login"
-                : roleKey === "desk_clerk" ||
-                    roleKey === "workspace_owner" ||
-                    roleKey === "workspace_manager"
-                  ? "/api/auth/logout?next=/yonghe"
-                  : "/api/auth/logout"
+                : roleKey === "desk_clerk"
+                  ? "/api/auth/logout?next=/yonghe/desk"
+                  : roleKey === "workspace_owner" || roleKey === "workspace_manager"
+                    ? "/api/auth/logout?next=/yonghe"
+                    : "/api/auth/logout"
             }
             className="mt-3 flex h-10 items-center justify-center gap-2 rounded-md border bg-background text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >

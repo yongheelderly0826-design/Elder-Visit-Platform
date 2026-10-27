@@ -2,7 +2,16 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 
-const publicRoutes = ["/", "/login", "/login/manager", "/yonghe", "/visitor/login", "/register", "/offline"];
+const publicRoutes = [
+  "/",
+  "/login",
+  "/login/manager",
+  "/yonghe",
+  "/yonghe/desk",
+  "/visitor/login",
+  "/register",
+  "/offline",
+];
 const supabaseCookiePrefixes = ["sb-", "supabase-auth-token"];
 
 export function middleware(request: NextRequest) {

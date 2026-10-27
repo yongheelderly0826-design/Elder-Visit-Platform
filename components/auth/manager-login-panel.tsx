@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ClipboardPen, LogIn } from "lucide-react";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,9 @@ function getLoginErrorMessage(code: string | null) {
   return null;
 }
 
+/** 總承辦／後台登入（Gmail）。臨時登打請走 /yonghe/desk。 */
 export function ManagerLoginPanel() {
   const [managerEmail, setManagerEmail] = useState("yongheelderly0826@gmail.com");
-  const [clerkId, setClerkId] = useState("");
-  const [clerkPasscode, setClerkPasscode] = useState("");
   const [message, setMessage] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return getLoginErrorMessage(new URLSearchParams(window.location.search).get("error"));
@@ -62,37 +62,6 @@ export function ManagerLoginPanel() {
     }
   }
 
-  async function loginDeskClerk() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const nextPath = getSafeNextPath("/desk/care-forms");
-      const response = await fetch("/api/auth/desk-clerk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          clerkId: clerkId.trim(),
-          passcode: clerkPasscode,
-          next: nextPath,
-        }),
-      });
-      const result = (await response.json()) as {
-        data?: { nextPath?: string; displayName?: string; clerkId?: string };
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        setMessage(result.error?.message ?? "帳號或通行碼不正確。");
-        return;
-      }
-      window.location.href = result.data?.nextPath ?? "/desk/care-forms";
-    } catch {
-      setMessage("目前無法連線，請稍後再試。");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-xl items-center">
@@ -101,61 +70,18 @@ export function ManagerLoginPanel() {
             <BrandLogo variant="full" size="lg" className="h-28 w-full max-w-md" />
             <div className="mt-2 min-w-0">
               <p className="text-base font-semibold">獨居長者訪查管理平台</p>
-              <p className="text-sm text-muted-foreground">永和區入口</p>
+              <p className="text-sm text-muted-foreground">永和區 · 總承辦入口</p>
             </div>
           </div>
 
           <div className="grid gap-6 p-5 lg:p-6">
             <div>
-              <p className="text-sm font-medium text-primary">臨時登打（紙本 KEY）</p>
-              <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">輸入臨時帳號</h1>
+              <p className="text-sm font-medium text-primary">總承辦／後台（Gmail）</p>
+              <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">管理者登入</h1>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                使用承辦核發的 TEMP-01～TEMP-20 帳號與通行碼進入關懷表建檔。帳號可設定到期日，時間到即無法登入。
+                派案、匯出、使用者與臨時登打管理，請用公所指定 Google 帳號。
               </p>
-              <div className="mt-6 space-y-3 rounded-lg border bg-card p-3">
-                <label className="block text-sm font-medium">
-                  臨時帳號
-                  <input
-                    className="mt-2 h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    autoComplete="username"
-                    placeholder="例：TEMP-01"
-                    value={clerkId}
-                    onChange={(event) => setClerkId(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void loginDeskClerk();
-                    }}
-                  />
-                </label>
-                <label className="block text-sm font-medium">
-                  通行碼
-                  <input
-                    className="mt-2 h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    type="password"
-                    autoComplete="current-password"
-                    value={clerkPasscode}
-                    onChange={(event) => setClerkPasscode(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void loginDeskClerk();
-                    }}
-                  />
-                </label>
-                <Button
-                  className="h-11 w-full"
-                  disabled={busy || !clerkId.trim() || !clerkPasscode.trim()}
-                  onClick={() => void loginDeskClerk()}
-                >
-                  <ClipboardPen className="h-4 w-4" />
-                  {busy ? "進入中…" : "進入關懷表建檔"}
-                </Button>
-              </div>
-            </div>
-
-            <div className="border-t pt-6">
-              <p className="text-sm font-medium text-muted-foreground">總承辦／後台（Gmail）</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                完整後台（派案、匯出、臨時登打管理）請用公所指定 Google 帳號。
-              </p>
-              <div className="mt-4 rounded-lg border bg-card p-3">
+              <div className="mt-6 rounded-lg border bg-card p-3">
                 <label className="block text-sm font-medium">
                   Google 帳號（Gmail）
                   <input
@@ -163,16 +89,18 @@ export function ManagerLoginPanel() {
                     autoComplete="email"
                     value={managerEmail}
                     onChange={(event) => setManagerEmail(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void loginAsManager();
+                    }}
                   />
                 </label>
                 <Button
                   className="mt-3 h-11 w-full"
-                  variant="outline"
-                  disabled={busy}
+                  disabled={busy || !managerEmail.trim()}
                   onClick={() => void loginAsManager()}
                 >
                   <LogIn className="h-4 w-4" />
-                  以管理者進入後台
+                  {busy ? "進入中…" : "以管理者進入後台"}
                 </Button>
               </div>
             </div>
@@ -180,6 +108,17 @@ export function ManagerLoginPanel() {
             {message ? (
               <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">{message}</p>
             ) : null}
+
+            <p className="border-t pt-4 text-center text-sm text-muted-foreground">
+              臨時登打人員請改走專用入口：
+              <Link
+                href="/yonghe/desk"
+                className="ml-1 inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                <ClipboardPen className="h-3.5 w-3.5" />
+                /yonghe/desk
+              </Link>
+            </p>
           </div>
         </section>
       </div>

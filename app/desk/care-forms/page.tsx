@@ -15,7 +15,7 @@ export default async function DeskCareFormsPage({
 
   const manager = decodeManagerSession(jar.get(SESSION_COOKIE)?.value);
   if (!manager && !role) {
-    redirect("/yonghe?next=/desk/care-forms");
+    redirect("/yonghe/desk?next=/desk/care-forms");
   }
 
   const params = await searchParams;
