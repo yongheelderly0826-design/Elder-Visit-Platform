@@ -6,6 +6,14 @@
 - **Evidence:** `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-desk-form-defaults.ts`, `confirm-time-batch/route.ts`.
 - **Added on:** 2026-10-27
 
+## Lesson: Fresh desk KEY queue must not auto-clear on Sheets lag
+
+- **Trigger:** After sheet wipe, user re-prepares → sees「已自動清除失效待 KEY 清單（曾見 ASG-…）」and cannot continue KEY even with cases re-selected.
+- **Cause:** (1) `prepare` used `Promise.all` dispatch; concurrent GAS `appendRow` can return ASG ids whose rows never land. (2) Mount / apply `assignment-status` probe treated a single missing read as stale and wiped a brand-new `sessionStorage` queue.
+- **Rule:** Prepare sequentially and verify each ASG with `assignments.get` before returning. Status endpoint retries missing ids once. Skip mount clear when `updatedAt` is within `DESK_BATCH_FRESH_MS` (2 min); apply/enter-form retry once for fresh batches. Before wipe, re-read sessionStorage so a newer prepare is not cleared by an in-flight stale probe. Deploy GAS lock+flush on `assignments.dispatch` when shipping that side.
+- **Evidence:** `app/api/manager/care-forms/prepare/route.ts`, `assignment-status/route.ts`, `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`, `gas/src/modules/AssignmentModule.gs`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk 里別 select labels put code first for digit typeahead
 
 - **Trigger:** 關懷表建檔「1. 選擇身份與里別」里別下拉只有里名，承辦要對紙本六碼時不好打字找里。

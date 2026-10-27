@@ -43,55 +43,65 @@ var AssignmentModule = (function () {
 
   function dispatch(data) {
     Validation.requireFields(data, ['case_id', 'visitor_id']);
-    var caseRow = CaseModule.get(data.case_id);
-    if (!caseRow) throw new Error('Case not found');
-
-    var existingActive = list({}).filter(function (r) {
-      return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
-    });
-    // 紙本建檔／代填可一案多人分次 KEY（allow_multi_active）；外勤唯一派案仍擋重複。
-    var allowMulti =
-      data.allow_multi_active === true ||
-      data.allow_multi_active === 'true' ||
-      String(data.notes || '').indexOf('公所代填') !== -1;
-    if (existingActive.length > 0 && !allowMulti) {
-      var err = new Error(
-        '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
-      );
-      err.code = 'CONFLICT';
-      throw err;
+    // 序列化寫入：並行 appendRow 可能互蓋，回傳 ASG 但列未落地。
+    var lock = LockService.getDocumentLock();
+    if (!lock.tryLock(30000)) {
+      throw new Error('派案忙碌中，請稍後再試');
     }
+    try {
+      var caseRow = CaseModule.get(data.case_id);
+      if (!caseRow) throw new Error('Case not found');
 
-    var autoConfirm = data.auto_confirm !== false && data.auto_confirm !== 'false';
-    var now = new Date().toISOString();
-    var assignment = {
-      assignment_id: 'ASG-' + Utilities.getUuid().slice(0, 8),
-      batch_id: data.batch_id || '',
-      case_id: data.case_id,
-      encoded_id: caseRow.encoded_id,
-      visitor_id: data.visitor_id,
-      visit_village: caseRow.visit_village,
-      status: autoConfirm ? '進行中' : '待接案',
-      dispatched_at: now,
-      confirmed_at: autoConfirm ? now : '',
-      due_date: data.due_date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-      notes: data.notes || '',
-      updated_at: now,
-    };
-    var saved = SheetHelper.appendRow(SHEET, assignment);
+      var existingActive = list({}).filter(function (r) {
+        return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
+      });
+      // 紙本建檔／代填可一案多人分次 KEY（allow_multi_active）；外勤唯一派案仍擋重複。
+      var allowMulti =
+        data.allow_multi_active === true ||
+        data.allow_multi_active === 'true' ||
+        String(data.notes || '').indexOf('公所代填') !== -1;
+      if (existingActive.length > 0 && !allowMulti) {
+        var err = new Error(
+          '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
+        );
+        err.code = 'CONFLICT';
+        throw err;
+      }
 
-    SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', data.case_id, {
-      visit_status: '進行中',
-      updated_at: now,
-    });
+      var autoConfirm = data.auto_confirm !== false && data.auto_confirm !== 'false';
+      var now = new Date().toISOString();
+      var assignment = {
+        assignment_id: 'ASG-' + Utilities.getUuid().slice(0, 8),
+        batch_id: data.batch_id || '',
+        case_id: data.case_id,
+        encoded_id: caseRow.encoded_id,
+        visitor_id: data.visitor_id,
+        visit_village: caseRow.visit_village,
+        status: autoConfirm ? '進行中' : '待接案',
+        dispatched_at: now,
+        confirmed_at: autoConfirm ? now : '',
+        due_date: data.due_date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+        notes: data.notes || '',
+        updated_at: now,
+      };
+      var saved = SheetHelper.appendRow(SHEET, assignment);
+      SpreadsheetApp.flush();
 
-    saved.visit_attempt = countAttempts_(data.case_id);
-    ReadCache.bump();
-    ReportModule.scheduleDailyVisitSnapshot(
-      String(saved.due_date || '').slice(0, 10) ||
-        Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
-    );
-    return saved;
+      SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', data.case_id, {
+        visit_status: '進行中',
+        updated_at: now,
+      });
+
+      saved.visit_attempt = countAttempts_(data.case_id);
+      ReadCache.bump();
+      ReportModule.scheduleDailyVisitSnapshot(
+        String(saved.due_date || '').slice(0, 10) ||
+          Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
+      );
+      return saved;
+    } finally {
+      lock.releaseLock();
+    }
   }
 
   function caseVisitStatusForAssignment_(assignmentStatus) {

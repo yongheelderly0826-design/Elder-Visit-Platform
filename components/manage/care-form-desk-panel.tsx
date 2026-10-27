@@ -11,10 +11,12 @@ import {
   addMinutesToTime,
   buildDeskCareFormPath,
   buildStaggeredVisitWindows,
+  DESK_BATCH_STATUS_RETRY_MS,
   clearDeskBatchState,
   deskStaleAssignmentClearedMessage,
   findNextReadyDeskBatchItem,
   isAssignmentNotFoundError,
+  isDeskBatchFresh,
   readDeskBatchState,
   writeDeskBatchState,
   type DeskBatchQueueItem,
@@ -137,8 +139,27 @@ export function CareFormDeskPanel({
     }
   }
 
-  async function assignmentStillExists(assignmentId: string): Promise<boolean | null> {
-    const result = await checkAssignmentsExist([assignmentId]);
+  /** Fresh queues get one extra client-side wait before we trust a missing result. */
+  async function checkAssignmentsExistForBatch(
+    state: DeskBatchState,
+  ): Promise<{ exists: boolean; missing: string[] } | null> {
+    const ids = state.items.map((item) => item.assignmentId);
+    const first = await checkAssignmentsExist(ids);
+    if (!first || first.exists || !isDeskBatchFresh(state)) return first;
+    await new Promise((resolve) => setTimeout(resolve, DESK_BATCH_STATUS_RETRY_MS));
+    return checkAssignmentsExist(ids);
+  }
+
+  async function assignmentStillExists(
+    assignmentId: string,
+    batchState?: DeskBatchState | null,
+  ): Promise<boolean | null> {
+    const result = batchState
+      ? await checkAssignmentsExistForBatch({
+          ...batchState,
+          items: batchState.items.filter((item) => item.assignmentId === assignmentId),
+        })
+      : await checkAssignmentsExist([assignmentId]);
     if (!result) return null;
     return result.exists;
   }
@@ -176,9 +197,18 @@ export function CareFormDeskPanel({
 
     let cancelled = false;
     void (async () => {
-      const status = await checkAssignmentsExist(saved.items.map((item) => item.assignmentId));
+      // 剛 prepare 的佇列：Sheets 讀取可能落後，先跳過 mount 清除，避免誤清品牌新 ASG。
+      if (isDeskBatchFresh(saved)) return;
+      const status = await checkAssignmentsExistForBatch(saved);
       if (cancelled || !status || status.exists) return;
       // ANY missing ASG → wipe stale queue so steps 1–3 unlock immediately
+      // Re-read: user may have prepared a fresh queue while this probe was in flight.
+      const latest = readDeskBatchState();
+      if (!latest?.items?.length) return;
+      if (isDeskBatchFresh(latest)) return;
+      const latestIds = latest.items.map((item) => item.assignmentId).join(",");
+      const probedIds = saved.items.map((item) => item.assignmentId).join(",");
+      if (latestIds !== probedIds) return;
       clearDeskBatchState();
       setBatch(null);
       setTimeDraft(null);
@@ -627,7 +657,7 @@ export function CareFormDeskPanel({
     setBusy(true);
     setMessage(null);
     try {
-      const exists = await assignmentStillExists(item.assignmentId);
+      const exists = await assignmentStillExists(item.assignmentId, batch);
       if (exists === false) {
         recoverStaleAssignmentQueue(item.assignmentId);
         return;
@@ -663,8 +693,9 @@ export function CareFormDeskPanel({
     setMessage(null);
     setShowPrepareAgainCta(false);
     try {
-      // Fail fast before confirm-time-batch so dead ASGs never leave UI locked mid-apply
-      const preflight = await checkAssignmentsExist(batch.items.map((item) => item.assignmentId));
+      // Fail fast before confirm-time-batch so dead ASGs never leave UI locked mid-apply.
+      // Fresh batches retry once so Sheets lag after prepare does not wipe the new queue.
+      const preflight = await checkAssignmentsExistForBatch(batch);
       if (preflight && !preflight.exists) {
         recoverStaleAssignmentQueue(preflight.missing[0]);
         return;
@@ -1193,7 +1224,7 @@ export function CareFormDeskPanel({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <div className="mt-3 grid max-h-80 gap-2 overflow-auto">
+            <div className="mt-3 grid max-h-80 grid-cols-1 gap-2 overflow-auto sm:grid-cols-2">
               {filteredCases.map((item) => {
                 const checked = selectedCaseIds.includes(item.id);
                 const paperLabel = formatDeskCasePaperLabel({

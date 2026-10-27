@@ -8,6 +8,15 @@ export const DESK_BATCH_SLOT_MINUTES = 10;
 export const DESK_BATCH_TRAVEL_GAP_MINUTES = 5;
 
 /**
+ * 剛 prepare 寫入的佇列：Sheets / GAS 讀取可能短暫落後。
+ * 此寬限內 mount／preflight 不可因單次 false-missing 就清掉品牌新佇列。
+ */
+export const DESK_BATCH_FRESH_MS = 2 * 60 * 1000;
+
+/** assignment-status：缺列時再查一次的間隔 */
+export const DESK_BATCH_STATUS_RETRY_MS = 1200;
+
+/**
  * 未遇紙本三趟固定時段（早／中／晚）。
  * MissedVisitTimeSlot 對照：早→上午、中→中午、晚→夜間。
  */
@@ -445,6 +454,19 @@ export function writeDeskBatchState(state: DeskBatchState) {
 export function clearDeskBatchState() {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(DESK_BATCH_STORAGE_KEY);
+}
+
+/** 剛準備／剛更新的待 KEY 清單：避免 status probe 誤清。 */
+export function isDeskBatchFresh(
+  state: Pick<DeskBatchState, "updatedAt"> | null | undefined,
+  nowMs: number = Date.now(),
+  freshMs: number = DESK_BATCH_FRESH_MS,
+) {
+  const raw = String(state?.updatedAt ?? "").trim();
+  if (!raw) return false;
+  const updatedAtMs = Date.parse(raw);
+  if (!Number.isFinite(updatedAtMs)) return false;
+  return nowMs - updatedAtMs < freshMs;
 }
 
 /** GAS `AssignmentModule.confirm` 找不到列時的英文訊息 → 派案編號 */
