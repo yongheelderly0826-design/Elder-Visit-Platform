@@ -7,6 +7,7 @@ import {
   listDeskClerkStats,
   listDeskClerks,
   setDeskClerkStatus,
+  setDeskClerkStatusBatch,
 } from "@/lib/domain/desk-clerks";
 import { GasApiError } from "@/lib/gas-client";
 
@@ -54,10 +55,11 @@ export async function POST(request: NextRequest) {
   if (forbidden) return forbidden;
   try {
     const body = (await request.json()) as {
-      action?: "create_batch" | "set_status" | "disable_all";
+      action?: "create_batch" | "set_status" | "set_status_batch" | "disable_all";
       count?: number;
       validUntil?: string | null;
       clerkId?: string;
+      clerkIds?: string[];
       status?: "active" | "disabled";
       displayName?: string;
     };
@@ -65,6 +67,21 @@ export async function POST(request: NextRequest) {
 
     if (action === "disable_all") {
       const result = await disableAllDeskClerks();
+      return NextResponse.json({ data: result });
+    }
+
+    if (action === "set_status_batch") {
+      if (body.status !== "active" && body.status !== "disabled") {
+        return NextResponse.json(
+          { error: { code: "VALIDATION_ERROR", message: "請指定 status。" } },
+          { status: 400 },
+        );
+      }
+      const result = await setDeskClerkStatusBatch({
+        clerkIds: Array.isArray(body.clerkIds) ? body.clerkIds : [],
+        status: body.status,
+        validUntil: body.validUntil,
+      });
       return NextResponse.json({ data: result });
     }
 
@@ -91,7 +108,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: {
         credentials,
-        warning: "通行碼僅顯示一次，請立即列印或下載後交臨時人員。",
+        warning:
+          "通行碼僅顯示／下載一次（無法事後查回）。請立即下載 CSV；若遺失請再按「重新產生並下載」。",
       },
     });
   } catch (error) {

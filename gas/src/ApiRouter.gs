@@ -119,6 +119,7 @@ var ApiRouter = (function () {
     },
     'deskClerks.upsertBatch': function (p, b) { return DeskClerkModule.upsertBatch(b || p); },
     'deskClerks.setStatus': function (p, b) { return DeskClerkModule.setStatus(b || p); },
+    'deskClerks.setStatusBatch': function (p, b) { return DeskClerkModule.setStatusBatch(b || p); },
     'deskClerks.disableAll': function (p, b) { return DeskClerkModule.disableAll(b || p); },
     'deskClerks.markLogin': function (p, b) { return DeskClerkModule.markLogin(b || p); },
     'deskClerks.logKey': function (p, b) { return DeskClerkModule.logKey(b || p); },

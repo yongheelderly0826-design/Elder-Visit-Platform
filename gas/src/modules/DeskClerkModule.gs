@@ -163,6 +163,37 @@ var DeskClerkModule = (function () {
     });
   }
 
+  function setStatusBatch(data) {
+    return withLock_(function () {
+      data = data || {};
+      var status = String(data.status || '').trim();
+      if (status !== 'active' && status !== 'disabled') {
+        throw error_('VALIDATION_ERROR', 'status 須為 active 或 disabled。');
+      }
+      var ids = Array.isArray(data.clerk_ids) ? data.clerk_ids : [];
+      if (!ids.length) throw error_('VALIDATION_ERROR', '請指定 clerk_ids。');
+      var now = now_();
+      var updated = [];
+      for (var i = 0; i < ids.length; i++) {
+        var clerkId = String(ids[i] || '').trim().toUpperCase();
+        if (!clerkId) continue;
+        var current = findClerk_(clerkId);
+        if (!current) continue;
+        var patch = {
+          status: status,
+          updated_at: now,
+          disabled_at: status === 'disabled' ? now : '',
+        };
+        if (data.valid_until !== undefined) {
+          patch.valid_until = String(data.valid_until || '');
+        }
+        SheetHelper.updateByKey(CLERKS, 'clerk_id', clerkId, patch);
+        updated.push(publicClerk_(findClerk_(clerkId), false));
+      }
+      return { items: updated, count: updated.length, status: status };
+    });
+  }
+
   function disableAll(data) {
     return withLock_(function () {
       var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(CLERKS));
@@ -348,6 +379,7 @@ var DeskClerkModule = (function () {
     get: function (clerkId, opts) { return getClerk(clerkId, opts); },
     upsertBatch: upsertBatch,
     setStatus: setStatus,
+    setStatusBatch: setStatusBatch,
     disableAll: disableAll,
     markLogin: markLogin,
     logKey: logKey,

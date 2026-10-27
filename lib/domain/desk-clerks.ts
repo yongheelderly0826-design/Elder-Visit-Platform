@@ -163,6 +163,27 @@ export async function setDeskClerkStatus(input: {
   return mapClerk(row);
 }
 
+export async function setDeskClerkStatusBatch(input: {
+  clerkIds: string[];
+  status: "active" | "disabled";
+  validUntil?: string | null;
+}) {
+  const clerkIds = [...new Set(input.clerkIds.map(normalizeDeskClerkId).filter(Boolean))];
+  if (!clerkIds.length) {
+    throw new Error("請勾選至少一個臨時帳號。");
+  }
+  const result = await gasClient.deskClerks.setStatusBatch({
+    clerk_ids: clerkIds,
+    status: input.status,
+    ...(input.validUntil !== undefined ? { valid_until: input.validUntil ?? "" } : {}),
+  });
+  return {
+    count: Number(result.count ?? 0),
+    status: input.status,
+    clerks: ((result.items ?? []) as Record<string, unknown>[]).map(mapClerk),
+  };
+}
+
 export async function disableAllDeskClerks() {
   return gasClient.deskClerks.disableAll({});
 }

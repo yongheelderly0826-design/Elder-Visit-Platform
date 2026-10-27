@@ -1,3 +1,11 @@
+## Lesson: Desk clerk passcodes are one-shot; use regenerate + multi-select status
+
+- **Trigger:** Manager lost the TEMP passcode CSV; also needed to re-enable many clerks after disable-all without clicking one-by-one.
+- **Cause:** Passcodes are hashed at create time and never readable again. Status UI only had per-row toggles.
+- **Rule:** Tell managers: cannot recover old codes—press「重新產生並下載」(auto CSV). Preserve `display_name` on upsert. Add checkbox multi-select + `deskClerks.setStatusBatch` for bulk active/disabled, plus「全部啟用」.
+- **Evidence:** `components/workspace/desk-clerks-panel.tsx`, `app/api/manager/desk-clerks/route.ts`, `gas/src/modules/DeskClerkModule.gs`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Desk clerk self-serve Chinese display name
 
 - **Trigger:** Temp KEY staff need their real Chinese name on welcome + left sidebar for piece-rate accountability.

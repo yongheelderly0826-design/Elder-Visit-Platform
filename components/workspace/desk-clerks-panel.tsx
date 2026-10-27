@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardPen, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type {
@@ -22,6 +22,31 @@ type OverviewResponse = {
   error?: { message?: string };
 };
 
+const LOGIN_URL = "https://elder-visit-platform-ruby.vercel.app/temp-key";
+
+function buildCredentialsCsv(rows: DeskClerkCredential[]) {
+  const header = ["clerk_id", "display_name", "passcode", "valid_until", "login_url"];
+  const lines = [
+    header.join(","),
+    ...rows.map((row) =>
+      [row.clerkId, row.displayName || "", row.passcode, row.validUntil || "", LOGIN_URL]
+        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+        .join(","),
+    ),
+  ];
+  return `\uFEFF${lines.join("\n")}`;
+}
+
+function triggerCsvDownload(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function DeskClerksPanel() {
   const [clerks, setClerks] = useState<DeskClerkRecord[]>([]);
   const [stats, setStats] = useState<DeskClerkStatsRow[]>([]);
@@ -31,6 +56,7 @@ export function DeskClerksPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [freshCredentials, setFreshCredentials] = useState<DeskClerkCredential[] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedClerkId, setSelectedClerkId] = useState<string | null>(null);
   const [logs, setLogs] = useState<DeskKeyLogRow[]>([]);
 
@@ -48,6 +74,9 @@ export function DeskClerksPanel() {
       setStats(json.data.stats.items);
       setPieceTotal(json.data.stats.pieceTotal);
       setKeyTotal(json.data.stats.keyTotal);
+      setSelectedIds((current) =>
+        current.filter((id) => json.data!.clerks.some((clerk) => clerk.clerkId === id)),
+      );
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -59,10 +88,45 @@ export function DeskClerksPanel() {
     void load();
   }, [load]);
 
+  const tableRows = useMemo(() => {
+    if (clerks.length) return clerks;
+    return stats.map((row) => ({
+      clerkId: row.clerkId,
+      displayName: row.displayName,
+      status: (row.status === "active" ? "active" : "disabled") as "active" | "disabled",
+      validFrom: null,
+      validUntil: row.validUntil ?? null,
+      createdAt: null,
+      updatedAt: null,
+      disabledAt: null,
+      lastLoginAt: row.lastLoginAt ?? null,
+    }));
+  }, [clerks, stats]);
+
+  const allSelected =
+    tableRows.length > 0 && tableRows.every((row) => selectedIds.includes(row.clerkId));
+  const selectedCount = selectedIds.length;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(tableRows.map((row) => row.clerkId));
+  }
+
+  function toggleSelect(clerkId: string) {
+    setSelectedIds((current) =>
+      current.includes(clerkId)
+        ? current.filter((id) => id !== clerkId)
+        : [...current, clerkId],
+    );
+  }
+
   async function createBatch() {
     if (
       !window.confirm(
-        "將建立／重設 TEMP-01～TEMP-20（共 20 組通行碼）。舊通行碼會失效。確定繼續？",
+        "將重新產生 TEMP-01～TEMP-20 通行碼（舊碼立即失效，已填的中文姓名會保留）。確定繼續？",
       )
     ) {
       return;
@@ -87,8 +151,16 @@ export function DeskClerksPanel() {
         setMessage(json.error?.message ?? "批次建立失敗。");
         return;
       }
-      setFreshCredentials(json.data.credentials);
-      setMessage(json.data.warning ?? "已建立 20 組臨時帳號。");
+      const credentials = json.data.credentials;
+      setFreshCredentials(credentials);
+      triggerCsvDownload(
+        buildCredentialsCsv(credentials),
+        `desk-clerks-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+      setMessage(
+        json.data.warning ??
+          "已重新產生 20 組通行碼，並自動下載 CSV。請立即存檔；舊碼已失效。",
+      );
       await load();
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -124,8 +196,46 @@ export function DeskClerksPanel() {
     }
   }
 
+  async function setStatusBatch(status: "active" | "disabled") {
+    if (!selectedIds.length) {
+      setMessage("請先勾選要操作的帳號。");
+      return;
+    }
+    const label = status === "active" ? "啟用" : "停用";
+    if (!window.confirm(`確定${label}已勾選的 ${selectedIds.length} 組帳號？`)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/manager/desk-clerks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "set_status_batch",
+          clerkIds: selectedIds,
+          status,
+          validUntil: validUntil ? new Date(`${validUntil}T23:59:59+08:00`).toISOString() : undefined,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: { count?: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setMessage(json.error?.message ?? `批次${label}失敗。`);
+        return;
+      }
+      setMessage(`已${label} ${json.data?.count ?? selectedIds.length} 組帳號。`);
+      setSelectedIds([]);
+      await load();
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function disableAll() {
-    if (!window.confirm("確定停用全部臨時登打帳號？停用後無法再從 /yonghe 登入。")) return;
+    if (!window.confirm("確定停用全部臨時登打帳號？停用後無法再從 /temp-key 登入。")) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -140,6 +250,45 @@ export function DeskClerksPanel() {
         return;
       }
       setMessage("已停用全部臨時登打帳號。");
+      setSelectedIds([]);
+      await load();
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enableAll() {
+    const ids = tableRows.map((row) => row.clerkId);
+    if (!ids.length) {
+      setMessage("尚無臨時帳號可啟用。");
+      return;
+    }
+    if (!window.confirm(`確定啟用全部 ${ids.length} 組臨時登打帳號？`)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/manager/desk-clerks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "set_status_batch",
+          clerkIds: ids,
+          status: "active",
+          validUntil: validUntil ? new Date(`${validUntil}T23:59:59+08:00`).toISOString() : undefined,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: { count?: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setMessage(json.error?.message ?? "全部啟用失敗。");
+        return;
+      }
+      setMessage(`已啟用 ${json.data?.count ?? ids.length} 組帳號。`);
+      setSelectedIds([]);
       await load();
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -174,28 +323,10 @@ export function DeskClerksPanel() {
 
   function downloadCredentialsCsv() {
     if (!freshCredentials?.length) return;
-    const header = ["clerk_id", "display_name", "passcode", "valid_until", "login_url"];
-    const lines = [
-      header.join(","),
-      ...freshCredentials.map((row) =>
-        [
-          row.clerkId,
-          row.displayName || "",
-          row.passcode,
-          row.validUntil || "",
-          "https://elder-visit-platform-ruby.vercel.app/temp-key",
-        ]
-          .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-          .join(","),
-      ),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `desk-clerks-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    triggerCsvDownload(
+      buildCredentialsCsv(freshCredentials),
+      `desk-clerks-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
   }
 
   function downloadStatsCsv() {
@@ -224,13 +355,10 @@ export function DeskClerksPanel() {
           .join(","),
       ),
     ];
-    const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `desk-clerk-pieces-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    triggerCsvDownload(
+      `\uFEFF${lines.join("\n")}`,
+      `desk-clerk-pieces-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
   }
 
   const statsById = new Map(stats.map((row) => [row.clerkId, row]));
@@ -243,7 +371,7 @@ export function DeskClerksPanel() {
             <h2 className="font-semibold">臨時登打帳號</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               批次開 TEMP-01～TEMP-20，從 /temp-key 登入只做關懷表建檔。計件：每送出 1 張＝1
-              件；同一案「未遇」多張只算 1 件。
+              件；同一案「未遇」多張只算 1 件。通行碼無法事後查回，遺失請重新產生並下載。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -285,7 +413,10 @@ export function DeskClerksPanel() {
           </label>
           <Button type="button" disabled={busy} onClick={() => void createBatch()}>
             <ClipboardPen className="h-4 w-4" />
-            {busy ? "處理中…" : "批次開 20 帳"}
+            {busy ? "處理中…" : "重新產生並下載"}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy || !tableRows.length} onClick={() => void enableAll()}>
+            全部啟用
           </Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => void disableAll()}>
             全部停用
@@ -300,7 +431,7 @@ export function DeskClerksPanel() {
           <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-medium text-amber-950">
-                通行碼僅顯示一次，請立即下載／列印後交給臨時人員。
+                新通行碼已產生並開始下載。若瀏覽器擋下載，請再按一次「下載帳密 CSV」。舊碼已失效。
               </p>
               <Button type="button" size="sm" variant="outline" onClick={downloadCredentialsCsv}>
                 <Download className="h-4 w-4" />
@@ -319,11 +450,46 @@ export function DeskClerksPanel() {
       </div>
 
       <div className="rounded-lg border bg-card p-4">
-        <h3 className="font-semibold">帳號與計件</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="font-semibold">帳號與計件</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">已勾選 {selectedCount} 組</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy || !selectedCount}
+              onClick={() => void setStatusBatch("active")}
+            >
+              勾選啟用
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy || !selectedCount}
+              onClick={() => void setStatusBatch("disabled")}
+            >
+              勾選停用
+            </Button>
+          </div>
+        </div>
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b text-xs text-muted-foreground">
               <tr>
+                <th className="px-2 py-2 font-medium">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={!tableRows.length || busy}
+                      onChange={toggleSelectAll}
+                      aria-label="全選"
+                    />
+                    全選
+                  </label>
+                </th>
                 <th className="px-2 py-2 font-medium">帳號</th>
                 <th className="px-2 py-2 font-medium">顯示名</th>
                 <th className="px-2 py-2 font-medium">狀態</th>
@@ -335,20 +501,20 @@ export function DeskClerksPanel() {
               </tr>
             </thead>
             <tbody>
-              {(clerks.length ? clerks : stats.map((row) => ({
-                clerkId: row.clerkId,
-                displayName: row.displayName,
-                status: (row.status === "active" ? "active" : "disabled") as "active" | "disabled",
-                validFrom: null,
-                validUntil: row.validUntil ?? null,
-                createdAt: null,
-                updatedAt: null,
-                disabledAt: null,
-                lastLoginAt: row.lastLoginAt ?? null,
-              }))).map((clerk) => {
+              {tableRows.map((clerk) => {
                 const row = statsById.get(clerk.clerkId);
+                const checked = selectedIds.includes(clerk.clerkId);
                 return (
                   <tr key={clerk.clerkId} className="border-b last:border-0">
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={busy}
+                        onChange={() => toggleSelect(clerk.clerkId)}
+                        aria-label={`選擇 ${clerk.clerkId}`}
+                      />
+                    </td>
                     <td className="px-2 py-2 font-medium">{clerk.clerkId}</td>
                     <td className="px-2 py-2">{clerk.displayName || "—"}</td>
                     <td className="px-2 py-2">
@@ -396,10 +562,10 @@ export function DeskClerksPanel() {
                   </tr>
                 );
               })}
-              {!clerks.length && !stats.length ? (
+              {!tableRows.length ? (
                 <tr>
-                  <td colSpan={8} className="px-2 py-6 text-center text-muted-foreground">
-                    尚無臨時帳號。請按「批次開 20 帳」。
+                  <td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">
+                    尚無臨時帳號。請按「重新產生並下載」。
                   </td>
                 </tr>
               ) : null}

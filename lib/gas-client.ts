@@ -221,6 +221,11 @@ export const gasClient = {
       }),
     setStatus: (body: Record<string, unknown>) =>
       gasFetch<Record<string, unknown>>("deskClerks.setStatus", { method: "POST", body }),
+    setStatusBatch: (body: Record<string, unknown>) =>
+      gasFetch<{ items?: Record<string, unknown>[]; count?: number; status?: string }>(
+        "deskClerks.setStatusBatch",
+        { method: "POST", body },
+      ),
     disableAll: (body?: Record<string, unknown>) =>
       gasFetch<{ disabled?: number; at?: string }>("deskClerks.disableAll", {
         method: "POST",
