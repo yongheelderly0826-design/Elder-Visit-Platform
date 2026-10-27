@@ -173,6 +173,18 @@ const rolePriorities: Record<
       },
     ],
   },
+  desk_clerk: {
+    eyebrow: "今天先 KEY",
+    title: "臨時登打的工作",
+    items: [
+      {
+        title: "關懷表建檔",
+        detail: "依紙本連續 KEY，完成後登出。",
+        href: "/desk/care-forms",
+        icon: FileText,
+      },
+    ],
+  },
 };
 
 export function RoleHomePriorities({ roleKey }: { roleKey: WorkspaceRoleKey }) {

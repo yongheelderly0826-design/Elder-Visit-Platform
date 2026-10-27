@@ -114,6 +114,21 @@ export function CareFormDeskPanel({
     visitDate: "",
     visitStartTime: "09:00",
   });
+  const [deskClerkLabel, setDeskClerkLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const cookies = Object.fromEntries(
+      document.cookie.split(";").map((part) => {
+        const [key, ...rest] = part.trim().split("=");
+        return [key, decodeURIComponent(rest.join("=") || "")];
+      }),
+    );
+    const clerkId = String(cookies.desk_clerk_id || "").trim();
+    if (!clerkId) return;
+    const name = String(cookies.demo_name || "").trim();
+    setDeskClerkLabel(name && name !== clerkId ? `${clerkId}／${name}` : clerkId);
+  }, []);
 
   async function checkAssignmentsExist(
     assignmentIds: string[],
@@ -891,6 +906,13 @@ export function CareFormDeskPanel({
         title="關懷表建檔"
         description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；批次只填日期與第 1 起始，進表後勾選訪視時長 1／5／10 分（結束可手改），下一案起始＝上案結束＋5 分。同組時段不可衝突。非未遇不必三次；未遇送出後會自動補 D-2 早／D-1 中兩張紙本。"
       />
+
+      {deskClerkLabel ? (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          目前登打帳號：<span className="font-semibold">{deskClerkLabel}</span>
+          （送出後會計入論件件數）
+        </div>
+      ) : null}
 
       {batch ? (
         <div className="sticky top-2 z-40 rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm">

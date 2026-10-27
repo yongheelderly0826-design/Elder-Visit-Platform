@@ -205,6 +205,45 @@ export const gasClient = {
         >
       >("registrations.batchReview", { method: "POST", body }),
   },
+  deskClerks: {
+    list: () => gasFetch<Record<string, unknown>[]>("deskClerks.list"),
+    get: (clerkId: string, opts?: { include_secrets?: boolean }) =>
+      gasFetch<Record<string, unknown> | null>("deskClerks.get", {
+        params: {
+          clerk_id: clerkId,
+          ...(opts?.include_secrets ? { include_secrets: "true" } : {}),
+        },
+      }),
+    upsertBatch: (body: Record<string, unknown>) =>
+      gasFetch<{ items?: Record<string, unknown>[]; count?: number }>("deskClerks.upsertBatch", {
+        method: "POST",
+        body,
+      }),
+    setStatus: (body: Record<string, unknown>) =>
+      gasFetch<Record<string, unknown>>("deskClerks.setStatus", { method: "POST", body }),
+    disableAll: (body?: Record<string, unknown>) =>
+      gasFetch<{ disabled?: number; at?: string }>("deskClerks.disableAll", {
+        method: "POST",
+        body: body ?? {},
+      }),
+    markLogin: (body: Record<string, unknown>) =>
+      gasFetch<Record<string, unknown>>("deskClerks.markLogin", { method: "POST", body }),
+    logKey: (body: Record<string, unknown>) =>
+      gasFetch<{ log?: Record<string, unknown>; counts_as_piece?: number }>("deskClerks.logKey", {
+        method: "POST",
+        body,
+      }),
+    listLogs: (params?: Record<string, string>) =>
+      gasFetch<{ items?: Record<string, unknown>[]; total?: number }>("deskClerks.listLogs", {
+        params,
+      }),
+    stats: (params?: Record<string, string>) =>
+      gasFetch<{
+        items?: Record<string, unknown>[];
+        piece_total?: number;
+        key_total?: number;
+      }>("deskClerks.stats", { params }),
+  },
   accounts: {
     getAuthByEmail: (email: string) =>
       gasFetch<GasAuthAccount | null>("accounts.getAuthByEmail", { params: { email } }),

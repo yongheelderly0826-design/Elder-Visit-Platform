@@ -57,6 +57,8 @@ var Config = (function () {
       EXPORTS: '匯出紀錄',
       REPORTS: '報表快照',
       CONSENTS: '電子同意書',
+      DESK_CLERKS: '臨時登打帳號',
+      DESK_KEY_LOGS: '紙本登打紀錄',
       LOG: '_操作日誌',
     },
   };

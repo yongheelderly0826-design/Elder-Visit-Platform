@@ -185,7 +185,7 @@ export const navItems: NavItem[] = [
     href: "/desk/care-forms",
     icon: FileText,
     requiredCapabilities: ["visits.submit"],
-    allowedRoles: ["workspace_owner", "workspace_manager"],
+    allowedRoles: ["workspace_owner", "workspace_manager", "desk_clerk"],
     group: "operations",
   },
   {
@@ -337,6 +337,10 @@ export function getVisibleNavItems(
   return navItems.filter((item) => {
     if (roleKey === "visitor" && !item.allowedRoles?.includes("visitor")) {
       return false;
+    }
+    // 臨時登打：僅顯示明確允許的關懷表建檔
+    if (roleKey === "desk_clerk") {
+      if (!item.allowedRoles?.includes("desk_clerk")) return false;
     }
     if (item.allowedRoles?.length) {
       if (!roleKey || !item.allowedRoles.includes(roleKey)) {

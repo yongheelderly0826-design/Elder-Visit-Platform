@@ -18,6 +18,8 @@ import {
 import { getSystemStatus } from "@/lib/system/env";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { MANAGER_DESK_NOTE } from "@/lib/domain/manager-care-form-desk";
+import { logDeskClerkKey } from "@/lib/domain/desk-clerks";
+import { normalizeDeskVisitDateToIso } from "@/lib/domain/desk-care-batch";
 
 type MissedVisitPhotoPayload = {
   slot: string;
@@ -29,7 +31,9 @@ type VisitSubmitPayload = VisitSubmission & {
   assignmentId?: string;
   visitorId?: string;
   encodedId?: string;
+  caseId?: string;
   caseCode?: string;
+  caseLabel?: string;
   careFormAnswers?: MohwLifeCareAnswers;
   missedVisitPhotos?: MissedVisitPhotoPayload[];
   registryNationalId?: string | null;
@@ -164,6 +168,32 @@ export async function POST(request: NextRequest) {
           : submission.notes,
       });
       invalidateGasReadCaches();
+
+      const clerkId = request.cookies.get("desk_clerk_id")?.value;
+      if (clerkId) {
+        const submitted = gasResult as {
+          careform?: { careform_id?: string; assignment_id?: string };
+        } | null;
+        const answers = careFormAnswers ?? {};
+        try {
+          await logDeskClerkKey({
+            clerkId,
+            displayName: request.cookies.get("demo_name")?.value,
+            assignmentId: String(
+              submitted?.careform?.assignment_id || body.assignmentId || body.scheduleId || "",
+            ),
+            careformId: String(submitted?.careform?.careform_id || ""),
+            caseId: String(body.caseId || body.caseCode || answers.encoded_id || ""),
+            caseLabel: String(body.caseLabel || answers.name || body.caseCode || ""),
+            visitResult: submission.visitResult,
+            visitDate:
+              normalizeDeskVisitDateToIso(answers.visit_date) ||
+              String(answers.visit_date || ""),
+          });
+        } catch {
+          // 計件紀錄失敗不擋 KEY 成功；承辦可後補查關懷表
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "GAS careform.submit 失敗";
       return NextResponse.json({ error: { code: "GAS_SUBMIT_FAILED", message } }, { status: 502 });

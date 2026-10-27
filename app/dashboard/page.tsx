@@ -32,6 +32,9 @@ export default async function DashboardPage() {
   if (roleKey === "visitor") {
     redirect("/visitor/home");
   }
+  if (roleKey === "desk_clerk") {
+    redirect("/desk/care-forms");
+  }
   const role = getRoleByKey(roleKey);
   const roleDashboard = dashboardByRole[roleKey] ?? dashboardByRole.workspace_manager;
   const repository = getRepository();
@@ -345,6 +348,29 @@ const dashboardByRole: Record<
       { label: "資料操作", value: "不可修改", detail: "唯讀角色不顯示新增、修改與刪除按鈕。" },
       { label: "個資範圍", value: "受限", detail: "只顯示授權可查看欄位。" },
       { label: "匯出權限", value: "關閉", detail: "不可匯出個案或核銷資料。" },
+    ],
+  },
+  desk_clerk: {
+    title: "臨時登打",
+    description: "僅可進入關懷表建檔進行紙本 KEY。",
+    workQueueTitle: "登打工作",
+    workQueueHint: "請前往關懷表建檔",
+    sidePanelTitle: "權限",
+    showPlanLimits: false,
+    metrics: [
+      { key: "desk", label: "關懷表建檔", value: "開放", detail: "唯一功能", icon: FileText },
+      { key: "export", label: "匯出", value: "關閉", detail: "無權限", icon: FileCheck2 },
+      { key: "users", label: "使用者", value: "關閉", detail: "無權限", icon: Users },
+      { key: "audit", label: "稽核", value: "關閉", detail: "無權限", icon: ShieldCheck },
+    ],
+    activityItems: [
+      { author: "系統", content: "臨時登打帳號僅能使用關懷表建檔。", tone: "system" },
+    ],
+    focusCards: [
+      { title: "關懷表建檔", detail: "進入紙本 KEY。", href: "/desk/care-forms", icon: FileText },
+    ],
+    sidePanelRows: [
+      { label: "功能範圍", value: "關懷表建檔", detail: "其餘後台功能不開放。" },
     ],
   },
 };

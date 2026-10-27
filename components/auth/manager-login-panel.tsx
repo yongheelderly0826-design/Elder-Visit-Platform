@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ClipboardPen, LogIn } from "lucide-react";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -28,23 +28,13 @@ function getLoginErrorMessage(code: string | null) {
 
 export function ManagerLoginPanel() {
   const [managerEmail, setManagerEmail] = useState("yongheelderly0826@gmail.com");
-  const [deskPasscode, setDeskPasscode] = useState("");
-  const [deskEnabled, setDeskEnabled] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [clerkId, setClerkId] = useState("");
+  const [clerkPasscode, setClerkPasscode] = useState("");
+  const [message, setMessage] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getLoginErrorMessage(new URLSearchParams(window.location.search).get("error"));
+  });
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const loginError = getLoginErrorMessage(params.get("error"));
-    if (loginError) setMessage(loginError);
-
-    void fetch("/api/auth/desk-shared")
-      .then(async (response) => {
-        const json = (await response.json()) as { data?: { enabled?: boolean } };
-        setDeskEnabled(Boolean(json.data?.enabled));
-      })
-      .catch(() => setDeskEnabled(false));
-  }, []);
 
   async function loginAsManager() {
     setBusy(true);
@@ -72,23 +62,27 @@ export function ManagerLoginPanel() {
     }
   }
 
-  async function loginDeskShared() {
+  async function loginDeskClerk() {
     setBusy(true);
     setMessage(null);
     try {
       const nextPath = getSafeNextPath("/desk/care-forms");
-      const response = await fetch("/api/auth/desk-shared", {
+      const response = await fetch("/api/auth/desk-clerk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ passcode: deskPasscode, next: nextPath }),
+        body: JSON.stringify({
+          clerkId: clerkId.trim(),
+          passcode: clerkPasscode,
+          next: nextPath,
+        }),
       });
       const result = (await response.json()) as {
-        data?: { nextPath?: string };
+        data?: { nextPath?: string; displayName?: string; clerkId?: string };
         error?: { message?: string };
       };
       if (!response.ok) {
-        setMessage(result.error?.message ?? "通行碼不正確。");
+        setMessage(result.error?.message ?? "帳號或通行碼不正確。");
         return;
       }
       window.location.href = result.data?.nextPath ?? "/desk/care-forms";
@@ -112,52 +106,54 @@ export function ManagerLoginPanel() {
           </div>
 
           <div className="grid gap-6 p-5 lg:p-6">
-            {deskEnabled ? (
-              <div>
-                <p className="text-sm font-medium text-primary">紙本建檔（多人共用）</p>
-                <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">不用個人 Gmail</h1>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  里責／志工輪班 KEY 單：輸入共用通行碼即可進入關懷表建檔。同一網址可多人輪流使用。
-                </p>
-                <div className="mt-6 rounded-lg border bg-card p-3">
-                  <label className="block text-sm font-medium">
-                    共用通行碼
-                    <input
-                      className="mt-2 h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                      type="password"
-                      autoComplete="current-password"
-                      value={deskPasscode}
-                      onChange={(event) => setDeskPasscode(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void loginDeskShared();
-                      }}
-                    />
-                  </label>
-                  <Button
-                    className="mt-3 h-11 w-full"
-                    disabled={busy || !deskPasscode.trim()}
-                    onClick={() => void loginDeskShared()}
-                  >
-                    <ClipboardPen className="h-4 w-4" />
-                    {busy ? "進入中…" : "進入關懷表建檔"}
-                  </Button>
-                </div>
+            <div>
+              <p className="text-sm font-medium text-primary">臨時登打（紙本 KEY）</p>
+              <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">輸入臨時帳號</h1>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                使用承辦核發的 TEMP-01～TEMP-20 帳號與通行碼進入關懷表建檔。帳號可設定到期日，時間到即無法登入。
+              </p>
+              <div className="mt-6 space-y-3 rounded-lg border bg-card p-3">
+                <label className="block text-sm font-medium">
+                  臨時帳號
+                  <input
+                    className="mt-2 h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    autoComplete="username"
+                    placeholder="例：TEMP-01"
+                    value={clerkId}
+                    onChange={(event) => setClerkId(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void loginDeskClerk();
+                    }}
+                  />
+                </label>
+                <label className="block text-sm font-medium">
+                  通行碼
+                  <input
+                    className="mt-2 h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    type="password"
+                    autoComplete="current-password"
+                    value={clerkPasscode}
+                    onChange={(event) => setClerkPasscode(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void loginDeskClerk();
+                    }}
+                  />
+                </label>
+                <Button
+                  className="h-11 w-full"
+                  disabled={busy || !clerkId.trim() || !clerkPasscode.trim()}
+                  onClick={() => void loginDeskClerk()}
+                >
+                  <ClipboardPen className="h-4 w-4" />
+                  {busy ? "進入中…" : "進入關懷表建檔"}
+                </Button>
               </div>
-            ) : (
-              <div>
-                <p className="text-sm font-medium text-primary">紙本建檔</p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  尚未設定共用通行碼。請總承辦在 Vercel／環境變數加入
-                  <code className="mx-1 rounded bg-secondary px-1">DESK_SHARED_PASSCODE</code>
-                  後即可讓多人免 Gmail KEY 單。
-                </p>
-              </div>
-            )}
+            </div>
 
             <div className="border-t pt-6">
               <p className="text-sm font-medium text-muted-foreground">總承辦／後台（Gmail）</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                完整後台（派案、匯出、里責任分配）請用公所指定 Google 帳號。可多人輪流使用同一組授權信箱。
+                完整後台（派案、匯出、臨時登打管理）請用公所指定 Google 帳號。
               </p>
               <div className="mt-4 rounded-lg border bg-card p-3">
                 <label className="block text-sm font-medium">

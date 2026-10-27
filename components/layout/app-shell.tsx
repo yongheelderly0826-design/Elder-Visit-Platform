@@ -118,7 +118,9 @@ export async function AppShell({
             href={
               roleKey === "visitor"
                 ? "/api/auth/logout?next=/visitor/login"
-                : roleKey === "workspace_owner" || roleKey === "workspace_manager"
+                : roleKey === "desk_clerk" ||
+                    roleKey === "workspace_owner" ||
+                    roleKey === "workspace_manager"
                   ? "/api/auth/logout?next=/yonghe"
                   : "/api/auth/logout"
             }

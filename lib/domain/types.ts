@@ -130,7 +130,8 @@ export type WorkspaceRoleKey =
   | "supervisor"
   | "visitor"
   | "auditor"
-  | "viewer";
+  | "viewer"
+  | "desk_clerk";
 
 export type WorkspaceRole = {
   key: WorkspaceRoleKey;

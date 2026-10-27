@@ -1,3 +1,11 @@
+## Lesson: Temporary desk clerks for paper KEY piece-rate
+
+- **Trigger:** Need ~20 temp staff to KEY hundreds of paper care forms via `/yonghe`, then pay by piece and shut accounts when the campaign ends.
+- **Cause:** Old shared `DESK_SHARED_PASSCODE` logged everyone in as one identity, so piece-rate attribution was impossible.
+- **Rule:** Disable shared passcode. Issue `TEMP-01`…`TEMP-20` from 使用者→臨時登打（passcodes shown once). Role `desk_clerk` only sees 關懷表建檔. Each successful careform submit writes `紙本登打紀錄`; `counts_as_piece=1` except additional 未遇 papers for the same `case_id` count 0. Support manual disable + `valid_until` auto-block. Deploy GAS `DeskClerkModule` before using the UI.
+- **Evidence:** `gas/src/modules/DeskClerkModule.gs`, `lib/domain/desk-clerks.ts`, `app/api/auth/desk-clerk/route.ts`, `components/workspace/desk-clerks-panel.tsx`, `components/auth/manager-login-panel.tsx`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk continuous KEY uses per-case 1／5／10 duration chain
 
 - **Trigger:** Paper KEY staff should not pre-assign every case end time; duration varies per paper.

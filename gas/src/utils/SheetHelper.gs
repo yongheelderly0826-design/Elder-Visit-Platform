@@ -136,6 +136,8 @@ var SheetHelper = (function () {
       ],
       '報表快照': ['snapshot_id', 'report_type', 'period', 'data_json', 'created_at'],
       '電子同意書': ['consent_id', 'template_id', 'template_version', 'title', 'signer_name', 'signer_role', 'visitor_id', 'case_id', 'schedule_id', 'external_ref', 'signature_file_id', 'signature_file_url', 'signature_mime_type', 'signature_file_name', 'signed_at', 'is_test', 'field_values_json', 'metadata_json', 'pdf_file_id', 'pdf_file_url', 'pdf_file_name', 'pdf_generated_at', 'pdf_template_key', 'signature_folder_id', 'signature_folder_url', 'pdf_folder_id', 'pdf_folder_url'],
+      '臨時登打帳號': ['clerk_id', 'display_name', 'status', 'passcode_hash', 'passcode_salt', 'passcode_params', 'valid_from', 'valid_until', 'created_at', 'updated_at', 'disabled_at', 'last_login_at'],
+      '紙本登打紀錄': ['log_id', 'clerk_id', 'display_name', 'assignment_id', 'careform_id', 'case_id', 'case_label', 'visit_result', 'visit_date', 'keyed_at', 'counts_as_piece', 'created_at'],
       '_操作日誌': ['log_id', 'action', 'sheet', 'record_id', 'actor', 'timestamp', 'detail'],
     };
 

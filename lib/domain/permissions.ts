@@ -161,6 +161,12 @@ export const workspaceRoles: WorkspaceRole[] = [
     description: "只能查看總覽、名冊與成果，不可更改資料。",
     capabilities: ["dashboard.read", "kpi.read", "cases.read", "visits.read", "system.read"],
   },
+  {
+    key: "desk_clerk",
+    label: "臨時登打",
+    description: "僅可進入關懷表建檔，紙本 KEY；不可進匯出／使用者／派案後台。",
+    capabilities: ["visits.submit", "visits.read", "cases.read"],
+  },
 ];
 
 export const workspaceMembers: WorkspaceMember[] = [

@@ -28,6 +28,7 @@ import type { LucideIcon } from "lucide-react";
 import { useCan } from "@/components/auth/permission-provider";
 import { Button } from "@/components/ui/button";
 import { VisitorCorrectionDialog } from "@/components/workspace/visitor-correction-dialog";
+import { DeskClerksPanel } from "@/components/workspace/desk-clerks-panel";
 import { workspaceRoles } from "@/lib/domain/permissions";
 import { visitors as defaultVisitors } from "@/lib/domain/assignments";
 import type {
@@ -54,7 +55,14 @@ type UsersPayload = {
 
 type VisitorRegistryView = "all" | "needs_invite" | "awaiting_activation" | "needs_profile" | "assignable";
 
-type UserManagementTab = "overview" | "pending" | "approved" | "supplement" | "registration" | "flow";
+type UserManagementTab =
+  | "overview"
+  | "pending"
+  | "approved"
+  | "supplement"
+  | "desk_clerks"
+  | "registration"
+  | "flow";
 
 export function UsersPanel() {
   const canReviewUsers = useCan("users.review");
@@ -421,7 +429,7 @@ export function UsersPanel() {
           </section>
 
           <section className="rounded-lg border bg-card p-2">
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7">
               {(Object.keys(userManagementTabLabels) as UserManagementTab[]).map((tab) => (
                 <button
                   key={tab}
@@ -513,6 +521,8 @@ export function UsersPanel() {
               onCorrected={handleVisitorCorrected}
             />
           )}
+
+          {activeTab === "desk_clerks" && <DeskClerksPanel />}
 
           {activeTab === "registration" && (
           <>
@@ -702,6 +712,7 @@ const userManagementTabLabels: Record<UserManagementTab, string> = {
   pending: "待審核",
   approved: "訪員名冊",
   supplement: "待補資料",
+  desk_clerks: "臨時登打",
   registration: "註冊入口",
   flow: "流程索引",
 };

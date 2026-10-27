@@ -110,6 +110,20 @@ var ApiRouter = (function () {
     'ops.clearVisitTestData': function (p, b) {
       return OpsModule.clearVisitTestData(b || p);
     },
+
+    'deskClerks.list': function () { return DeskClerkModule.list(); },
+    'deskClerks.get': function (p) {
+      return DeskClerkModule.get(p.clerk_id || p.id, {
+        include_secrets: p.include_secrets === true || p.include_secrets === 'true',
+      });
+    },
+    'deskClerks.upsertBatch': function (p, b) { return DeskClerkModule.upsertBatch(b || p); },
+    'deskClerks.setStatus': function (p, b) { return DeskClerkModule.setStatus(b || p); },
+    'deskClerks.disableAll': function (p, b) { return DeskClerkModule.disableAll(b || p); },
+    'deskClerks.markLogin': function (p, b) { return DeskClerkModule.markLogin(b || p); },
+    'deskClerks.logKey': function (p, b) { return DeskClerkModule.logKey(b || p); },
+    'deskClerks.listLogs': function (p) { return DeskClerkModule.listLogs(p); },
+    'deskClerks.stats': function (p) { return DeskClerkModule.stats(p); },
   };
 
   function dispatch(action, params, body) {
