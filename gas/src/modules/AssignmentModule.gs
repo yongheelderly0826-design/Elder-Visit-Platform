@@ -44,9 +44,14 @@ var AssignmentModule = (function () {
   function dispatch(data) {
     Validation.requireFields(data, ['case_id', 'visitor_id']);
     // 序列化寫入：並行 appendRow 可能互蓋，回傳 ASG 但列未落地。
-    var lock = LockService.getDocumentLock();
-    if (!lock.tryLock(30000)) {
-      throw new Error('派案忙碌中，請稍後再試');
+    // Web App 無開啟文件時 getDocumentLock() 為 null；改用 script lock，取不到則跳過鎖定。
+    var lock = LockService.getScriptLock();
+    var locked = false;
+    if (lock) {
+      locked = lock.tryLock(30000);
+      if (!locked) {
+        throw new Error('派案忙碌中，請稍後再試');
+      }
     }
     try {
       var caseRow = CaseModule.get(data.case_id);
@@ -100,7 +105,9 @@ var AssignmentModule = (function () {
       );
       return saved;
     } finally {
-      lock.releaseLock();
+      if (locked && lock) {
+        lock.releaseLock();
+      }
     }
   }
 
