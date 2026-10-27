@@ -101,6 +101,14 @@
 這份文件用來保存「下次不要再重複踩坑」的專案經驗。  
 只有當一個發現具備重複價值、會影響未來判斷時，才應該記錄在這裡；不要把一次性的小插曲全部塞進來。
 
+## Lesson: Visitor KEY auto-shifts overlapping visit windows; desk stays strict
+
+- **Trigger:** 訪查員 quick KEY / field_self forms seed “now +10m” (or clock) times that often overlap other same-day cases for the same visitor; a blocking conflict modal strand them.
+- **Cause:** Desk `confirm-time` / batch audit correctly forbids overlap for 核銷, but visitor path had no confirm-time gate and no auto-resolve.
+- **Rule:** Reuse the same overlap detection (`findOverlappingWindow` / `auditDeskVisitTime`). For **visitor** KEY only: `resolveNonOverlappingVisitSlot` + `auditDeskVisitTimeAutoResolve` shift the **current** case forward by duration + `DESK_BATCH_TRAVEL_GAP_MINUTES` (5), or next day `09:00` if past 24:00; persist via `/api/visitor/confirm-time` and soft-notice「時段與其他案衝突，已自動調整為 HH:mm–HH:mm」. Desk/manager paper KEY keeps strict 409 + blocking modal.
+- **Evidence:** `lib/domain/desk-care-batch.ts`, `lib/domain/desk-visit-time-audit.ts`, `app/api/visitor/confirm-time/route.ts`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk care forms batch KEY with sticky visit team and time audit
 
 - **Trigger:** Paper bulk KEY needs the same civil/social visit team across many cases without re-picking, and overlapping times break reimbursement.

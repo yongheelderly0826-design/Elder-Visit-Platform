@@ -220,6 +220,131 @@ export function findOverlappingWindow(
   return existing.find((item) => windowsOverlap(candidate, item)) ?? null;
 }
 
+/** 日界溢出後改排隔日上午（與紙本早班／建檔預設一致）。 */
+export const DESK_NEXT_DAY_MORNING_START = "09:00";
+
+export type ResolvedVisitSlot = {
+  visitDate: string;
+  visitStartTime: string;
+  visitEndTime: string;
+  shifted: boolean;
+  /** 促使第一次移位的衝突案（若有） */
+  conflict?: DeskVisitWindow;
+};
+
+/**
+ * 若 candidate 與 existing 重疊，把「本案」往後挪：衝突結束＋移動間隔，
+ * 維持原時長；當日放不下則改隔日 morningStart。純函式，不打 API。
+ * `existing` 可含多日視窗（同日才會重疊）。
+ */
+export function resolveNonOverlappingVisitSlot(input: {
+  candidate: DeskVisitWindow;
+  existing: DeskVisitWindow[];
+  travelGapMinutes?: number;
+  morningStart?: string;
+  /** 單日內最多嘗試次數（防死迴圈） */
+  maxAttemptsPerDay?: number;
+  /** 最多跨幾天（含起始日） */
+  maxDayHops?: number;
+}):
+  | { ok: true; slot: ResolvedVisitSlot }
+  | { ok: false; message: string } {
+  const travelGap =
+    input.travelGapMinutes == null
+      ? DESK_BATCH_TRAVEL_GAP_MINUTES
+      : Number(input.travelGapMinutes);
+  const morningStart = String(input.morningStart || DESK_NEXT_DAY_MORNING_START)
+    .trim()
+    .slice(0, 5);
+  const maxAttempts = Math.max(1, Math.floor(input.maxAttemptsPerDay ?? 96));
+  const maxDayHops = Math.max(1, Math.floor(input.maxDayHops ?? 14));
+
+  const visitDate = String(input.candidate.visitDate || "").trim();
+  let start = String(input.candidate.start || "").trim().slice(0, 5);
+  let end = String(input.candidate.end || "").trim().slice(0, 5);
+  const startMin = toMinutes(start);
+  const endMin = toMinutes(end);
+  if (!visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+    return { ok: false, message: "請填寫訪視日期。" };
+  }
+  if (startMin == null || endMin == null) {
+    return { ok: false, message: "請完整填寫開始與結束時間。" };
+  }
+  if (endMin <= startMin) {
+    return { ok: false, message: "結束時間必須晚於開始時間。" };
+  }
+  if (!Number.isFinite(travelGap) || travelGap < 0) {
+    return { ok: false, message: "移動間隔分鐘數無效。" };
+  }
+  const morningMin = toMinutes(morningStart);
+  if (morningMin == null) {
+    return { ok: false, message: "隔日上午開始時間無效。" };
+  }
+
+  const durationMinutes = endMin - startMin;
+  const morningEnd = minutesToTime(morningMin + durationMinutes);
+  if (!morningEnd) {
+    return { ok: false, message: "隔日上午時段長度無效。" };
+  }
+
+  const existing = input.existing;
+  let shifted = false;
+  let firstConflict: DeskVisitWindow | undefined;
+  let currentDate = visitDate;
+
+  for (let dayHop = 0; dayHop < maxDayHops; dayHop += 1) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const candidate: DeskVisitWindow = {
+        ...input.candidate,
+        visitDate: currentDate,
+        start,
+        end,
+      };
+      const hit = findOverlappingWindow(candidate, existing);
+      if (!hit) {
+        return {
+          ok: true,
+          slot: {
+            visitDate: currentDate,
+            visitStartTime: start,
+            visitEndTime: end,
+            shifted,
+            conflict: firstConflict,
+          },
+        };
+      }
+      if (!firstConflict) firstConflict = hit;
+      shifted = true;
+
+      const hitEnd = toMinutes(hit.end);
+      if (hitEnd == null) {
+        return { ok: false, message: "衝突時段格式無效，無法自動調整。" };
+      }
+      const nextStartMin = hitEnd + travelGap;
+      const nextEndMin = nextStartMin + durationMinutes;
+      if (nextStartMin >= 24 * 60 || nextEndMin > 24 * 60) {
+        break;
+      }
+      const nextStart = minutesToTime(nextStartMin);
+      const nextEnd = minutesToTime(nextEndMin);
+      if (!nextStart || !nextEnd) break;
+      start = nextStart;
+      end = nextEnd;
+    }
+
+    const nextDate = addCalendarDaysIso(currentDate, 1);
+    if (!nextDate) {
+      return { ok: false, message: "無法推算隔日日期，時段衝突無法自動排除。" };
+    }
+    currentDate = nextDate;
+    start = morningStart;
+    end = morningEnd;
+    shifted = true;
+  }
+
+  return { ok: false, message: "無法自動排除時段衝突，請手動調整訪視時間。" };
+}
+
 export const DESK_PAPER_SOURCE_NOTE = "公所代填・紙本";
 export const FIELD_SELF_SOURCE_NOTE = "訪員自領・實訪";
 

@@ -200,6 +200,9 @@ export function VisitDialogueForm({
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  /** 訪查員 KEY：時段自動排除衝突後的輕提示（非阻擋 modal） */
+  const [timeAdjustNotice, setTimeAdjustNotice] = useState<string | null>(null);
+  const timeSyncSeqRef = useRef(0);
   const [continuousNextHref, setContinuousNextHref] = useState<string | null>(null);
   const [continuousListHref, setContinuousListHref] = useState<string | null>(null);
   const [mohwErrors, setMohwErrors] = useState<MohwValidationError[]>([]);
@@ -273,6 +276,8 @@ export function VisitDialogueForm({
     // 草稿／主檔數字化可能丟前導 0；進畫面前記得補回
     return normalizeVisitorCareAnswers({ ...withTimes, ...seeded });
   });
+  const careFormAnswersRef = useRef(careFormAnswers);
+  careFormAnswersRef.current = careFormAnswers;
   const [openSectionTitles, setOpenSectionTitles] = useState<string[]>(() =>
     mohwLifeCareSections
       .filter((section) => section.title.startsWith("一、"))
@@ -414,6 +419,107 @@ export function VisitDialogueForm({
     window.localStorage.setItem(careFormDraftKey, JSON.stringify(careFormAnswers));
     setDraftState("saved");
   }, [careFormAnswers, careFormDraftKey, draftKey, readonly, submission]);
+
+  /**
+   * 訪查員 KEY：進表／簽到帶入時段後，用與場生相同稽核偵測衝突；
+   * 有重疊則自動往後挪並寫回表單＋派案 notes（不擋 modal）。
+   */
+  async function syncVisitorVisitTimes(times?: {
+    visitDate?: string;
+    visitStartTime?: string;
+    visitEndTime?: string;
+  }) {
+    if (readonly || isDeskEntry) return;
+    const latest = careFormAnswersRef.current;
+    const visitDateRaw = String(times?.visitDate ?? latest.visit_date ?? "").trim();
+    const visitStartTime = String(times?.visitStartTime ?? latest.visit_start_time ?? "")
+      .trim()
+      .slice(0, 5);
+    const visitEndTime = String(times?.visitEndTime ?? latest.visit_end_time ?? "")
+      .trim()
+      .slice(0, 5);
+    if (!visitStartTime || !visitEndTime) return;
+
+    const visitDateIso =
+      normalizeDeskVisitDateToIso(visitDateRaw) ||
+      normalizeDeskVisitDateToIso(schedule.visitDate) ||
+      new Date().toISOString().slice(0, 10);
+
+    const seq = ++timeSyncSeqRef.current;
+    try {
+      const response = await fetch("/api/visitor/confirm-time", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          assignmentId: schedule.id,
+          caseId: elderCase.id,
+          caseLabel: formatDeskCasePaperLabel({
+            villageCode: elderCase.villageCode,
+            village: elderCase.village,
+            villageSeq: elderCase.villageSeq,
+            name: elderCase.name,
+            caseCode: elderCase.caseCode,
+          }).full,
+          visitDate: visitDateIso,
+          visitStartTime,
+          visitEndTime,
+          persist: true,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: {
+          visitDate?: string;
+          visitStartTime?: string;
+          visitEndTime?: string;
+          adjusted?: boolean;
+          message?: string | null;
+        };
+        error?: { message?: string };
+      };
+      if (seq !== timeSyncSeqRef.current) return;
+      if (!response.ok || !json.data?.visitStartTime || !json.data?.visitEndTime) {
+        if (json.error?.message) setTimeAdjustNotice(json.error.message);
+        return;
+      }
+
+      const rocDate = (() => {
+        const formatted = formatRocDate(json.data.visitDate || visitDateIso);
+        return formatted &&
+          formatted !== "INVALID_DATE" &&
+          /^\d{3}\/\d{2}\/\d{2}$/.test(formatted)
+          ? formatted
+          : String(careFormAnswersRef.current.visit_date || "");
+      })();
+
+      setCareFormAnswers((current) => ({
+        ...current,
+        ...(rocDate ? { visit_date: rocDate } : {}),
+        visit_start_time: json.data!.visitStartTime!,
+        visit_end_time: json.data!.visitEndTime!,
+      }));
+      if (json.data.adjusted && json.data.message) {
+        setTimeAdjustNotice(json.data.message);
+      }
+    } catch {
+      if (seq !== timeSyncSeqRef.current) return;
+      setTimeAdjustNotice("時段檢查暫時無法連線，仍可繼續填寫；送出前請再確認起迄時間。");
+    }
+  }
+
+  useEffect(() => {
+    if (readonly || isDeskEntry) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      void syncVisitorVisitTimes();
+    }, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // 進表一次：草稿還原後再稽核／自動排除
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readonly, isDeskEntry, schedule.id]);
 
   async function submitVisit() {
     if (readonly) return;
@@ -877,9 +983,23 @@ export function VisitDialogueForm({
                 ...(visitStartTime ? { visit_start_time: visitStartTime } : {}),
                 ...(visitEndTime ? { visit_end_time: visitEndTime } : {}),
               }));
+              void syncVisitorVisitTimes({
+                visitDate,
+                visitStartTime,
+                visitEndTime,
+              });
             }}
           />
         )}
+
+        {timeAdjustNotice ? (
+          <p
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            role="status"
+          >
+            {timeAdjustNotice}
+          </p>
+        ) : null}
 
         <section className="rounded-lg border bg-background p-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
