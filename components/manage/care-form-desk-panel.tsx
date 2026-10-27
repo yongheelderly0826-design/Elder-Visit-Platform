@@ -909,7 +909,7 @@ export function CareFormDeskPanel({
 
       {deskClerkLabel ? (
         <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-          目前登打帳號：<span className="font-semibold">{deskClerkLabel}</span>
+          登打帳號 <span className="font-semibold">{deskClerkLabel}</span>
           （送出後會計入論件件數）
         </div>
       ) : null}

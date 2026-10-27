@@ -34,6 +34,16 @@ export async function AppShell({
   const activeGroup = items.find((item) => item.key === active)?.group;
   const sponsor = getPrimarySponsor();
   const canManageSponsors = role.capabilities.includes("sponsors.manage");
+  const displayName = String(cookieStore.get("demo_name")?.value || "").trim();
+  const clerkId = String(cookieStore.get("desk_clerk_id")?.value || "").trim();
+  const deskClerkName =
+    roleKey === "desk_clerk" && displayName && !/^TEMP-\d{2}$/i.test(displayName)
+      ? displayName
+      : null;
+  const sidebarPersonLabel = deskClerkName || role.label;
+  const sidebarPersonHint = deskClerkName
+    ? `臨時登打 ${clerkId || ""}`.trim()
+    : "目前角色";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -111,8 +121,8 @@ export async function AppShell({
 
         <div className="border-t p-4">
           <div className="rounded-md bg-secondary p-3">
-            <p className="text-xs text-muted-foreground">目前角色</p>
-            <p className="mt-1 text-sm font-semibold">{role.label}</p>
+            <p className="text-xs text-muted-foreground">{sidebarPersonHint}</p>
+            <p className="mt-1 truncate text-sm font-semibold">{sidebarPersonLabel}</p>
           </div>
           <a
             href={
@@ -161,9 +171,9 @@ export async function AppShell({
               </button>
               <div className="hidden h-10 items-center gap-2 rounded-full bg-secondary px-3 text-sm font-medium sm:flex">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
-                  管
+                  {deskClerkName ? deskClerkName.slice(0, 1) : "管"}
                 </span>
-                <span>{role.label}</span>
+                <span className="max-w-[8rem] truncate">{sidebarPersonLabel}</span>
               </div>
             </div>
           </div>
@@ -172,6 +182,11 @@ export async function AppShell({
         <PermissionProvider capabilities={role.capabilities}>
           <main className="safe-page-bottom mx-auto flex w-full max-w-[112rem] flex-col gap-4 px-3 py-4 sm:px-5 lg:px-6 xl:px-8 lg:pb-8">
             <AnnouncementMarquee />
+            {deskClerkName ? (
+              <p className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+                歡迎，<span className="font-semibold">{deskClerkName}</span>！請開始紙本關懷表建檔。
+              </p>
+            ) : null}
             {children}
           </main>
         </PermissionProvider>
@@ -181,7 +196,7 @@ export async function AppShell({
         active={active}
         capabilities={role.capabilities}
         roleKey={roleKey}
-        roleLabel={role.label}
+        roleLabel={sidebarPersonLabel}
       />
     </div>
   );

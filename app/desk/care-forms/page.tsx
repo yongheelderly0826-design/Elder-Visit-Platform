@@ -18,6 +18,15 @@ export default async function DeskCareFormsPage({
     redirect("/temp-key?next=/desk/care-forms");
   }
 
+  // 臨時登打尚未填中文姓名 → 先補資料
+  if (role === "desk_clerk") {
+    const clerkId = String(jar.get("desk_clerk_id")?.value || "").trim();
+    const name = String(jar.get("demo_name")?.value || "").trim();
+    if (!name || /^TEMP-\d{2}$/i.test(name) || name === clerkId) {
+      redirect("/temp-key/profile?next=/desk/care-forms");
+    }
+  }
+
   const params = await searchParams;
   return (
     <AppShell active="careForms">

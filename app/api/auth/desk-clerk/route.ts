@@ -28,8 +28,12 @@ export async function POST(request: Request) {
     );
     const roleKey = "desk_clerk" as const;
     const email = `${clerk.clerkId.toLowerCase()}@desk.local`;
+    const needsDisplayName = !String(clerk.displayName || "").trim();
     const name = clerk.displayName || clerk.clerkId;
-    const nextPath = getSafeNextPath(body.next ?? null);
+    const careFormsPath = getSafeNextPath(body.next ?? null);
+    const nextPath = needsDisplayName
+      ? `/temp-key/profile?next=${encodeURIComponent(careFormsPath)}`
+      : careFormsPath;
 
     const response = NextResponse.json({
       data: {
@@ -38,6 +42,7 @@ export async function POST(request: Request) {
         roleKey,
         clerkId: clerk.clerkId,
         displayName: name,
+        needsDisplayName,
         nextPath,
       },
     });

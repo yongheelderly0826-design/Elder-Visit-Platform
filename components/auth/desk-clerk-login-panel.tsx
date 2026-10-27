@@ -42,13 +42,14 @@ export function DeskClerkLoginPanel() {
         }),
       });
       const result = (await response.json()) as {
-        data?: { nextPath?: string };
+        data?: { nextPath?: string; needsDisplayName?: boolean };
         error?: { message?: string };
       };
       if (!response.ok) {
         setMessage(result.error?.message ?? "帳號或通行碼不正確。");
         return;
       }
+      // 首次登入無中文名 → profile；已有姓名 → 直接建檔
       window.location.href = result.data?.nextPath ?? "/desk/care-forms";
     } catch {
       setMessage("目前無法連線，請稍後再試。");

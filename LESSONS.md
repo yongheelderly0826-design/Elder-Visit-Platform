@@ -1,3 +1,11 @@
+## Lesson: Desk clerk self-serve Chinese display name
+
+- **Trigger:** Temp KEY staff need their real Chinese name on welcome + left sidebar for piece-rate accountability.
+- **Cause:** Login only stored `TEMP-xx` as `demo_name` until a name was saved.
+- **Rule:** First login with empty `display_name` → `/temp-key/profile` to enter Chinese name; persist via `deskClerks.setStatus` + cookies. Block `/desk/care-forms` while name is missing or still `TEMP-xx`. AppShell welcome banner + sidebar/bottom「更多」show `demo_name` for `desk_clerk`.
+- **Evidence:** `app/temp-key/profile/page.tsx`, `components/auth/desk-clerk-profile-panel.tsx`, `app/api/auth/desk-clerk/profile/route.ts`, `app/desk/care-forms/page.tsx`, `components/layout/app-shell.tsx`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Temporary desk clerks for paper KEY piece-rate
 
 - **Trigger:** Need ~20 temp staff to KEY hundreds of paper care forms via `/yonghe`, then pay by piece and shut accounts when the campaign ends.

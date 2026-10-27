@@ -129,16 +129,20 @@ export function BottomNav({
           </div>
           <div className="border-t bg-card p-3">
             <div className="mb-2 rounded-md bg-secondary px-3 py-2">
-              <p className="text-xs text-muted-foreground">目前角色</p>
-              <p className="mt-0.5 text-sm font-semibold">{roleLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                {roleKey === "desk_clerk" ? "臨時登打" : "目前角色"}
+              </p>
+              <p className="mt-0.5 truncate text-sm font-semibold">{roleLabel}</p>
             </div>
             <a
               href={
                 roleKey === "visitor"
                   ? "/api/auth/logout?next=/visitor/login"
-                  : roleKey === "workspace_owner" || roleKey === "workspace_manager"
-                    ? "/api/auth/logout?next=/yonghe"
-                    : "/api/auth/logout"
+                  : roleKey === "desk_clerk"
+                    ? "/api/auth/logout?next=/temp-key"
+                    : roleKey === "workspace_owner" || roleKey === "workspace_manager"
+                      ? "/api/auth/logout?next=/yonghe"
+                      : "/api/auth/logout"
               }
               className="flex h-10 items-center justify-center gap-2 rounded-md border bg-background text-sm font-medium text-muted-foreground"
             >
