@@ -549,27 +549,35 @@ export function CareFormDeskPanel({
           ? "正在建立個案並準備派案…"
           : `正在準備 ${selectedCases.length || selectedCaseIds.length} 筆派案，請稍候…`,
       );
-      const response = await fetch("/api/manager/care-forms/prepare", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          cases: creating
-            ? undefined
-            : selectedCases.map((item) => ({
-                caseId: item.id,
-                caseName: item.name,
-                caseCode: item.caseCode,
-              })),
-          caseIds: creating ? undefined : selectedCaseIds,
-          newCase: creating ? newCase : undefined,
-          visitorId: primaryVisitorId,
-          visitorName: visitorNameById[primaryVisitorId] || "",
-          companionVisitorIds,
-          companionNames: Object.fromEntries(
-            companionVisitorIds.map((id) => [id, visitorNameById[id] || ""]),
-          ),
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 90000);
+      let response: Response;
+      try {
+        response = await fetch("/api/manager/care-forms/prepare", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            cases: creating
+              ? undefined
+              : selectedCases.map((item) => ({
+                  caseId: item.id,
+                  caseName: item.name,
+                  caseCode: item.caseCode,
+                })),
+            caseIds: creating ? undefined : selectedCaseIds,
+            newCase: creating ? newCase : undefined,
+            visitorId: primaryVisitorId,
+            visitorName: visitorNameById[primaryVisitorId] || "",
+            companionVisitorIds,
+            companionNames: Object.fromEntries(
+              companionVisitorIds.map((id) => [id, visitorNameById[id] || ""]),
+            ),
+          }),
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const json = (await response.json()) as {
         data?: {
           items?: Array<{
@@ -621,8 +629,15 @@ export function CareFormDeskPanel({
       setMessage(
         `已準備 ${next.items.length} 筆派案。請填第 1 筆時間後「套用整批時段」，將立刻開始連續 KEY。`,
       );
-    } catch {
-      setMessage("目前無法連線，請稍後再試。");
+    } catch (error) {
+      const aborted =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && /abort/i.test(error.message));
+      setMessage(
+        aborted
+          ? "準備派案逾時，請再按一次「一次準備派案」。若持續發生請稍候再試。"
+          : "目前無法連線，請稍後再試。",
+      );
     } finally {
       setBusy(false);
     }

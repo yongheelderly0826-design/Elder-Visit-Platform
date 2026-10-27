@@ -123,67 +123,43 @@ export async function POST(request: NextRequest) {
     }
 
     const due = visitDate || new Date().toISOString().slice(0, 10);
-    const items: Array<{
-      caseId: string;
-      caseName: string;
-      caseCode: string;
-      assignmentId: string;
-      visitAttempt: number;
-      elderCase?: ReturnType<typeof toDeskElderCase>;
-      schedule: ReturnType<typeof toDeskSchedule>;
-    }> = [];
 
-    // 逐案 dispatch（勿 Promise.all）：GAS 並行 appendRow 可能互蓋導致回傳 ASG 但列未落地，
-    // 接著 status probe／confirm 以為「失效」清掉品牌新佇列。
-    for (const ref of caseRefs) {
-      const saved = (await gasClient.assignments.dispatch({
-        case_id: ref.caseId,
-        visitor_id: visitorId,
-        due_date: visitDate || undefined,
-        notes,
-        auto_confirm: true,
-        allow_multi_active: true,
-      })) as Record<string, unknown>;
+    // 單次 GAS dispatchBatch：一次鎖 + appendRows + flush，避免 10 案逐筆卡在「準備中」
+    const batchResult = (await gasClient.assignments.dispatchBatch({
+      visitor_id: visitorId,
+      case_ids: caseRefs.map((ref) => ref.caseId),
+      due_date: visitDate || undefined,
+      notes,
+      auto_confirm: true,
+      allow_multi_active: true,
+    })) as { items?: Record<string, unknown>[]; count?: number };
 
+    const savedRows = Array.isArray(batchResult?.items) ? batchResult.items : [];
+    if (!savedRows.length) {
+      throw new Error("批次派案未回傳任何編號，請重試準備派案。");
+    }
+
+    const refByCaseId = new Map(caseRefs.map((ref) => [ref.caseId, ref]));
+    const items = savedRows.map((saved) => {
+      const caseId = String(saved.case_id ?? "").trim();
+      const ref = refByCaseId.get(caseId);
       const assignmentId = String(saved.assignment_id ?? "").trim();
-      if (!assignmentId) {
-        throw new Error(`派案未回傳編號（個案 ${ref.caseId}），請重試準備派案。`);
+      if (!assignmentId || !caseId) {
+        throw new Error("批次派案回傳缺 assignment_id／case_id，請重試。");
       }
-
-      // 確認列真的在表上再交給前端（短暫落後則再讀一次）
-      let verified = (await gasClient.assignments.get(assignmentId)) as {
-        assignment_id?: string;
-      } | null;
-      if (!verified || String(verified.assignment_id ?? "").trim() !== assignmentId) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        verified = (await gasClient.assignments.get(assignmentId)) as {
-          assignment_id?: string;
-        } | null;
-      }
-      if (!verified || String(verified.assignment_id ?? "").trim() !== assignmentId) {
-        throw new Error(
-          `派案 ${assignmentId} 寫入後讀不到（個案 ${ref.caseId}）。請稍後再按一次準備派案。`,
-        );
-      }
-
       const caseName =
-        ref.caseName ||
-        String(saved.elder_name ?? "") ||
-        ref.caseId;
+        ref?.caseName || String(saved.elder_name ?? "") || caseId;
       const caseCode =
-        ref.caseCode ||
-        String(saved.encoded_id ?? "") ||
-        ref.caseId;
-
-      items.push({
-        caseId: ref.caseId,
+        ref?.caseCode || String(saved.encoded_id ?? "") || caseId;
+      return {
+        caseId,
         caseName,
         caseCode,
         assignmentId,
         visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
         schedule: toDeskSchedule(saved, due),
-      });
-    }
+      };
+    });
 
     invalidateGasReadCaches();
 

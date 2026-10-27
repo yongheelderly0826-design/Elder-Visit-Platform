@@ -388,6 +388,11 @@ export const gasClient = {
       gasFetch<unknown>("assignments.get", { params: { assignment_id: assignmentId } }),
     dispatch: (body: unknown) =>
       gasFetch<unknown>("assignments.dispatch", { method: "POST", body }),
+    dispatchBatch: (body: unknown) =>
+      gasFetch<{ items?: unknown[]; count?: number }>("assignments.dispatchBatch", {
+        method: "POST",
+        body,
+      }),
     confirm: (body: unknown) =>
       gasFetch<unknown>("assignments.confirm", { method: "POST", body }),
   },

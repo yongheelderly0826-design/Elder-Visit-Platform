@@ -41,54 +41,76 @@ var AssignmentModule = (function () {
     return rows.filter(function (r) { return String(r.case_id) === String(caseId); }).length;
   }
 
-  function dispatch(data) {
-    Validation.requireFields(data, ['case_id', 'visitor_id']);
-    // 序列化寫入：並行 appendRow 可能互蓋，回傳 ASG 但列未落地。
-    // Web App 無開啟文件時 getDocumentLock() 為 null；改用 script lock，取不到則跳過鎖定。
+  function withScriptLock_(fn) {
     var lock = LockService.getScriptLock();
     var locked = false;
     if (lock) {
-      locked = lock.tryLock(30000);
+      // 短鎖：長時間 tryLock(30s) 會讓桌面「一次準備派案」整批卡死
+      locked = lock.tryLock(8000);
       if (!locked) {
         throw new Error('派案忙碌中，請稍後再試');
       }
     }
     try {
+      return fn();
+    } finally {
+      if (locked && lock) {
+        lock.releaseLock();
+      }
+    }
+  }
+
+  function isAllowMulti_(data) {
+    return (
+      data.allow_multi_active === true ||
+      data.allow_multi_active === 'true' ||
+      String(data.notes || '').indexOf('公所代填') !== -1
+    );
+  }
+
+  function buildAssignmentRow_(data, caseRow, now) {
+    var autoConfirm = data.auto_confirm !== false && data.auto_confirm !== 'false';
+    return {
+      assignment_id: 'ASG-' + Utilities.getUuid().slice(0, 8),
+      batch_id: data.batch_id || '',
+      case_id: data.case_id,
+      encoded_id: caseRow.encoded_id,
+      visitor_id: data.visitor_id,
+      visit_village: caseRow.visit_village,
+      status: autoConfirm ? '進行中' : '待接案',
+      dispatched_at: now,
+      confirmed_at: autoConfirm ? now : '',
+      due_date:
+        data.due_date ||
+        Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      notes: data.notes || '',
+      updated_at: now,
+    };
+  }
+
+  function dispatch(data) {
+    Validation.requireFields(data, ['case_id', 'visitor_id']);
+    return withScriptLock_(function () {
       var caseRow = CaseModule.get(data.case_id);
       if (!caseRow) throw new Error('Case not found');
 
-      var existingActive = list({}).filter(function (r) {
-        return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
-      });
-      // 紙本建檔／代填可一案多人分次 KEY（allow_multi_active）；外勤唯一派案仍擋重複。
-      var allowMulti =
-        data.allow_multi_active === true ||
-        data.allow_multi_active === 'true' ||
-        String(data.notes || '').indexOf('公所代填') !== -1;
-      if (existingActive.length > 0 && !allowMulti) {
-        var err = new Error(
-          '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
-        );
-        err.code = 'CONFLICT';
-        throw err;
+      var allowMulti = isAllowMulti_(data);
+      // 紙本／代填允許多筆進行中：略過全表掃描，避免每案讀完整張派案表卡住
+      if (!allowMulti) {
+        var existingActive = list({}).filter(function (r) {
+          return String(r.case_id) === String(data.case_id) && ACTIVE_STATUSES[r.status];
+        });
+        if (existingActive.length > 0) {
+          var err = new Error(
+            '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
+          );
+          err.code = 'CONFLICT';
+          throw err;
+        }
       }
 
-      var autoConfirm = data.auto_confirm !== false && data.auto_confirm !== 'false';
       var now = new Date().toISOString();
-      var assignment = {
-        assignment_id: 'ASG-' + Utilities.getUuid().slice(0, 8),
-        batch_id: data.batch_id || '',
-        case_id: data.case_id,
-        encoded_id: caseRow.encoded_id,
-        visitor_id: data.visitor_id,
-        visit_village: caseRow.visit_village,
-        status: autoConfirm ? '進行中' : '待接案',
-        dispatched_at: now,
-        confirmed_at: autoConfirm ? now : '',
-        due_date: data.due_date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-        notes: data.notes || '',
-        updated_at: now,
-      };
+      var assignment = buildAssignmentRow_(data, caseRow, now);
       var saved = SheetHelper.appendRow(SHEET, assignment);
       SpreadsheetApp.flush();
 
@@ -104,11 +126,104 @@ var AssignmentModule = (function () {
           Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd')
       );
       return saved;
-    } finally {
-      if (locked && lock) {
-        lock.releaseLock();
-      }
+    });
+  }
+
+  /**
+   * 紙本一次多案：單次鎖 + appendRows + 一次 flush，避免 N 次 dispatch 把 UI 卡在「準備中」。
+   * body: { visitor_id, case_ids: string[], notes?, due_date?, auto_confirm?, allow_multi_active?, batch_id? }
+   */
+  function dispatchBatch(data) {
+    Validation.requireFields(data, ['visitor_id']);
+    var caseIds = [];
+    var seen = {};
+    (data.case_ids || data.cases || []).forEach(function (item) {
+      var id =
+        typeof item === 'string'
+          ? String(item || '').trim()
+          : String((item && (item.case_id || item.caseId)) || '').trim();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      caseIds.push(id);
+    });
+    if (!caseIds.length) {
+      throw new Error('請至少選擇一位個案');
     }
+
+    return withScriptLock_(function () {
+      var now = new Date().toISOString();
+      var allowMulti = isAllowMulti_(data);
+      var rows = [];
+      var missing = [];
+
+      caseIds.forEach(function (caseId) {
+        var caseRow = CaseModule.get(caseId);
+        if (!caseRow) {
+          missing.push(caseId);
+          return;
+        }
+        if (!allowMulti) {
+          var existingActive = list({}).filter(function (r) {
+            return String(r.case_id) === String(caseId) && ACTIVE_STATUSES[r.status];
+          });
+          if (existingActive.length > 0) {
+            var conflict = new Error(
+              '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
+            );
+            conflict.code = 'CONFLICT';
+            throw conflict;
+          }
+        }
+        rows.push(
+          buildAssignmentRow_(
+            {
+              case_id: caseId,
+              visitor_id: data.visitor_id,
+              notes: data.notes || '',
+              due_date: data.due_date || '',
+              batch_id: data.batch_id || '',
+              auto_confirm: data.auto_confirm,
+              allow_multi_active: data.allow_multi_active,
+            },
+            caseRow,
+            now
+          )
+        );
+      });
+
+      if (missing.length) {
+        throw new Error('找不到個案：' + missing.slice(0, 5).join('、'));
+      }
+      if (!rows.length) {
+        throw new Error('沒有可派案的個案');
+      }
+
+      SheetHelper.appendRows(SHEET, rows);
+      SpreadsheetApp.flush();
+
+      // 一次讀派案表算 attempt，避免每案全表掃描
+      var attemptCounts = {};
+      SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET)).forEach(function (r) {
+        var cid = String(r.case_id || '').trim();
+        if (!cid) return;
+        attemptCounts[cid] = (attemptCounts[cid] || 0) + 1;
+      });
+
+      rows.forEach(function (row) {
+        SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', row.case_id, {
+          visit_status: '進行中',
+          updated_at: now,
+        });
+        row.visit_attempt = attemptCounts[String(row.case_id)] || 1;
+      });
+
+      ReadCache.bump();
+      var dueHint =
+        String((rows[0] && rows[0].due_date) || '').slice(0, 10) ||
+        Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+      ReportModule.scheduleDailyVisitSnapshot(dueHint);
+      return { items: rows, count: rows.length };
+    });
   }
 
   function caseVisitStatusForAssignment_(assignmentStatus) {
@@ -233,6 +348,7 @@ var AssignmentModule = (function () {
     list: list,
     get: get,
     dispatch: dispatch,
+    dispatchBatch: dispatchBatch,
     confirm: confirm,
     visitorTasksBundle: visitorTasksBundle,
   };

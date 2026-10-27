@@ -46,6 +46,7 @@ var ApiRouter = (function () {
     'assignments.list': function (p) { return AssignmentModule.list(p); },
     'assignments.get': function (p) { return AssignmentModule.get(p.assignment_id || p.id); },
     'assignments.dispatch': function (p, b) { return AssignmentModule.dispatch(b); },
+    'assignments.dispatchBatch': function (p, b) { return AssignmentModule.dispatchBatch(b); },
     'assignments.confirm': function (p, b) { return AssignmentModule.confirm(b); },
     'assignments.visitorTasksBundle': function (p) {
       return AssignmentModule.visitorTasksBundle(p);
