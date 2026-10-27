@@ -9,6 +9,7 @@ import {
 import {
   formatYongheVillageCode,
   mapVillageAdminRow,
+  mergeYongheVillageCodeByName,
 } from "@/lib/domain/village-admins";
 import { gasClient } from "@/lib/gas-client";
 
@@ -57,13 +58,16 @@ export async function GET(request: NextRequest) {
     const visitorRows = visitorRowsRaw as Record<string, unknown>[];
     const assignmentList = assignmentRows as Record<string, unknown>[];
 
-    const villageCodeByName: Record<string, string> = {};
-    const villageNamesForCode = new Set<string>();
+    const fromAdmins: Record<string, string> = {};
     for (const row of adminRows.map(mapVillageAdminRow)) {
       const code = formatYongheVillageCode(row.villageCode);
-      if (row.villageName && code) villageCodeByName[row.villageName] = code;
-      if (code === villageCode && row.villageName) {
-        villageNamesForCode.add(row.villageName);
+      if (row.villageName && code) fromAdmins[row.villageName] = code;
+    }
+    const villageCodeByName = mergeYongheVillageCodeByName(fromAdmins);
+    const villageNamesForCode = new Set<string>();
+    for (const [name, code] of Object.entries(villageCodeByName)) {
+      if (formatYongheVillageCode(code) === villageCode) {
+        villageNamesForCode.add(name);
       }
     }
 

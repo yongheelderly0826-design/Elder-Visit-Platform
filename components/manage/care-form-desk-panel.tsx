@@ -31,6 +31,7 @@ import {
 } from "@/lib/domain/manager-care-form-desk";
 import {
   formatYongheVillageSelectLabel,
+  sortYongheVillagesByCode,
   type DeskIdentityOption,
   type DeskScope,
 } from "@/lib/domain/village-admins";
@@ -42,7 +43,7 @@ type OptionsPayload = {
   scope?: DeskScope;
   allowedVillages?: string[] | null;
   identityOptions?: DeskIdentityOption[];
-  /** 里名 → 六碼里編碼（來自里責任分配） */
+  /** 里名 → 六碼里編碼（Excel「里別 編碼」＋里責任分配合併） */
   villageCodeByName?: Record<string, string>;
 };
 
@@ -361,7 +362,14 @@ export function CareFormDeskPanel({
 
   const identityOptions = options?.identityOptions ?? [];
   const selectedIdentity = identityOptions.find((item) => item.key === identityKey) ?? null;
-  const villageOptions = selectedIdentity?.villages ?? [];
+  const villageOptions = useMemo(
+    () =>
+      sortYongheVillagesByCode(
+        selectedIdentity?.villages ?? [],
+        options?.villageCodeByName,
+      ),
+    [selectedIdentity?.villages, options?.villageCodeByName],
+  );
   const allVisitors = options?.visitors ?? [];
 
   // 未分類只放民政欄，避免同一人出現兩欄造成點選混亂

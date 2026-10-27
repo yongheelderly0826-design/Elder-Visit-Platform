@@ -1,10 +1,24 @@
 /** 里責任分配與關懷表獨立填表 scope */
 
 import mohwTemplate from "@/lib/domain/mohw-life-care-template.json";
+import {
+  lookupYongheVillageCode,
+  sortYongheVillagesByCode,
+} from "@/lib/domain/yonghe-village-codes";
 
 export const YONGHE_VILLAGE_NAMES: string[] = (
   (mohwTemplate.villagesByCityDistrict as Record<string, string[]>)["新北市永和區"] ?? []
 ).slice();
+
+export {
+  YONGHE_VILLAGE_CODE_BY_NAME,
+  YONGHE_VILLAGE_CODE_COUNT,
+  canonicalizeYongheVillageName,
+  compareYongheVillagesByCode,
+  lookupYongheVillageCode,
+  mergeYongheVillageCodeByName,
+  sortYongheVillagesByCode,
+} from "@/lib/domain/yonghe-village-codes";
 
 export const VILLAGE_ORG_SLUGS = {
   civilAffairs: "org:civil-affairs",
@@ -125,14 +139,15 @@ export function buildYongheVillageCodeFromImport(input: {
 
 /**
  * 里別下拉顯示文字：紙本同款「六碼（里名）」，碼在前以便 native select 打數字可 typeahead。
- * 無碼時僅回傳里名；`value` 仍應使用里名。
+ * 無碼參數時回退 Excel「里別 編碼」對照表；仍無碼則僅回傳里名。`value` 仍應使用里名。
  */
 export function formatYongheVillageSelectLabel(
   villageName: string,
   villageCode?: string | number | null,
 ): string {
   const name = String(villageName ?? "").trim();
-  const code = formatYongheVillageCode(villageCode);
+  const code =
+    formatYongheVillageCode(villageCode) || lookupYongheVillageCode(name);
   if (code && name) return `${code}（${name}）`;
   return name || code;
 }
@@ -283,9 +298,9 @@ export function buildDeskIdentityOptions(input: {
         key: "self",
         label: scope.label,
         kind: "self",
-        villages: [...scope.villages]
-          .filter((village) => !scope.skipVillages.includes(village))
-          .sort((a, b) => a.localeCompare(b, "zh-Hant")),
+        villages: sortYongheVillagesByCode(
+          [...scope.villages].filter((village) => !scope.skipVillages.includes(village)),
+        ),
       },
     ];
   }
@@ -301,9 +316,9 @@ export function buildDeskIdentityOptions(input: {
       key: "all",
       label: scope.mode === "all" ? scope.label : "承辦（全部里）",
       kind: "all",
-      villages: [...new Set(allVillages)]
-        .filter((village) => village && !skipVillages.has(village))
-        .sort((a, b) => a.localeCompare(b, "zh-Hant")),
+      villages: sortYongheVillagesByCode(
+        [...new Set(allVillages)].filter((village) => village && !skipVillages.has(village)),
+      ),
     },
   ];
 
@@ -327,7 +342,7 @@ export function buildDeskIdentityOptions(input: {
       key,
       label: value.label,
       kind: value.kind,
-      villages: [...value.villages].sort((a, b) => a.localeCompare(b, "zh-Hant")),
+      villages: sortYongheVillagesByCode([...value.villages]),
     });
   }
 

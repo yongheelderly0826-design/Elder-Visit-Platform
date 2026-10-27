@@ -8,6 +8,7 @@ import {
   buildDeskIdentityOptions,
   formatYongheVillageCode,
   mapVillageAdminRow,
+  mergeYongheVillageCodeByName,
   resolveDeskScope,
   villagesAllowedForDesk,
   YONGHE_VILLAGE_NAMES,
@@ -63,9 +64,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: { visitors } });
     }
 
-    // v4：身份選項附 villageCodeByName（里別下拉顯示六碼）。
+    // v5：villageCodeByName 以 Excel「里別 編碼」補齊未指定里，且 identity 里別依六碼升冪。
     const payload = await cachedRead(
-      ["desk-care-form-identities-v4", email || "anon", roleKey],
+      ["desk-care-form-identities-v5", email || "anon", roleKey],
       [GAS_READ_TAGS.deskCareFormOptions, GAS_READ_TAGS.villageAdmins],
       () => loadDeskIdentities({ email, name, roleKey }),
       GAS_READ_CACHE_SECONDS_DESK,
@@ -120,11 +121,12 @@ async function loadDeskIdentities(identity: {
     ],
   });
 
-  const villageCodeByName: Record<string, string> = {};
+  const fromAdmins: Record<string, string> = {};
   for (const row of admins) {
     const code = formatYongheVillageCode(row.villageCode);
-    if (row.villageName && code) villageCodeByName[row.villageName] = code;
+    if (row.villageName && code) fromAdmins[row.villageName] = code;
   }
+  const villageCodeByName = mergeYongheVillageCodeByName(fromAdmins);
 
   return {
     cases: [] as ReturnType<typeof mapDeskCase>[],
@@ -172,12 +174,12 @@ async function loadVillageCodeByName() {
   const adminRows = await gasClient.villageAdmins
     .list()
     .catch(() => [] as Record<string, unknown>[]);
-  const map: Record<string, string> = {};
+  const fromAdmins: Record<string, string> = {};
   for (const row of adminRows.map(mapVillageAdminRow)) {
     const code = formatYongheVillageCode(row.villageCode);
-    if (row.villageName && code) map[row.villageName] = code;
+    if (row.villageName && code) fromAdmins[row.villageName] = code;
   }
-  return map;
+  return mergeYongheVillageCodeByName(fromAdmins);
 }
 
 async function loadVillageCases(

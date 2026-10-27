@@ -7,7 +7,10 @@ import type {
   VisitSchedule,
   VisitorRegistrationWorkerGroup,
 } from "@/lib/domain/types";
-import { formatYongheVillageCode } from "@/lib/domain/village-admins";
+import {
+  formatYongheVillageCode,
+  lookupYongheVillageCode,
+} from "@/lib/domain/village-admins";
 
 export const MANAGER_DESK_NOTE = "公所代填・紙本";
 
@@ -107,6 +110,7 @@ export function mapDeskCase(
     (row.village_code ?? row.villageCode) as string | number | null | undefined,
   );
   const fromMap = village ? formatYongheVillageCode(villageCodeByName?.[village]) : "";
+  const fromExcel = village ? lookupYongheVillageCode(village) : "";
   return {
     id: caseId,
     caseCode: String(row.encoded_id ?? row.external_id ?? caseId),
@@ -116,7 +120,7 @@ export function mapDeskCase(
     visitStatus: String(row.visit_status ?? "待訪"),
     phone: String(row.primary_phone ?? ""),
     villageSeq: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : null,
-    villageCode: fromRow || fromMap,
+    villageCode: fromRow || fromMap || fromExcel,
     externalId: String(row.external_id ?? "").trim(),
   };
 }

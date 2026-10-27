@@ -14,11 +14,19 @@
 - **Evidence:** `app/api/manager/care-forms/prepare/route.ts`, `assignment-status/route.ts`, `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`, `gas/src/modules/AssignmentModule.gs`.
 - **Added on:** 2026-10-27
 
+## Lesson: Desk 里別 codes come from Excel「里別 編碼」, not only 里責任分配
+
+- **Trigger:** 關懷表建檔里別下拉部分里只有里名（中溪／中興／光明…），且未依六碼升冪。
+- **Cause:** `villageCodeByName` 只掃 `里責任分配`；未指定 7 里匯入時 `village_code` 空白。Identity villages 又用里名 `localeCompare` 排序。
+- **Rule:** Static map `lib/domain/yonghe-village-codes.ts` from `75歲以上待訪(線上).xlsx`「里別 編碼」(62 里). `mergeYongheVillageCodeByName` fills gaps; `sortYongheVillagesByCode` ascending; `formatYongheVillageSelectLabel` falls back to the map. Keep `value` as village name. Bump identities cache key (v5) when payload/sort changes. Do not invent codes.
+- **Evidence:** `lib/domain/yonghe-village-codes.ts`, `lib/domain/village-admins.ts`, `app/api/manager/care-forms/options/route.ts`, `components/manage/care-form-desk-panel.tsx`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Desk 里別 select labels put code first for digit typeahead
 
 - **Trigger:** 關懷表建檔「1. 選擇身份與里別」里別下拉只有里名，承辦要對紙本六碼時不好打字找里。
 - **Cause:** `identityOptions.villages` 只有 name；`<option>` 顯示與 `value` 相同，且 native select typeahead 從字首比對，里名在前時無法用數字定位。
-- **Rule:** Keep `value` as village **name** (case load / filters). Display with `formatYongheVillageSelectLabel` → `040045（新廍里）` (same paper shape as `formatDeskCasePaperLabel`). Join codes from identities payload `villageCodeByName` (village_admins). Bump identities cache key when payload shape changes.
+- **Rule:** Keep `value` as village **name** (case load / filters). Display with `formatYongheVillageSelectLabel` → `040045（新廍里）` (same paper shape as `formatDeskCasePaperLabel`). Join codes from identities payload `villageCodeByName` (Excel map + village_admins). Bump identities cache key when payload shape changes.
 - **Evidence:** `lib/domain/village-admins.ts`, `app/api/manager/care-forms/options/route.ts`, `components/manage/care-form-desk-panel.tsx`.
 - **Added on:** 2026-10-27
 
