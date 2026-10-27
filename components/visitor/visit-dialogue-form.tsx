@@ -24,7 +24,7 @@ import {
   asMultiChoiceValues,
   createMohwDeskInitialAnswers,
   finalizeDeskContactPhones,
-  getDeskNowVisitClock,
+  mergeDeskSeededVisitTimes,
   MOHW_NONE_OF_ABOVE,
   multiIncludesNoneOfAbove,
   toggleExclusiveNoneMulti,
@@ -219,37 +219,16 @@ export function VisitDialogueForm({
     seededMissedSlot ? [seededMissedSlot] : [],
   );
   const [careFormAnswers, setCareFormAnswers] = useState<MohwLifeCareAnswers>(() => {
+    // desk：createMohwDeskInitialAnswers 已優先吃 URL／整批時段；勿再被 getDeskNowVisitClock 蓋掉
     const initial = useDeskFormDefaults
-      ? createMohwDeskInitialAnswers(elderCase, schedule)
+      ? createMohwDeskInitialAnswers(elderCase, schedule, initialTimes)
       : createInitialMohwAnswers(elderCase, schedule);
-    const clock = getDeskNowVisitClock();
-    const timedVisitDate = initialTimes?.visitDate
-      ? (() => {
-          const formatted = formatRocDate(initialTimes.visitDate);
-          return formatted &&
-            formatted !== "INVALID_DATE" &&
-            /^\d{3}\/\d{2}\/\d{2}$/.test(formatted)
-            ? formatted
-            : initialTimes.visitDate;
-        })()
-      : useDeskFormDefaults
-        ? clock.visitDate
-        : undefined;
-    const withTimes: MohwLifeCareAnswers = {
-      ...initial,
-      ...initialAnswers,
-      ...(timedVisitDate ? { visit_date: timedVisitDate } : {}),
-      ...(initialTimes?.visitStartTime
-        ? { visit_start_time: initialTimes.visitStartTime }
-        : useDeskFormDefaults
-          ? { visit_start_time: clock.visitStartTime }
-          : {}),
-      ...(initialTimes?.visitEndTime
-        ? { visit_end_time: initialTimes.visitEndTime }
-        : useDeskFormDefaults
-          ? { visit_end_time: clock.visitEndTime }
-          : {}),
-    };
+    const withTimes: MohwLifeCareAnswers = mergeDeskSeededVisitTimes(
+      { ...initial, ...initialAnswers },
+      initialTimes,
+      // roster 無 URL 時段時不硬塞現場鐘；desk 缺漏才補鐘
+      { fallbackToClock: useDeskFormDefaults && !initialTimes?.visitStartTime },
+    );
     const workerKind: "social" | "civil" =
       selectedVisitor?.workerGroup === "civil_affairs" ? "civil" : "social";
     const visitorForSeed =
@@ -403,14 +382,28 @@ export function VisitDialogueForm({
     if (storedCareForm) {
       try {
         const parsed = JSON.parse(storedCareForm) as MohwLifeCareAnswers;
-        setCareFormAnswers(normalizeVisitorCareAnswers(parsed));
+        // 草稿可保留問卷內容，但 URL／整批時段必須蓋過草稿裡的「當下」時鐘
+        const restored = mergeDeskSeededVisitTimes(
+          normalizeVisitorCareAnswers(parsed),
+          initialTimes,
+          { fallbackToClock: false },
+        );
+        setCareFormAnswers(normalizeVisitorCareAnswers(restored));
       } catch {
         // 損壞草稿略過，保留 useState 初始值
       }
     } else if (schedule.id === "schedule_ntpc_demo") {
       setCareFormAnswers(normalizeVisitorCareAnswers(mohwLifeCareSampleAnswers));
     }
-  }, [careFormDraftKey, draftKey, readonly, schedule.id]);
+  }, [
+    careFormDraftKey,
+    draftKey,
+    initialTimes?.visitDate,
+    initialTimes?.visitEndTime,
+    initialTimes?.visitStartTime,
+    readonly,
+    schedule.id,
+  ]);
 
   useEffect(() => {
     if (readonly) return;
@@ -788,13 +781,14 @@ export function VisitDialogueForm({
         toastMessage,
       };
     }
+    // 下一筆尚未套用整批時段：回清單，勿開無 date/start/end 的表單（會被現場鐘蓋掉）
     if (next) {
       return {
-        nextHref: buildDeskCareFormPath(next.assignmentId, {
-          returnPath: listHrefBase,
-        }),
+        nextHref: null,
         listHref: `${listHrefBase}?${doneQuery}`,
-        toastMessage,
+        toastMessage:
+          toastMessage ||
+          "下一筆尚未套用時間，請回清單按「套用整批時段」或「先填時間」。",
       };
     }
 

@@ -194,15 +194,73 @@ export function getDeskNowVisitClock(now: Date = new Date()): {
   };
 }
 
+export type DeskSeededVisitTimes = {
+  visitDate?: string;
+  visitStartTime?: string;
+  visitEndTime?: string;
+};
+
+/** ISO／民國字串 → 表單用民國 yyy/MM/dd；無法解析則回傳原字串（非空時）。 */
+export function toDeskFormVisitDateRoc(value?: string | null): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const formatted = formatRocDate(raw);
+  if (formatted && formatted !== "INVALID_DATE" && /^\d{3}\/\d{2}\/\d{2}$/.test(formatted)) {
+    return formatted;
+  }
+  if (/^\d{3}\/\d{1,2}\/\d{1,2}$/.test(raw)) return raw;
+  return raw;
+}
+
+function normalizeDeskSeedTime(value?: string | null): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!match) return raw.slice(0, 5);
+  return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
+}
+
+/**
+ * 紙本／批次 KEY：URL 或整批時段優先於「當下」時鐘。
+ * - 有 seed 的欄位一律蓋過 answers／clock
+ * - `fallbackToClock`：缺漏欄位才補現場時間（快速 KEY）；草稿還原請傳 false
+ */
+export function mergeDeskSeededVisitTimes(
+  answers: MohwLifeCareAnswers,
+  seed?: DeskSeededVisitTimes | null,
+  options?: { fallbackToClock?: boolean },
+): MohwLifeCareAnswers {
+  const seededDate = toDeskFormVisitDateRoc(seed?.visitDate);
+  const seededStart = normalizeDeskSeedTime(seed?.visitStartTime);
+  const seededEnd = normalizeDeskSeedTime(seed?.visitEndTime);
+  const clock = options?.fallbackToClock ? getDeskNowVisitClock() : null;
+
+  return {
+    ...answers,
+    visit_date:
+      seededDate ||
+      (clock?.visitDate ? clock.visitDate : undefined) ||
+      answers.visit_date,
+    visit_start_time:
+      seededStart ||
+      (clock ? clock.visitStartTime : undefined) ||
+      answers.visit_start_time,
+    visit_end_time:
+      seededEnd ||
+      (clock ? clock.visitEndTime : undefined) ||
+      answers.visit_end_time,
+  };
+}
+
 /** 建檔初始答案。 */
 export function createMohwDeskInitialAnswers(
   elderCase: ElderCase,
   schedule: VisitSchedule,
+  seedTimes?: DeskSeededVisitTimes | null,
 ): MohwLifeCareAnswers {
   const fromCase = createInitialMohwAnswers(elderCase, schedule);
   const inferredGender = inferGenderFromNationalId(elderCase.nationalId);
   const birthDate = formatDeskBirthDate(elderCase.birthDate ?? null);
-  const clock = getDeskNowVisitClock();
 
   const householdCity = String(fromCase.household_city || "新北市");
   const householdDistrict = String(fromCase.household_district || elderCase.district || "永和區");
@@ -213,13 +271,23 @@ export function createMohwDeskInitialAnswers(
     fromCase.household_address || elderCase.address || "",
   );
 
+  const seededFromSchedule: DeskSeededVisitTimes = {
+    visitDate: seedTimes?.visitDate || schedule.visitDate || undefined,
+    visitStartTime: seedTimes?.visitStartTime,
+    visitEndTime: seedTimes?.visitEndTime,
+  };
+  // 有 URL／整批時段就用它；完全沒 seed 才退回現場時鐘（快速 KEY）
+  const withTimes = mergeDeskSeededVisitTimes(
+    {
+      ...MOHW_DESK_FORM_DEFAULTS,
+      ...fromCase,
+    },
+    seededFromSchedule,
+    { fallbackToClock: true },
+  );
+
   return {
-    ...MOHW_DESK_FORM_DEFAULTS,
-    ...fromCase,
-    // 一律帶入「今天＋現場時間」（民國），勿留西元 ISO
-    visit_date: clock.visitDate || fromCase.visit_date,
-    visit_start_time: clock.visitStartTime,
-    visit_end_time: clock.visitEndTime,
+    ...withTimes,
     gender: inferredGender || String(fromCase.gender || elderCase.gender || ""),
     birth_date: birthDate,
     living_address_type: "與戶籍地址相同",

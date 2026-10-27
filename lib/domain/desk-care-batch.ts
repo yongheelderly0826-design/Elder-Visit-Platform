@@ -447,6 +447,33 @@ export function clearDeskBatchState() {
   window.sessionStorage.removeItem(DESK_BATCH_STORAGE_KEY);
 }
 
+/** GAS `AssignmentModule.confirm` 找不到列時的英文訊息 → 派案編號 */
+export function parseAssignmentNotFoundId(message: unknown): string | null {
+  const text = String(message ?? "");
+  const match = text.match(/Assignment not found:\s*(ASG-[A-Za-z0-9-]+)/i);
+  return match?.[1] ?? null;
+}
+
+export function isAssignmentNotFoundError(error?: {
+  code?: string;
+  message?: string;
+} | null) {
+  if (!error) return false;
+  if (error.code === "ASSIGNMENT_NOT_FOUND") return true;
+  if (parseAssignmentNotFoundId(error.message)) return true;
+  return (
+    (error.code === "NOT_FOUND" || error.code === "GAS_CONFIRM_FAILED") &&
+    /Assignment not found/i.test(String(error.message ?? ""))
+  );
+}
+
+/** 待 KEY 佇列在 sessionStorage，Sheets 派案列卻已刪／重派時的提示 */
+export function deskStaleAssignmentMessage(assignmentId?: string) {
+  const id = String(assignmentId ?? "").trim();
+  const suffix = id ? `（${id}）` : "";
+  return `派案已不在表上${suffix}。瀏覽器還留著舊的「待 KEY 清單」，但 Sheets「派案紀錄」已找不到該列（常見於清測資、重派、或換試算表）。請按「清空清單（解鎖）」後再勾個案「一次準備派案」。`;
+}
+
 /** 民國 yyy/MM/dd 或 ISO yyyy-MM-dd → ISO；無法解析則 null。 */
 export function normalizeDeskVisitDateToIso(value: unknown): string | null {
   const text = String(value ?? "").trim();

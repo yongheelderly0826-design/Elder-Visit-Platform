@@ -145,6 +145,10 @@ export async function POST(request: NextRequest) {
           allow_multi_active: true,
         })) as Record<string, unknown>;
 
+        const assignmentId = String(saved.assignment_id ?? "").trim();
+        if (!assignmentId) {
+          throw new Error(`派案未回傳編號（個案 ${ref.caseId}），請重試準備派案。`);
+        }
         const caseName =
           ref.caseName ||
           String(saved.elder_name ?? "") ||
@@ -158,7 +162,7 @@ export async function POST(request: NextRequest) {
           caseId: ref.caseId,
           caseName,
           caseCode,
-          assignmentId: String(saved.assignment_id ?? ""),
+          assignmentId,
           visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
           schedule: toDeskSchedule(saved, due),
         };

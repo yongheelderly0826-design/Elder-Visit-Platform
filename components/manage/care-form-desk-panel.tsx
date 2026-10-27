@@ -12,7 +12,9 @@ import {
   buildDeskCareFormPath,
   buildStaggeredVisitWindows,
   clearDeskBatchState,
+  deskStaleAssignmentMessage,
   findNextReadyDeskBatchItem,
+  isAssignmentNotFoundError,
   readDeskBatchState,
   writeDeskBatchState,
   type DeskBatchQueueItem,
@@ -25,7 +27,11 @@ import {
   type DeskCaseOption,
   type DeskVisitorOption,
 } from "@/lib/domain/manager-care-form-desk";
-import type { DeskIdentityOption, DeskScope } from "@/lib/domain/village-admins";
+import {
+  formatYongheVillageSelectLabel,
+  type DeskIdentityOption,
+  type DeskScope,
+} from "@/lib/domain/village-admins";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
 
 type OptionsPayload = {
@@ -34,6 +40,8 @@ type OptionsPayload = {
   scope?: DeskScope;
   allowedVillages?: string[] | null;
   identityOptions?: DeskIdentityOption[];
+  /** 里名 → 六碼里編碼（來自里責任分配） */
+  villageCodeByName?: Record<string, string>;
 };
 
 type TimeDraft = {
@@ -621,10 +629,14 @@ export function CareFormDeskPanel({
         }),
       });
       const json = (await response.json()) as {
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; assignmentId?: string };
       };
       if (!response.ok) {
         const failMessage = json.error?.message ?? "整批時段無法套用";
+        if (isAssignmentNotFoundError(json.error)) {
+          recoverStaleAssignmentQueue(json.error?.assignmentId, failMessage);
+          return;
+        }
         if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
         else setMessage(failMessage);
         return;
@@ -714,10 +726,17 @@ export function CareFormDeskPanel({
         }),
       });
       const json = (await response.json()) as {
-        error?: { code?: string; message?: string };
+        error?: { code?: string; message?: string; assignmentId?: string };
       };
       if (!response.ok) {
         const failMessage = json.error?.message ?? "時段無法確認";
+        if (isAssignmentNotFoundError(json.error)) {
+          recoverStaleAssignmentQueue(
+            json.error?.assignmentId || timeDraft.assignmentId,
+            failMessage,
+          );
+          return;
+        }
         if (isTimeConflictError(json.error)) showTimeConflict(failMessage);
         else setMessage(failMessage);
         return;
@@ -763,6 +782,14 @@ export function CareFormDeskPanel({
     setBatch(null);
     setTimeDraft(null);
     setMessage("已清空待 KEY 清單。訪查組仍保留，可再勾個案準備。");
+  }
+
+  /** Sheets 已無該派案列 → 整批 sessionStorage 佇列視為過期，避免逐筆再卡 */
+  function recoverStaleAssignmentQueue(assignmentId?: string, serverMessage?: string) {
+    clearDeskBatchState();
+    setBatch(null);
+    setTimeDraft(null);
+    setMessage(serverMessage || deskStaleAssignmentMessage(assignmentId));
   }
 
   // 從表單返回：done= 標記已 KEY；batchDone=1 顯示連續 KEY 完成提示
@@ -882,7 +909,10 @@ export function CareFormDeskPanel({
               <option value="">{selectedIdentity ? "請選擇里別" : "先選身份"}</option>
               {villageOptions.map((village) => (
                 <option key={village} value={village}>
-                  {village}
+                  {formatYongheVillageSelectLabel(
+                    village,
+                    options?.villageCodeByName?.[village],
+                  )}
                 </option>
               ))}
             </select>
@@ -1186,7 +1216,7 @@ export function CareFormDeskPanel({
             <p className="mt-1 text-xs text-muted-foreground">
               填第 1 筆日期與起迄；後案同日自動往後排（時長{" "}
               {DESK_BATCH_SLOT_MINUTES} 分＋移動間隔 {DESK_BATCH_TRAVEL_GAP_MINUTES}{" "}
-              分）。例：09:00–09:10 → 09:15–09:25 → 09:30–09:40。套用後留在清單自行進表。
+              分）。例：09:00–09:10 → 09:15–09:25 → 09:30–09:40。套用成功後各案會寫入時段並立刻進第 1 案連續 KEY。
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Field label="訪視日期 *">

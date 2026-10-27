@@ -123,6 +123,20 @@ export function buildYongheVillageCodeFromImport(input: {
   return formatYongheVillageCode(input.villageSeq, input.districtCode);
 }
 
+/**
+ * 里別下拉顯示文字：紙本同款「六碼（里名）」，碼在前以便 native select 打數字可 typeahead。
+ * 無碼時僅回傳里名；`value` 仍應使用里名。
+ */
+export function formatYongheVillageSelectLabel(
+  villageName: string,
+  villageCode?: string | number | null,
+): string {
+  const name = String(villageName ?? "").trim();
+  const code = formatYongheVillageCode(villageCode);
+  if (code && name) return `${code}（${name}）`;
+  return name || code;
+}
+
 export function mapVillageAdminRow(row: Record<string, unknown>): VillageAdminRow {
   const kindRaw = String(row.admin_kind || "person");
   const adminKind =

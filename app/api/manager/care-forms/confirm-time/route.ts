@@ -1,9 +1,14 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
-import { buildDeskAssignmentNotes, type DeskVisitWindow } from "@/lib/domain/desk-care-batch";
+import {
+  buildDeskAssignmentNotes,
+  deskStaleAssignmentMessage,
+  parseAssignmentNotFoundId,
+  type DeskVisitWindow,
+} from "@/lib/domain/desk-care-batch";
 import { auditDeskVisitTime } from "@/lib/domain/desk-visit-time-audit";
-import { gasClient } from "@/lib/gas-client";
+import { GasApiError, gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 
 export async function POST(request: NextRequest) {
@@ -104,6 +109,25 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法寫入訪視時段";
+    const missingId =
+      parseAssignmentNotFoundId(message) ||
+      (error instanceof GasApiError &&
+      error.code === "NOT_FOUND" &&
+      /Assignment not found/i.test(message)
+        ? assignmentId
+        : null);
+    if (missingId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "ASSIGNMENT_NOT_FOUND",
+            message: deskStaleAssignmentMessage(missingId),
+            assignmentId: missingId,
+          },
+        },
+        { status: 404 },
+      );
+    }
     return NextResponse.json({ error: { code: "GAS_CONFIRM_FAILED", message } }, { status: 502 });
   }
 }

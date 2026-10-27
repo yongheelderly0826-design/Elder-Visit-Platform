@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
 import {
   buildDeskAssignmentNotes,
+  deskStaleAssignmentMessage,
   findOverlappingWindow,
+  parseAssignmentNotFoundId,
   type DeskVisitWindow,
 } from "@/lib/domain/desk-care-batch";
 import { collectVisitorWindowsForDate } from "@/lib/domain/desk-visit-time-audit";
-import { gasClient } from "@/lib/gas-client";
+import { GasApiError, gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 
 type BatchConfirmItem = {
@@ -184,6 +186,24 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法寫入訪視時段";
+    const missingId = parseAssignmentNotFoundId(message);
+    if (
+      missingId ||
+      (error instanceof GasApiError &&
+        error.code === "NOT_FOUND" &&
+        /Assignment not found/i.test(message))
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "ASSIGNMENT_NOT_FOUND",
+            message: deskStaleAssignmentMessage(missingId || undefined),
+            assignmentId: missingId || undefined,
+          },
+        },
+        { status: 404 },
+      );
+    }
     return NextResponse.json({ error: { code: "GAS_CONFIRM_FAILED", message } }, { status: 502 });
   }
 }

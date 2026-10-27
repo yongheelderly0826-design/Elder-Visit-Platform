@@ -1,3 +1,27 @@
+## Lesson: Desk batch KEY times must beat clock「當下」
+
+- **Trigger:** 「套用整批時段」preview shows 09:00–09:10… but list stays「尚未套用時間」, or care form shows now instead of batch slot.
+- **Cause:** (1) Stale `sessionStorage` ASG → `assignments.confirm` NOT_FOUND, local queue never updated. (2) `createMohwDeskInitialAnswers` / draft restore preferred `getDeskNowVisitClock()` over URL `date/start/end`.
+- **Rule:** Confirm-time-batch success must write slots into queue then continuous KEY with query params. Form init + draft restore: `mergeDeskSeededVisitTimes` so URL/batch wins; never overwrite seeded times with clock. Stale ASG → `ASSIGNMENT_NOT_FOUND` + clear queue.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `components/visitor/visit-dialogue-form.tsx`, `lib/domain/mohw-desk-form-defaults.ts`, `confirm-time-batch/route.ts`.
+- **Added on:** 2026-10-27
+
+## Lesson: Desk 里別 select labels put code first for digit typeahead
+
+- **Trigger:** 關懷表建檔「1. 選擇身份與里別」里別下拉只有里名，承辦要對紙本六碼時不好打字找里。
+- **Cause:** `identityOptions.villages` 只有 name；`<option>` 顯示與 `value` 相同，且 native select typeahead 從字首比對，里名在前時無法用數字定位。
+- **Rule:** Keep `value` as village **name** (case load / filters). Display with `formatYongheVillageSelectLabel` → `040045（新廍里）` (same paper shape as `formatDeskCasePaperLabel`). Join codes from identities payload `villageCodeByName` (village_admins). Bump identities cache key when payload shape changes.
+- **Evidence:** `lib/domain/village-admins.ts`, `app/api/manager/care-forms/options/route.ts`, `components/manage/care-form-desk-panel.tsx`.
+- **Added on:** 2026-10-27
+
+## Lesson: Desk 待 KEY stuck on `Assignment not found: ASG-…`
+
+- **Trigger:** 關懷表建檔 modal「通過稽核並儲存時段」shows red `Assignment not found: ASG-a35128c2`; batch still「尚未套用時間」after restore.
+- **Cause:** 待 KEY 清單 lives in browser `sessionStorage` (`elder-desk-care-batch-v1`). Confirm calls GAS `assignments.confirm` → `SheetHelper.updateByKey(派案紀錄)`. If that row was deleted (清測資 / re-init / spreadsheet switch) or the tab restored an old queue, the ASG id is valid-looking but missing. Not an ID-format bug; prepare still mints `ASG-` + 8 hex.
+- **Rule:** Treat as stale client queue. Map to `ASSIGNMENT_NOT_FOUND` + Chinese recover copy; desk UI clears the whole batch so user re-勾選 and「一次準備派案」. Immediate workaround without deploy:「清空清單（解鎖）」then prepare again.
+- **Evidence:** `gas/src/modules/AssignmentModule.gs` `confirm`, `app/api/manager/care-forms/confirm-time/route.ts`, `components/manage/care-form-desk-panel.tsx`, `lib/domain/desk-care-batch.ts`.
+- **Added on:** 2026-10-27
+
 ## Lesson: Worker phone `9123456789` needs display+state leading-0 repair
 
 - **Trigger:** Visitor「民政訪查人-電話」showed `9123456789` with red「請填含前導 0」even after domain normalize helpers were added.

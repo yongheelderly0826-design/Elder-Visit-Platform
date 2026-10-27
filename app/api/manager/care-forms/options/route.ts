@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: { visitors } });
     }
 
-    // v3：避免舊版「承辦→空身份」結果卡在 unstable_cache。
+    // v4：身份選項附 villageCodeByName（里別下拉顯示六碼）。
     const payload = await cachedRead(
-      ["desk-care-form-identities-v3", email || "anon", roleKey],
+      ["desk-care-form-identities-v4", email || "anon", roleKey],
       [GAS_READ_TAGS.deskCareFormOptions, GAS_READ_TAGS.villageAdmins],
       () => loadDeskIdentities({ email, name, roleKey }),
       GAS_READ_CACHE_SECONDS_DESK,
@@ -120,12 +120,19 @@ async function loadDeskIdentities(identity: {
     ],
   });
 
+  const villageCodeByName: Record<string, string> = {};
+  for (const row of admins) {
+    const code = formatYongheVillageCode(row.villageCode);
+    if (row.villageName && code) villageCodeByName[row.villageName] = code;
+  }
+
   return {
     cases: [] as ReturnType<typeof mapDeskCase>[],
     visitors: [] as ReturnType<typeof mapDeskVisitor>[],
     scope,
     allowedVillages: allowed,
     identityOptions,
+    villageCodeByName,
   };
 }
 
