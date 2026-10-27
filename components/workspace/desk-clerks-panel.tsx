@@ -183,7 +183,7 @@ export function DeskClerksPanel() {
           row.displayName || "",
           row.passcode,
           row.validUntil || "",
-          "https://elder-visit-platform-ruby.vercel.app/yonghe/desk",
+          "https://elder-visit-platform-ruby.vercel.app/temp-key",
         ]
           .map((value) => `"${String(value).replaceAll('"', '""')}"`)
           .join(","),
@@ -242,7 +242,7 @@ export function DeskClerksPanel() {
           <div>
             <h2 className="font-semibold">臨時登打帳號</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              批次開 TEMP-01～TEMP-20，從 /yonghe/desk 登入只做關懷表建檔。計件：每送出 1 張＝1
+              批次開 TEMP-01～TEMP-20，從 /temp-key 登入只做關懷表建檔。計件：每送出 1 張＝1
               件；同一案「未遇」多張只算 1 件。
             </p>
           </div>

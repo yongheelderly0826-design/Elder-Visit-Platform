@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
-import { DeskClerkLoginPanel } from "@/components/auth/desk-clerk-login-panel";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "臨時登打登入｜獨居長者訪查",
-};
-
-export default function YongheDeskClerkLoginPage() {
-  return <DeskClerkLoginPanel />;
+/** 舊網址保留導向，避免書籤失效。正式入口改為 /temp-key。 */
+export default async function LegacyYongheDeskLoginRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const params = await searchParams;
+  const next = String(params.next ?? "").trim();
+  if (next.startsWith("/") && !next.startsWith("//")) {
+    redirect(`/temp-key?next=${encodeURIComponent(next)}`);
+  }
+  redirect("/temp-key");
 }

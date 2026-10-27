@@ -65,7 +65,7 @@ export function DeskClerkLoginPanel() {
             <BrandLogo variant="full" size="lg" className="h-28 w-full max-w-md" />
             <div className="mt-2 min-w-0">
               <p className="text-base font-semibold">獨居長者訪查管理平台</p>
-              <p className="text-sm text-muted-foreground">永和區 · 臨時登打入口</p>
+              <p className="text-sm text-muted-foreground">臨時登打入口 · /temp-key</p>
             </div>
           </div>
 

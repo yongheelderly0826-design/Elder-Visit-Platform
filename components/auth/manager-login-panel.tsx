@@ -27,7 +27,7 @@ function getLoginErrorMessage(code: string | null) {
   return null;
 }
 
-/** 總承辦／後台登入（Gmail）。臨時登打請走 /yonghe/desk。 */
+/** 總承辦／後台登入（Gmail）。臨時登打請走 /temp-key。 */
 export function ManagerLoginPanel() {
   const [managerEmail, setManagerEmail] = useState("yongheelderly0826@gmail.com");
   const [message, setMessage] = useState<string | null>(() => {
@@ -112,11 +112,11 @@ export function ManagerLoginPanel() {
             <p className="border-t pt-4 text-center text-sm text-muted-foreground">
               臨時登打人員請改走專用入口：
               <Link
-                href="/yonghe/desk"
+                href="/temp-key"
                 className="ml-1 inline-flex items-center gap-1 font-medium text-primary hover:underline"
               >
                 <ClipboardPen className="h-3.5 w-3.5" />
-                /yonghe/desk
+                /temp-key
               </Link>
             </p>
           </div>

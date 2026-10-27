@@ -119,7 +119,7 @@ export async function AppShell({
               roleKey === "visitor"
                 ? "/api/auth/logout?next=/visitor/login"
                 : roleKey === "desk_clerk"
-                  ? "/api/auth/logout?next=/yonghe/desk"
+                  ? "/api/auth/logout?next=/temp-key"
                   : roleKey === "workspace_owner" || roleKey === "workspace_manager"
                     ? "/api/auth/logout?next=/yonghe"
                     : "/api/auth/logout"

@@ -8,6 +8,7 @@ const publicRoutes = [
   "/login/manager",
   "/yonghe",
   "/yonghe/desk",
+  "/temp-key",
   "/visitor/login",
   "/register",
   "/offline",
