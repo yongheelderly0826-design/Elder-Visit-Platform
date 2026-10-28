@@ -1,3 +1,11 @@
+## Lesson: Desk clerks KEY all villages (no village-admin scope)
+
+- **Trigger:** TEMP staff need to KEY paper forms across villages; some names matched 里責任 and got a narrow village list, others got `mode: none` and could not select.
+- **Cause:** `resolveDeskScope` only gave `mode: all` to workspace_owner/manager; desk_clerk fell through to person/org matching.
+- **Rule:** `roleKey === "desk_clerk"` → `mode: "all"`（臨時登打（全部里））. Do not tie TEMP KEY to 里責任分配.
+- **Evidence:** `lib/domain/village-admins.ts` `resolveDeskScope`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Append more TEMP clerks without resetting 01–20
 
 - **Trigger:** Already issued TEMP-01～20 but need more staff mid-campaign.

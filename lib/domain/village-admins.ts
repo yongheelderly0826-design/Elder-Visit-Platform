@@ -206,6 +206,13 @@ export function resolveDeskScope(input: {
       label: roleKey === "workspace_owner" ? "總承辦（全部里）" : "承辦（全部里）",
     };
   }
+  // 臨時登打：論件紙本 KEY，不依里責任限縮，可跨里選案。
+  if (roleKey === "desk_clerk") {
+    return {
+      mode: "all",
+      label: "臨時登打（全部里）",
+    };
+  }
 
   const active = input.admins.filter((row) => row.status !== "inactive");
   const skipVillages = [
