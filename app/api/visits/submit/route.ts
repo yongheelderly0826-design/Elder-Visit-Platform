@@ -10,7 +10,6 @@ import { validateMohwLifeCareRow } from "@/lib/domain/mohw-life-care-validation"
 import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
 import {
-  countMissedVisitPhotoSlots,
   getPaymentEligibility,
   missedVisitMinSlots,
   validateVisitSubmission,
@@ -59,8 +58,12 @@ export async function POST(request: NextRequest) {
     notes: body.notes,
   };
 
+  // 紙本／公所代填：無需實拍與 GPS；時段以 photoNames 標籤記錄（至少 1）。
+  const deskEntry = body.deskEntry === true;
+  const missedSlotFloor = deskEntry ? 1 : missedVisitMinSlots;
   const validation = validateVisitSubmission(submission, {
-    requireMissedGps: body.deskEntry !== true,
+    requireMissedGps: !deskEntry,
+    minMissedPhotoSlots: missedSlotFloor,
   });
 
   if (!validation.ok) {
@@ -116,22 +119,6 @@ export async function POST(request: NextRequest) {
           code: "CARE_FORM_INCOMPLETE",
           message: `關懷表尚缺必填：${careFormCompletion.missingLabels.join("、")}`,
           missing: careFormCompletion.missingLabels,
-        },
-      },
-      { status: 400 },
-    );
-  }
-
-  const missedSlotFloor = body.deskEntry ? 1 : missedVisitMinSlots;
-  if (isMissedVisit && countMissedVisitPhotoSlots(submission.photoNames) < missedSlotFloor) {
-    // 紙本：一張＝一次訪視，至少 1 個時段；外勤仍需 3–5 個不同時段佐證照。
-    return NextResponse.json(
-      {
-        error: {
-          code: "MISSED_VISIT_SLOTS_REQUIRED",
-          message: body.deskEntry
-            ? "未遇紙本請勾選本趟時段（早／中／晚對應上午／中午／夜間）"
-            : `未遇需至少 ${missedVisitMinSlots} 個不同時段的佐證照片`,
         },
       },
       { status: 400 },

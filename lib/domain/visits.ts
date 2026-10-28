@@ -47,11 +47,16 @@ export function getVisitStatusLabel(status: VisitSchedule["status"]) {
 
 export function validateVisitSubmission(
   submission: VisitSubmission,
-  options?: { requireMissedGps?: boolean },
+  options?: {
+    requireMissedGps?: boolean;
+    /** 未遇時段／佐證下限；紙本公所代填可為 1（僅勾時段、無需實拍）或 0（完全略過）。 */
+    minMissedPhotoSlots?: number;
+  },
 ) {
   const missing: string[] = [];
   const hasGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
   const requireMissedGps = options?.requireMissedGps !== false;
+  const minMissedPhotoSlots = options?.minMissedPhotoSlots ?? missedVisitMinSlots;
 
   if (!submission.visitResult) {
     missing.push("訪查結果");
@@ -63,9 +68,15 @@ export function validateVisitSubmission(
     missing.push("生活支持狀態");
   }
   if (submission.visitResult === "未遇") {
-    const slotCount = countMissedVisitPhotoSlots(submission.photoNames);
-    if (slotCount < missedVisitMinSlots) {
-      missing.push(`未遇時段佐證照片（需 ${missedVisitMinSlots}–${missedVisitMaxSlots} 個不同時段）`);
+    if (minMissedPhotoSlots > 0) {
+      const slotCount = countMissedVisitPhotoSlots(submission.photoNames);
+      if (slotCount < minMissedPhotoSlots) {
+        missing.push(
+          minMissedPhotoSlots >= missedVisitMinSlots
+            ? `未遇時段佐證照片（需 ${missedVisitMinSlots}–${missedVisitMaxSlots} 個不同時段）`
+            : `未遇紙本時段（至少 ${minMissedPhotoSlots} 個）`,
+        );
+      }
     }
     if (requireMissedGps && !hasGps) {
       missing.push("未遇定位");

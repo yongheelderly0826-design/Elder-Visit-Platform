@@ -716,7 +716,8 @@ export function formatDeskNoteMonthDay(isoDate: string): string | null {
 }
 
 /**
- * 一鍵未遇／住址不詳：一張紙，備註寫三次訪視（往前 D-2 早、D-1 中，本張 D＋當下起始）。
+ * 一鍵未遇／住址不詳：一張紙，三次訪視時間寫入「居住-其他說明」與備註
+ *（往前 D-2 早、D-1 中，本張 D＋當下起始）。
  * 例：`10/20 09:00訪視未遇；10/22 14:00訪視未遇；10/23 16:30訪視未遇。`
  */
 export function buildDeskOnePaperMissedNote(input: {
@@ -824,6 +825,41 @@ export function markDeskBatchItemKeyed(
     ...state,
     items: state.items.map((item) =>
       item.assignmentId === assignmentId ? { ...item, status: "keyed" as const } : item,
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 連續 KEY「Pass／下次再 KEY」：本件標 skipped（不送出），以便跳下一筆；
+ * 清單仍可再開表補 KEY，送出成功後會改 keyed。
+ */
+export function markDeskBatchItemSkipped(
+  state: DeskBatchState,
+  assignmentId: string,
+): DeskBatchState {
+  return {
+    ...state,
+    items: state.items.map((item) =>
+      item.assignmentId === assignmentId && item.status !== "keyed"
+        ? { ...item, status: "skipped" as const }
+        : item,
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** 略過後再進表：把 skipped 改回 ready，方便本批稍後補 KEY。 */
+export function reviveDeskBatchItemForKey(
+  state: DeskBatchState,
+  assignmentId: string,
+): DeskBatchState {
+  return {
+    ...state,
+    items: state.items.map((item) =>
+      item.assignmentId === assignmentId && item.status === "skipped"
+        ? { ...item, status: "ready" as const }
+        : item,
     ),
     updatedAt: new Date().toISOString(),
   };

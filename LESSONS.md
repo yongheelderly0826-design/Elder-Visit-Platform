@@ -1,3 +1,11 @@
+## Lesson: Desk paper KEY skips 未遇 photo／GPS
+
+- **Trigger:** 公所代填紙本 KEY still looked like field 未遇 (photos + GPS), and client/`validateVisitSubmission` required 3 slot photos so one-slot desk papers (incl. 一鍵未遇) failed.
+- **Cause:** Field rule「未遇 3–5 時段各一張＋定位」was applied to desk; API already wanted floor=1 for desk but shared validator still used `missedVisitMinSlots`.
+- **Rule:** Desk (`isDeskEntry` / `deskEntry`): `minMissedPhotoSlots: 1` + `requireMissedGps: false`; keep time-slot chips only (synthetic `photoNames` labels); **hide** photo upload UI for desk 未遇. Field visitors unchanged (3–5 photos + GPS).
+- **Evidence:** `lib/domain/visits.ts`, `components/visitor/visit-dialogue-form.tsx`, `app/api/visits/submit/route.ts`.
+- **Added on:** 2026-10-29
+
 ## Lesson: MOHW export bulk-select by visit date and village
 
 - **Trigger:** Managers need faster batch export by one day’s KEY papers or one village, or both.
@@ -18,7 +26,7 @@
 
 - **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
 - **Cause:** Old U2 expand-missed always spawned D-2／D-1 papers after first 未遇 submit.
-- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote`; submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers.
+- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote` into **`living_address_other`（居住-其他說明）** and `visit_notes`（補充紀錄）; also set `living_address_type=查無此人`（該類型下其他說明必填）. Submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers. 「Pass（下次再 KEY）」: **不送出**；batch 標 `skipped`、進下一筆；清單顯示「下次再 KEY／補 KEY」，進表時 `revive` 回 `ready`。
 - **Evidence:** `lib/domain/desk-care-batch.ts`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-28
 

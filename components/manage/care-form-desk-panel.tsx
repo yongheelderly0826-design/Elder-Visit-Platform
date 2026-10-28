@@ -16,6 +16,7 @@ import {
   isAssignmentNotFoundError,
   isDeskBatchFresh,
   readDeskBatchState,
+  reviveDeskBatchItemForKey,
   seedDeskBatchDateAndFirstStart,
   writeDeskBatchState,
   type DeskBatchQueueItem,
@@ -774,6 +775,11 @@ export function CareFormDeskPanel({
     setBusy(true);
     setMessage(null);
     try {
+      if (item.status === "skipped" && batch) {
+        const revived = reviveDeskBatchItemForKey(batch, item.assignmentId);
+        writeDeskBatchState(revived);
+        setBatch(revived);
+      }
       const exists = await assignmentStillExists(item.assignmentId, batch);
       if (exists === false) {
         recoverStaleAssignmentQueue(item.assignmentId);
@@ -1527,7 +1533,11 @@ export function CareFormDeskPanel({
                     <p className="mt-1 text-sm text-muted-foreground">
                       {paperLabel.secondary ? `${paperLabel.secondary} · ` : ""}
                       {timeLabel}
-                      {item.status === "keyed" ? " · 已 KEY" : ""}
+                      {item.status === "keyed"
+                        ? " · 已 KEY"
+                        : item.status === "skipped"
+                          ? " · 下次再 KEY"
+                          : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1547,9 +1557,13 @@ export function CareFormDeskPanel({
                     >
                       {item.status === "keyed"
                         ? "再進表／查看"
-                        : hasStart
-                          ? "進表 KEY"
-                          : "先填時間後進表"}
+                        : item.status === "skipped"
+                          ? hasStart
+                            ? "補 KEY"
+                            : "先填時間後補 KEY"
+                          : hasStart
+                            ? "進表 KEY"
+                            : "先填時間後進表"}
                     </Button>
                   </div>
                 </div>

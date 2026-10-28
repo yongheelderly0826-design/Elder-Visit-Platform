@@ -89,6 +89,7 @@ import {
   findNextReadyDeskBatchItem,
   inferDeskVisitDurationMinutes,
   insertDeskBatchItemsAfter,
+  markDeskBatchItemSkipped,
   normalizeDeskVisitDateToIso,
   readDeskBatchState,
   writeDeskBatchState,
@@ -294,7 +295,11 @@ export function VisitDialogueForm({
     () =>
       validateVisitSubmission(
         { scheduleId: schedule.id, ...submission, photoNames: effectivePhotoNames },
-        { requireMissedGps: !isDeskEntry },
+        {
+          // 紙本／公所代填：無實拍與 GPS；時段標籤至少 1（對應紙本勾選）。
+          requireMissedGps: !isDeskEntry,
+          minMissedPhotoSlots: isDeskEntry ? 1 : missedVisitMinSlots,
+        },
       ),
     [effectivePhotoNames, isDeskEntry, schedule.id, submission],
   );
@@ -757,7 +762,11 @@ export function VisitDialogueForm({
       return;
     }
     const label = kind === "unknown_address" ? "一鍵住址不詳" : "一鍵未遇";
-    if (!window.confirm(`${label}：將以一張紙送出（備註含往前兩趟時間），並進入下一筆。確定？`)) {
+    if (
+      !window.confirm(
+        `${label}：將以一張紙送出（三次時間寫入「居住-其他說明」與備註），並進入下一筆。確定？`,
+      )
+    ) {
       return;
     }
     await submitVisit({
@@ -772,12 +781,57 @@ export function VisitDialogueForm({
         visit_start_time: visitStartTime,
         visit_end_time: visitEndTime,
         visit_notes: note,
-        visit_status: kind === "unknown_address" ? "住址不詳" : "查無此人",
+        // 衛福部：居住地址類型=查無此人時「居住-其他說明」必填；三次未遇時間寫此欄。
+        living_address_other: note,
+        ...(kind === "unknown_address"
+          ? { visit_status: "住址不詳" }
+          : { visit_status: "查無此人", living_address_type: "查無此人" }),
       },
       deskSlotsOverride: ["夜間"],
       closeAsMissedTriple: true,
       skipMissedExpand: true,
     });
+  }
+
+  /** 紙本資料不全：不送出，略過本件進下一筆；稍後可回清單補 KEY。 */
+  function runDeskQuickPass() {
+    if (readonly || !isDeskEntry || isSubmitting) return;
+    if (
+      !window.confirm(
+        "紙本資料不完全，略過本件並進入下一筆？\n（不會送出關懷表；清單可再點「補 KEY」。）",
+      )
+    ) {
+      return;
+    }
+    const listHrefBase = deskReturnPath || "/desk/care-forms";
+    const doneQuery = `passed=${encodeURIComponent(schedule.id)}`;
+    let batch = readDeskBatchState();
+    if (batch) {
+      batch = markDeskBatchItemSkipped(batch, schedule.id);
+      writeDeskBatchState(batch);
+    }
+    const next = findNextReadyDeskBatchItem(batch, {
+      afterAssignmentId: schedule.id,
+      excludeAssignmentIds: [schedule.id],
+    });
+    setResult("已 Pass（下次再 KEY），進入下一筆");
+    if (next?.visitDate && next.visitStartTime) {
+      router.push(
+        buildDeskCareFormPath(next.assignmentId, {
+          visitDate: next.visitDate,
+          visitStartTime: next.visitStartTime,
+          visitEndTime: next.visitEndTime,
+          returnPath: listHrefBase,
+        }),
+      );
+      return;
+    }
+    if (next) {
+      setResult("已略過本件。下一筆尚無起始時間，請回清單按「開始連續 KEY」或「先填時間」。");
+      router.push(`${listHrefBase}?${doneQuery}`);
+      return;
+    }
+    router.push(`${listHrefBase}?${doneQuery}&batchDone=1`);
   }
 
   async function advanceDeskContinuousKey(input: {
@@ -1093,13 +1147,13 @@ export function VisitDialogueForm({
         </p>
         {isDeskEntry ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            一般完成／拒訪一張即可。手動勾「未遇」仍可走三張補件；上方快速鍵則一張紙結案（備註自動寫入往前兩趟時間）。
+            一般完成／拒訪一張即可。手動勾「未遇」仍可走三張補件；「一鍵未遇／住址不詳」一張紙結案（三次時間寫入「居住-其他說明」）。紙本不全請用 Pass。
           </p>
         ) : null}
         {isDeskEntry && !readonly ? (
           <div className="mt-3 flex flex-wrap gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <p className="w-full text-xs text-muted-foreground">
-              快速鍵（需已有訪視日期＋起始時間）：一張送出並進下一筆
+              快速鍵：未遇／住址不詳需已有訪視日期＋起始時間；Pass 不送出、可下次再 KEY
             </p>
             <Button
               type="button"
@@ -1116,6 +1170,14 @@ export function VisitDialogueForm({
               onClick={() => void runDeskQuickSubmit("unknown_address")}
             >
               一鍵住址不詳
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isSubmitting}
+              onClick={() => runDeskQuickPass()}
+            >
+              Pass（下次再 KEY）
             </Button>
           </div>
         ) : null}
@@ -1484,7 +1546,7 @@ export function VisitDialogueForm({
               {initialDeskPaperKey ? `（${initialDeskPaperKey}）` : ""}
             </h2>
             <p className="mt-1 text-sm leading-6 text-amber-900/90">
-              一張紙＝一次訪視：請勾本趟對應時段（早→上午、中→中午、晚→夜間）。
+              一張紙＝一次訪視：請勾本趟對應時段（早→上午、中→中午、晚→夜間）。紙本佐證即可，無需拍照或定位。
               {schedule.visitAttempt < missedVisitClosureAttempt
                 ? ` 未遇滿 ${missedVisitClosureAttempt} 張後可結案；若這是第一張未遇，送出後會自動補另兩張紙本。`
                 : ` 已達第 ${missedVisitClosureAttempt} 次，可送出後由督導結案。`}
@@ -1520,135 +1582,128 @@ export function VisitDialogueForm({
               })}
             </div>
           </div>
-        ) : null}
-
-        <div className="rounded-lg border bg-background p-3">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold">
-              {deskPaperMissed
-                ? "現場照片（紙本建檔可略過）"
-                : isMissedVisit
-                  ? "未遇時段佐證（3–5 時段拍照）"
-                  : "拍照上傳（選填）"}
-            </h2>
-          </div>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {deskPaperMissed
-              ? "紙本已有時段勾選即可；若有電子檔可選填上傳。"
-              : isMissedVisit
-              ? `訪視未遇時，請在不同時段各拍一張門口／現場照片作為空訪紀錄（至少 ${missedVisitMinSlots} 個時段，最多 ${missedVisitMaxSlots} 個）。選照片時會自動取得定位並上傳存檔。`
-              : "一般訪視照片為選填；若結果改為「未遇」，需改填下方 3–5 個時段佐證。"}
-          </p>
-          {isMissedVisit && !deskPaperMissed && (
-            <>
-              <p
-                className={`mt-3 rounded-md border p-2 text-xs ${
-                  needsMissedVisitEvidence
-                    ? "border-amber-200 bg-amber-50 text-amber-900"
-                    : "border-primary/20 bg-primary/5 text-primary"
-                }`}
-              >
-                時段進度：{missedSlotCount}／{missedVisitMaxSlots}
-                （至少需 {missedVisitMinSlots} 個時段）
-                {hasVisitGps ? " · 定位已取得" : " · 尚缺定位"}
-              </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {missedVisitTimeSlots.map((slot) => {
-                  const photo = missedSlotPhotos[slot];
-                  const busy = slotPhotoBusy === slot;
-                  return (
-                    <div key={slot} className="rounded-md border bg-card p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{slot}</p>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[11px] ${
-                            photo
-                              ? "bg-primary/10 text-primary"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {photo ? "已上傳" : "未拍"}
-                        </span>
-                      </div>
-                      {photo?.dataUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={photo.dataUrl}
-                          alt={`${slot}佐證`}
-                          className="mt-2 h-28 w-full rounded-md object-cover"
-                        />
-                      ) : (
-                        <div className="mt-2 flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-                          請拍門口／現場
-                        </div>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <label className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary">
-                          <Camera className="h-3.5 w-3.5" />
-                          {busy ? "處理中…" : photo ? "重拍／更換" : "拍照／上傳"}
-                          <input
-                            className="hidden"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            disabled={busy}
-                            onChange={(event) => {
-                              void setMissedVisitSlotPhoto(slot, event.target.files);
-                              event.target.value = "";
-                            }}
-                          />
-                        </label>
-                        {photo ? (
-                          <button
-                            type="button"
-                            className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary"
-                            onClick={() => clearMissedVisitSlotPhoto(slot)}
-                          >
-                            清除
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          {!isMissedVisit && (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {activePhotoCategories.map((category) => (
-                <label
-                  key={category}
-                  className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-                >
-                  <Camera className="h-4 w-4" />
-                  拍照 / 上傳{category}
-                  <input
-                    className="hidden"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    onChange={(event) => addVisitPhotos(category, event.target.files)}
-                  />
-                </label>
-              ))}
+        ) : (
+          <div className="rounded-lg border bg-background p-3">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">
+                {isMissedVisit ? "未遇時段佐證（3–5 時段拍照）" : "拍照上傳（選填）"}
+              </h2>
             </div>
-          )}
-          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <p>
-              定位：
-              {locationLabel}
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {isMissedVisit
+                ? `訪視未遇時，請在不同時段各拍一張門口／現場照片作為空訪紀錄（至少 ${missedVisitMinSlots} 個時段，最多 ${missedVisitMaxSlots} 個）。選照片時會自動取得定位並上傳存檔。`
+                : "一般訪視照片為選填；若結果改為「未遇」，需改填下方 3–5 個時段佐證。"}
             </p>
-            {!isMissedVisit && (
-              <p>
-                照片：
-                {submission.photoNames.length > 0 ? submission.photoNames.join("、") : "尚未加入"}
-              </p>
+            {isMissedVisit ? (
+              <>
+                <p
+                  className={`mt-3 rounded-md border p-2 text-xs ${
+                    needsMissedVisitEvidence
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : "border-primary/20 bg-primary/5 text-primary"
+                  }`}
+                >
+                  時段進度：{missedSlotCount}／{missedVisitMaxSlots}
+                  （至少需 {missedVisitMinSlots} 個時段）
+                  {hasVisitGps ? " · 定位已取得" : " · 尚缺定位"}
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {missedVisitTimeSlots.map((slot) => {
+                    const photo = missedSlotPhotos[slot];
+                    const busy = slotPhotoBusy === slot;
+                    return (
+                      <div key={slot} className="rounded-md border bg-card p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{slot}</p>
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[11px] ${
+                              photo
+                                ? "bg-primary/10 text-primary"
+                                : "bg-secondary text-muted-foreground"
+                            }`}
+                          >
+                            {photo ? "已上傳" : "未拍"}
+                          </span>
+                        </div>
+                        {photo?.dataUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={photo.dataUrl}
+                            alt={`${slot}佐證`}
+                            className="mt-2 h-28 w-full rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="mt-2 flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                            請拍門口／現場
+                          </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <label className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary">
+                            <Camera className="h-3.5 w-3.5" />
+                            {busy ? "處理中…" : photo ? "重拍／更換" : "拍照／上傳"}
+                            <input
+                              className="hidden"
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              disabled={busy}
+                              onChange={(event) => {
+                                void setMissedVisitSlotPhoto(slot, event.target.files);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                          {photo ? (
+                            <button
+                              type="button"
+                              className="rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary"
+                              onClick={() => clearMissedVisitSlotPhoto(slot)}
+                            >
+                              清除
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {activePhotoCategories.map((category) => (
+                  <label
+                    key={category}
+                    className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    <Camera className="h-4 w-4" />
+                    拍照 / 上傳{category}
+                    <input
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      onChange={(event) => addVisitPhotos(category, event.target.files)}
+                    />
+                  </label>
+                ))}
+              </div>
             )}
+            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <p>
+                定位：
+                {locationLabel}
+              </p>
+              {!isMissedVisit && (
+                <p>
+                  照片：
+                  {submission.photoNames.length > 0 ? submission.photoNames.join("、") : "尚未加入"}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <div className="mt-5 rounded-lg border bg-background p-3 text-sm">
