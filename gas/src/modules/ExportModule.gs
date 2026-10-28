@@ -32,6 +32,7 @@ var ExportModule = (function () {
       name: caseRow.name || '',
       visit_district: caseRow.visit_district || '',
       visit_village: caseRow.visit_village || '',
+      visit_date: String((answers && answers.visit_date) || careform.visit_date || ''),
       careform_id: careform.careform_id,
       careform_status: careform.status,
       visit_result: careform.visit_result || '',
@@ -87,7 +88,7 @@ var ExportModule = (function () {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
     var cacheKey = ReadCache.key(
-      'exportCand:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+      'exportCand3:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;

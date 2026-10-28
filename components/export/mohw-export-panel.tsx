@@ -5,7 +5,11 @@ import { Download, ExternalLink, FileText, Loader2, RefreshCw, ShieldCheck } fro
 import { useCan } from "@/components/auth/permission-provider";
 import { MohwBatchErrorPanel } from "@/components/export/mohw-batch-error-panel";
 import { Button } from "@/components/ui/button";
-import type { MohwExportCandidate } from "@/lib/domain/mohw-export-candidates";
+import {
+  mohwCandidateAreaLabel,
+  mohwCandidateFilterDate,
+  type MohwExportCandidate,
+} from "@/lib/domain/mohw-export-candidates";
 import type { ExportHistoryItem } from "@/components/export/export-history-panel";
 
 type CandidatesResponse = {
@@ -95,6 +99,8 @@ export function MohwExportPanel({
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [destination, setDestination] = useState<ExportDestination>("drive");
   const [a3BusyCaseId, setA3BusyCaseId] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState("");
+  const [filterArea, setFilterArea] = useState("");
 
   const loadCandidates = useCallback(async () => {
     if (onRefresh) {
@@ -140,9 +146,36 @@ export function MohwExportPanel({
     setSelected(new Set(items.filter((item) => item.exportReady).map((item) => item.caseId)));
   }, [items]);
 
+  const areaOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of items) {
+      const label = mohwCandidateAreaLabel(item);
+      if (label) set.add(label);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (filterDate) {
+        const itemDate = mohwCandidateFilterDate(item);
+        if (itemDate !== filterDate) return false;
+      }
+      if (filterArea) {
+        if (mohwCandidateAreaLabel(item) !== filterArea) return false;
+      }
+      return true;
+    });
+  }, [items, filterDate, filterArea]);
+
   const readyCount = useMemo(
     () => items.filter((item) => item.exportReady).length,
     [items],
+  );
+
+  const filteredReadyCount = useMemo(
+    () => filteredItems.filter((item) => item.exportReady).length,
+    [filteredItems],
   );
 
   const caseLabels = useMemo(() => {
@@ -157,6 +190,8 @@ export function MohwExportPanel({
     () => items.filter((item) => !item.validationOk && item.errorCount > 0).length,
     [items],
   );
+
+  const hasActiveFilter = Boolean(filterDate || filterArea);
 
   function toggle(caseId: string) {
     setSelected((current) => {
@@ -177,8 +212,23 @@ export function MohwExportPanel({
     );
   }
 
+  function selectFilteredReady() {
+    setSelected(
+      new Set(filteredItems.filter((item) => item.exportReady).map((item) => item.caseId)),
+    );
+  }
+
+  function selectFilteredAll() {
+    setSelected(new Set(filteredItems.map((item) => item.caseId)));
+  }
+
   function clearSelection() {
     setSelected(new Set());
+  }
+
+  function clearFilters() {
+    setFilterDate("");
+    setFilterArea("");
   }
 
   function canPrintA3(item: MohwExportCandidate) {
@@ -339,7 +389,61 @@ export function MohwExportPanel({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-end gap-3 rounded-md border bg-secondary/40 p-3">
+        <label className="grid gap-1 text-sm font-medium">
+          訪視日期
+          <input
+            type="date"
+            className="h-9 rounded-md border bg-background px-3 font-normal"
+            value={filterDate}
+            onChange={(event) => setFilterDate(event.target.value)}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          區里
+          <select
+            className="h-9 min-w-[10rem] rounded-md border bg-background px-3 font-normal"
+            value={filterArea}
+            onChange={(event) => setFilterArea(event.target.value)}
+          >
+            <option value="">全部區里</option>
+            {areaOptions.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!hasActiveFilter || filteredReadyCount === 0}
+          onClick={selectFilteredReady}
+        >
+          勾選符合條件・可匯出（{filteredReadyCount}）
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!hasActiveFilter || filteredItems.length === 0}
+          onClick={selectFilteredAll}
+        >
+          勾選符合條件・全部（{filteredItems.length}）
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={!hasActiveFilter} onClick={clearFilters}>
+          清除篩選
+        </Button>
+        <p className="w-full text-xs text-muted-foreground">
+          可單用日期、單用區里，或兩個一起。清單會先縮小再整批勾選，加快匯出。
+          {hasActiveFilter
+            ? ` 目前符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。`
+            : ""}
+        </p>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -403,6 +507,7 @@ export function MohwExportPanel({
               <th className="px-3 py-2">選</th>
               <th className="px-3 py-2">姓名</th>
               <th className="px-3 py-2">案號</th>
+              <th className="px-3 py-2">訪視日</th>
               <th className="px-3 py-2">區里</th>
               <th className="px-3 py-2">關懷表</th>
               <th className="px-3 py-2">稽核</th>
@@ -412,15 +517,20 @@ export function MohwExportPanel({
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                  {loading ? "載入中…" : "目前沒有可匯出候選。核准後的個案會出現在這裡。"}
+                <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
+                  {loading
+                    ? "載入中…"
+                    : hasActiveFilter
+                      ? "沒有符合目前日期／區里條件的個案，請調整篩選。"
+                      : "目前沒有可匯出候選。核准後的個案會出現在這裡。"}
                 </td>
               </tr>
             ) : (
-              items.map((item) => {
+              filteredItems.map((item) => {
                 const open = expandedCaseId === item.caseId;
+                const visitDay = mohwCandidateFilterDate(item);
                 return (
                   <tr key={item.caseId} className="border-t align-top">
                     <td className="px-3 py-2">
@@ -433,6 +543,9 @@ export function MohwExportPanel({
                     <td className="px-3 py-2 font-medium">{item.name || "—"}</td>
                     <td className="px-3 py-2 font-mono text-xs">
                       {item.externalId || item.encodedId || item.caseId}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {visitDay || "—"}
                     </td>
                     <td className="px-3 py-2">
                       {item.district} {item.village}

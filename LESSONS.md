@@ -1,3 +1,11 @@
+## Lesson: MOHW export bulk-select by visit date and village
+
+- **Trigger:** Managers need faster batch export by one day’s KEY papers or one village, or both.
+- **Cause:** Export UI only had select-all ready / errors; no date or 區里 filter.
+- **Rule:** Filter bar on `MohwExportPanel`: date + area dropdown (AND). Buttons「勾選符合條件・可匯出／全部」. Table shows filtered rows + 訪視日 column. Candidate payload includes `visit_date` from answers (fallback `submitted_at` for filter).
+- **Evidence:** `components/export/mohw-export-panel.tsx`, `lib/domain/mohw-export-candidates.ts`, `gas/src/modules/ExportModule.gs`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Desk visitor pick list supports inline edit
 
 - **Trigger:** While selecting 民政／社政 visitors for paper KEY, names/phones/groups were wrong with no fix path except leaving the page.
