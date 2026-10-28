@@ -19,9 +19,32 @@ export type MohwExportCandidate = {
   errorLines: string[];
 };
 
+/** ISO／時間戳 → 台北日曆 yyyy-MM-dd（避免 UTC 切日差一天）。 */
+export function toTaipeiCalendarDate(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const ms = Date.parse(text);
+  if (!Number.isFinite(ms)) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
+}
+
 /** 統一成 yyyy-MM-dd，無法解析則空字串。 */
 export function normalizeMohwFilterDate(value: unknown): string {
-  const text = String(value ?? "").trim();
+  // 關懷表畫面常存「115 / 10 / 28」含空白；先去掉空白再解析
+  const text = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[./．。]/g, "/");
   if (!text) return "";
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
@@ -32,13 +55,29 @@ export function normalizeMohwFilterDate(value: unknown): string {
     const day = String(Number(roc[3])).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }
+  // 帶時間的 ISO：用台北日，勿直接切 UTC 日期
+  if (/^\d{4}-\d{2}-\d{2}T/.test(String(value ?? "").trim()) || Number.isFinite(Date.parse(String(value ?? "")))) {
+    return toTaipeiCalendarDate(value);
+  }
   const stamped = text.match(/^(\d{4}-\d{2}-\d{2})/);
   return stamped ? stamped[1] : "";
 }
 
-/** 篩選用日期：優先訪視日，其次送出日。 */
+/** 篩選／列表用訪視日：優先 answers.visit_date，其次送出日（台北）。 */
 export function mohwCandidateFilterDate(item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">) {
-  return normalizeMohwFilterDate(item.visitDate) || normalizeMohwFilterDate(item.submittedAt);
+  return normalizeMohwFilterDate(item.visitDate) || toTaipeiCalendarDate(item.submittedAt);
+}
+
+/** 是否符合日期篩選：訪視日或（台北）送出日任一命中即可。 */
+export function mohwCandidateMatchesDateFilter(
+  item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">,
+  filterDate: string,
+) {
+  const want = normalizeMohwFilterDate(filterDate);
+  if (!want) return true;
+  const visitDay = normalizeMohwFilterDate(item.visitDate);
+  const submittedDay = toTaipeiCalendarDate(item.submittedAt);
+  return visitDay === want || submittedDay === want;
 }
 
 export function mohwCandidateAreaLabel(item: Pick<MohwExportCandidate, "district" | "village">) {

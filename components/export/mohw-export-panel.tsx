@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import {
   mohwCandidateAreaLabel,
   mohwCandidateFilterDate,
+  mohwCandidateMatchesDateFilter,
+  toTaipeiCalendarDate,
   type MohwExportCandidate,
 } from "@/lib/domain/mohw-export-candidates";
 import type { ExportHistoryItem } from "@/components/export/export-history-panel";
@@ -157,9 +159,8 @@ export function MohwExportPanel({
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (filterDate) {
-        const itemDate = mohwCandidateFilterDate(item);
-        if (itemDate !== filterDate) return false;
+      if (filterDate && !mohwCandidateMatchesDateFilter(item, filterDate)) {
+        return false;
       }
       if (filterArea) {
         if (mohwCandidateAreaLabel(item) !== filterArea) return false;
@@ -391,7 +392,7 @@ export function MohwExportPanel({
 
       <div className="mt-4 flex flex-wrap items-end gap-3 rounded-md border bg-secondary/40 p-3">
         <label className="grid gap-1 text-sm font-medium">
-          訪視日期
+          日期（訪視日或今日送出）
           <input
             type="date"
             className="h-9 rounded-md border bg-background px-3 font-normal"
@@ -436,10 +437,11 @@ export function MohwExportPanel({
           清除篩選
         </Button>
         <p className="w-full text-xs text-muted-foreground">
-          可單用日期、單用區里，或兩個一起。清單會先縮小再整批勾選，加快匯出。
+          可單用日期、單用區里，或兩個一起。日期比對「訪視日」或「台北送出日」任一符合即可（剛 KEY
+          未稽核仍會列出；可匯出須稽核通過）。
           {hasActiveFilter
-            ? ` 目前符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。`
-            : ""}
+            ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。若比同仁說的少，請先「清除篩選」看全部，或確認紙本訪視日是否同一天。`
+            : ` 候選共 ${items.length} 筆。`}
         </p>
       </div>
 
@@ -508,6 +510,7 @@ export function MohwExportPanel({
               <th className="px-3 py-2">姓名</th>
               <th className="px-3 py-2">案號</th>
               <th className="px-3 py-2">訪視日</th>
+              <th className="px-3 py-2">送出日</th>
               <th className="px-3 py-2">區里</th>
               <th className="px-3 py-2">關懷表</th>
               <th className="px-3 py-2">稽核</th>
@@ -519,11 +522,11 @@ export function MohwExportPanel({
           <tbody>
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">
                   {loading
                     ? "載入中…"
                     : hasActiveFilter
-                      ? "沒有符合目前日期／區里條件的個案，請調整篩選。"
+                      ? `沒有符合目前日期／區里條件的個案（候選共 ${items.length} 筆）。請清除篩選或改日期。`
                       : "目前沒有可匯出候選。核准後的個案會出現在這裡。"}
                 </td>
               </tr>
@@ -531,6 +534,7 @@ export function MohwExportPanel({
               filteredItems.map((item) => {
                 const open = expandedCaseId === item.caseId;
                 const visitDay = mohwCandidateFilterDate(item);
+                const submittedDay = toTaipeiCalendarDate(item.submittedAt);
                 return (
                   <tr key={item.caseId} className="border-t align-top">
                     <td className="px-3 py-2">
@@ -546,6 +550,9 @@ export function MohwExportPanel({
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {visitDay || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {submittedDay || "—"}
                     </td>
                     <td className="px-3 py-2">
                       {item.district} {item.village}
