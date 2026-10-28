@@ -23,6 +23,7 @@ export type DeskVisitorOption = {
   status: string;
   nationalId: string;
   phone: string;
+  email?: string;
   workerGroup: VisitorRegistrationWorkerGroup | "unknown";
 };
 
@@ -198,6 +199,7 @@ export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption 
     status: String(row.status ?? ""),
     nationalId: String(row.id_number ?? "").trim().toUpperCase(),
     phone: normalizeTaiwanMobilePhone(rawPhone as string | number | null | undefined),
+    email: String(row.email ?? "").trim().toLowerCase(),
     workerGroup: normalizeDeskWorkerGroup(
       row.volunteer_group ?? row.worker_group ?? row.workerGroup,
     ),

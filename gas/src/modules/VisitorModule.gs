@@ -85,7 +85,9 @@ var VisitorModule = (function () {
     data.registered_at = new Date().toISOString();
     data.updated_at = data.registered_at;
     delete data.desk_minimal;
-    return SheetHelper.appendRow(SHEET, data);
+    var created = SheetHelper.appendRow(SHEET, data);
+    ReadCache.bump();
+    return created;
   }
 
   function update(data) {
@@ -98,6 +100,7 @@ var VisitorModule = (function () {
       err.code = 'NOT_FOUND';
       throw err;
     }
+    ReadCache.bump();
     return updated;
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardPen, Plus, Search, UserRound } from "lucide-react";
+import { ClipboardPen, Pencil, Plus, Search, UserRound } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +81,15 @@ export function CareFormDeskPanel({
   const [socialVisitorIds, setSocialVisitorIds] = useState<string[]>([]);
   const [primaryVisitorId, setPrimaryVisitorId] = useState("");
   const [creatingVisitor, setCreatingVisitor] = useState(false);
+  const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
   const [newVisitor, setNewVisitor] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    idNumber: "",
+    workerGroup: "civil_affairs" as VisitorRegistrationWorkerGroup,
+  });
+  const [editVisitor, setEditVisitor] = useState({
     name: "",
     phone: "",
     email: "",
@@ -504,7 +512,7 @@ export function CareFormDeskPanel({
       const response = await fetch("/api/manager/care-forms/visitors", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(newVisitor),
+        body: JSON.stringify({ action: "create", ...newVisitor }),
       });
       const json = (await response.json()) as {
         data?: DeskVisitorOption;
@@ -528,6 +536,81 @@ export function CareFormDeskPanel({
       if (!primaryVisitorId) setPrimaryVisitorId(created.id);
       setCreatingVisitor(false);
       setMessage(`已新增訪查員「${created.name}」，已勾入${created.workerGroup === "social_affairs" ? "社政" : "民政"}。`);
+    } catch {
+      setMessage("目前無法連線，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEditVisitor(visitor: DeskVisitorOption) {
+    setCreatingVisitor(false);
+    setEditingVisitorId(visitor.id);
+    setEditVisitor({
+      name: visitor.name,
+      phone: visitor.phone,
+      email: visitor.email || "",
+      idNumber: visitor.nationalId || "",
+      workerGroup:
+        visitor.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs",
+    });
+  }
+
+  function cancelEditVisitor() {
+    setEditingVisitorId(null);
+  }
+
+  async function saveEditVisitor() {
+    if (!editingVisitorId) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/manager/care-forms/visitors", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          visitorId: editingVisitorId,
+          ...editVisitor,
+        }),
+      });
+      const json = (await response.json()) as {
+        data?: DeskVisitorOption;
+        error?: { message?: string };
+      };
+      if (!response.ok || !json.data?.id) {
+        setMessage(json.error?.message ?? "無法更新訪查員");
+        return;
+      }
+      const updated = json.data;
+      const wasSelected =
+        civilVisitorIds.includes(updated.id) || socialVisitorIds.includes(updated.id);
+      setOptions((current) =>
+        current
+          ? {
+              ...current,
+              visitors: current.visitors.map((row) =>
+                row.id === updated.id ? updated : row,
+              ),
+            }
+          : current,
+      );
+      setCivilVisitorIds((current) => {
+        const without = current.filter((id) => id !== updated.id);
+        if (!wasSelected) return without;
+        return updated.workerGroup === "social_affairs"
+          ? without
+          : [...new Set([...without, updated.id])];
+      });
+      setSocialVisitorIds((current) => {
+        const without = current.filter((id) => id !== updated.id);
+        if (!wasSelected) return without;
+        return updated.workerGroup === "social_affairs"
+          ? [...new Set([...without, updated.id])]
+          : without;
+      });
+      setEditingVisitorId(null);
+      setMessage(`已更新訪查員「${updated.name}」。`);
     } catch {
       setMessage("目前無法連線，請稍後再試。");
     } finally {
@@ -1014,15 +1097,18 @@ export function CareFormDeskPanel({
           <Button
             type="button"
             variant="outline"
-            disabled={Boolean(batch)}
-            onClick={() => setCreatingVisitor((current) => !current)}
+            disabled={Boolean(batch) || Boolean(editingVisitorId)}
+            onClick={() => {
+              setEditingVisitorId(null);
+              setCreatingVisitor((current) => !current);
+            }}
           >
             <Plus className="h-4 w-4" />
             {creatingVisitor ? "改搜現有訪查員" : "新增訪查員"}
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。
+          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。資料有誤可按「編輯」修正。
         </p>
 
         {creatingVisitor ? (
@@ -1073,6 +1159,75 @@ export function CareFormDeskPanel({
               </Button>
             </div>
           </div>
+        ) : editingVisitorId ? (
+          <div className="mt-4 grid gap-3 rounded-md border border-sky-200 bg-sky-50/60 p-3 sm:grid-cols-2">
+            <p className="sm:col-span-2 text-sm font-medium text-sky-950">
+              編輯訪查員（{editingVisitorId}）
+            </p>
+            <Field label="訪查員姓名 *">
+              <input
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.name}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({ ...current, name: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="手機 *">
+              <input
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.phone}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({ ...current, phone: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="民政／社政 *">
+              <select
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.workerGroup}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({
+                    ...current,
+                    workerGroup: event.target.value as VisitorRegistrationWorkerGroup,
+                  }))
+                }
+              >
+                <option value="civil_affairs">民政訪查人員</option>
+                <option value="social_affairs">社政訪查人員</option>
+              </select>
+            </Field>
+            <Field label="身分證（可後補）">
+              <input
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.idNumber}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({ ...current, idNumber: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Email（可後補）">
+              <input
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.email}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({ ...current, email: event.target.value }))
+                }
+              />
+            </Field>
+            <div className="flex flex-wrap gap-2 sm:col-span-2">
+              <Button
+                type="button"
+                disabled={busy || !editVisitor.name.trim() || !editVisitor.phone.trim()}
+                onClick={() => void saveEditVisitor()}
+              >
+                {busy ? "儲存中…" : "儲存修改"}
+              </Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={cancelEditVisitor}>
+                取消
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <VisitorPickColumn
@@ -1086,6 +1241,7 @@ export function CareFormDeskPanel({
               disabled={Boolean(batch)}
               onToggle={(id) => toggleVisitor("civil", id)}
               onSetPrimary={setPrimaryVisitorId}
+              onEdit={startEditVisitor}
             />
             <VisitorPickColumn
               title="社政（訪員）"
@@ -1098,6 +1254,7 @@ export function CareFormDeskPanel({
               disabled={Boolean(batch)}
               onToggle={(id) => toggleVisitor("social", id)}
               onSetPrimary={setPrimaryVisitorId}
+              onEdit={startEditVisitor}
             />
           </div>
         )}
@@ -1547,6 +1704,7 @@ function VisitorPickColumn({
   disabled,
   onToggle,
   onSetPrimary,
+  onEdit,
 }: {
   title: string;
   query: string;
@@ -1558,6 +1716,7 @@ function VisitorPickColumn({
   disabled?: boolean;
   onToggle: (id: string) => void;
   onSetPrimary: (id: string) => void;
+  onEdit: (visitor: DeskVisitorOption) => void;
 }) {
   return (
     <div className="rounded-md border p-3">
@@ -1581,23 +1740,35 @@ function VisitorPickColumn({
               key={visitor.id}
               className={`rounded-md border p-2 ${checked ? "border-primary bg-primary/5" : "bg-background"}`}
             >
-              <label className="flex cursor-pointer items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => onToggle(visitor.id)}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{visitor.name}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {visitor.badgeNo || visitor.id}
-                    {visitor.status ? ` · ${visitor.status}` : ""}
-                    {visitor.workerGroup === "unknown" ? " · 未分類" : ""}
+              <div className="flex items-start gap-2">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => onToggle(visitor.id)}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{visitor.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {visitor.badgeNo || visitor.id}
+                      {visitor.status ? ` · ${visitor.status}` : ""}
+                      {visitor.workerGroup === "unknown" ? " · 未分類" : ""}
+                      {visitor.phone ? ` · ${visitor.phone}` : ""}
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+                <button
+                  type="button"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border bg-card px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => onEdit(visitor)}
+                  aria-label={`編輯 ${visitor.name}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  編輯
+                </button>
+              </div>
               {checked ? (
                 <button
                   type="button"

@@ -1,3 +1,11 @@
+## Lesson: Desk visitor pick list supports inline edit
+
+- **Trigger:** While selecting 民政／社政 visitors for paper KEY, names/phones/groups were wrong with no fix path except leaving the page.
+- **Cause:** Desk UI only had create + checkbox; `visitors.update` existed in GAS unused by this screen.
+- **Rule:** Each row has「編輯」→ form (name/phone/group/id/email) → `POST /api/manager/care-forms/visitors` `action:update`. Keep selection/primary; moving civil↔social relocates the checkbox. Bump GAS `ReadCache` on create/update. Do not edit badge/status here.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `app/api/manager/care-forms/visitors/route.ts`, `gas/src/modules/VisitorModule.gs`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Desk quick KEY — one-paper 未遇／住址不詳 with triple note
 
 - **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
