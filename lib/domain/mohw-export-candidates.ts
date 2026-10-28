@@ -63,21 +63,26 @@ export function normalizeMohwFilterDate(value: unknown): string {
   return stamped ? stamped[1] : "";
 }
 
-/** 篩選／列表用訪視日：優先 answers.visit_date，其次送出日（台北）。 */
+/** 列表用訪視日：優先 answers.visit_date，其次送出日（台北）。 */
 export function mohwCandidateFilterDate(item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">) {
   return normalizeMohwFilterDate(item.visitDate) || toTaipeiCalendarDate(item.submittedAt);
 }
 
-/** 是否符合日期篩選：訪視日或（台北）送出日任一命中即可。 */
+/** 匯出日期篩選基準：只依訪視日，或只依登打／送出日（台北）。 */
+export type MohwDateFilterMode = "visit" | "submitted";
+
+/** 是否符合日期篩選（依 mode 只比對一個欄位）。 */
 export function mohwCandidateMatchesDateFilter(
   item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">,
   filterDate: string,
+  mode: MohwDateFilterMode = "visit",
 ) {
   const want = normalizeMohwFilterDate(filterDate);
   if (!want) return true;
-  const visitDay = normalizeMohwFilterDate(item.visitDate);
-  const submittedDay = toTaipeiCalendarDate(item.submittedAt);
-  return visitDay === want || submittedDay === want;
+  if (mode === "submitted") {
+    return toTaipeiCalendarDate(item.submittedAt) === want;
+  }
+  return normalizeMohwFilterDate(item.visitDate) === want;
 }
 
 export function mohwCandidateAreaLabel(item: Pick<MohwExportCandidate, "district" | "village">) {

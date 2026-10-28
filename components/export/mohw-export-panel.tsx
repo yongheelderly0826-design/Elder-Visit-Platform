@@ -7,9 +7,10 @@ import { MohwBatchErrorPanel } from "@/components/export/mohw-batch-error-panel"
 import { Button } from "@/components/ui/button";
 import {
   mohwCandidateAreaLabel,
-  mohwCandidateFilterDate,
   mohwCandidateMatchesDateFilter,
+  normalizeMohwFilterDate,
   toTaipeiCalendarDate,
+  type MohwDateFilterMode,
   type MohwExportCandidate,
 } from "@/lib/domain/mohw-export-candidates";
 import type { ExportHistoryItem } from "@/components/export/export-history-panel";
@@ -102,6 +103,7 @@ export function MohwExportPanel({
   const [destination, setDestination] = useState<ExportDestination>("drive");
   const [a3BusyCaseId, setA3BusyCaseId] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState("");
+  const [filterDateMode, setFilterDateMode] = useState<MohwDateFilterMode>("visit");
   const [filterArea, setFilterArea] = useState("");
 
   const loadCandidates = useCallback(async () => {
@@ -159,7 +161,7 @@ export function MohwExportPanel({
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (filterDate && !mohwCandidateMatchesDateFilter(item, filterDate)) {
+      if (filterDate && !mohwCandidateMatchesDateFilter(item, filterDate, filterDateMode)) {
         return false;
       }
       if (filterArea) {
@@ -167,7 +169,7 @@ export function MohwExportPanel({
       }
       return true;
     });
-  }, [items, filterDate, filterArea]);
+  }, [items, filterDate, filterDateMode, filterArea]);
 
   const readyCount = useMemo(
     () => items.filter((item) => item.exportReady).length,
@@ -391,8 +393,31 @@ export function MohwExportPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap items-end gap-3 rounded-md border bg-secondary/40 p-3">
+        <fieldset className="grid gap-1 text-sm font-medium">
+          <legend className="mb-1">日期依據</legend>
+          <div className="flex h-9 items-center gap-4 rounded-md border bg-background px-3 font-normal">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="mohw-date-filter-mode"
+                checked={filterDateMode === "visit"}
+                onChange={() => setFilterDateMode("visit")}
+              />
+              訪視日
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="mohw-date-filter-mode"
+                checked={filterDateMode === "submitted"}
+                onChange={() => setFilterDateMode("submitted")}
+              />
+              登打日
+            </label>
+          </div>
+        </fieldset>
         <label className="grid gap-1 text-sm font-medium">
-          日期（訪視日或今日送出）
+          {filterDateMode === "submitted" ? "登打日期" : "訪視日期"}
           <input
             type="date"
             className="h-9 rounded-md border bg-background px-3 font-normal"
@@ -437,10 +462,10 @@ export function MohwExportPanel({
           清除篩選
         </Button>
         <p className="w-full text-xs text-muted-foreground">
-          可單用日期、單用區里，或兩個一起。日期比對「訪視日」或「台北送出日」任一符合即可（剛 KEY
-          未稽核仍會列出；可匯出須稽核通過）。
+          可單用日期、單用區里，或兩個一起。日期只依所選「訪視日」或「登打日」（送出時間的台北日）比對；剛 KEY
+          未稽核仍會列出，可匯出須稽核通過。
           {hasActiveFilter
-            ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。若比同仁說的少，請先「清除篩選」看全部，或確認紙本訪視日是否同一天。`
+            ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。若筆數不如預期，可改切日期依據，或先「清除篩選」看全部。`
             : ` 候選共 ${items.length} 筆。`}
         </p>
       </div>
@@ -533,7 +558,7 @@ export function MohwExportPanel({
             ) : (
               filteredItems.map((item) => {
                 const open = expandedCaseId === item.caseId;
-                const visitDay = mohwCandidateFilterDate(item);
+                const visitDay = normalizeMohwFilterDate(item.visitDate);
                 const submittedDay = toTaipeiCalendarDate(item.submittedAt);
                 return (
                   <tr key={item.caseId} className="border-t align-top">
