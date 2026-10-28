@@ -707,6 +707,42 @@ export type DeskMissedPaperPlanItem = {
   isSubmittedPaper: boolean;
 };
 
+/** ISO yyyy-MM-dd → 備註用 M/D（不補零）。 */
+export function formatDeskNoteMonthDay(isoDate: string): string | null {
+  const iso = normalizeDeskVisitDateToIso(isoDate);
+  if (!iso) return null;
+  const [, month, day] = iso.split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
+/**
+ * 一鍵未遇／住址不詳：一張紙，備註寫三次訪視（往前 D-2 早、D-1 中，本張 D＋當下起始）。
+ * 例：`10/20 09:00訪視未遇；10/22 14:00訪視未遇；10/23 16:30訪視未遇。`
+ */
+export function buildDeskOnePaperMissedNote(input: {
+  visitDateRaw: string;
+  visitStartTime?: string;
+}): string | null {
+  const lateDate = normalizeDeskVisitDateToIso(input.visitDateRaw);
+  if (!lateDate) return null;
+  const earlyDate = addCalendarDaysIso(lateDate, DESK_PAPER_MISS_WINDOWS.EARLY.dayOffsetFromLate);
+  const midDate = addCalendarDaysIso(lateDate, DESK_PAPER_MISS_WINDOWS.MID.dayOffsetFromLate);
+  if (!earlyDate || !midDate) return null;
+
+  const lateStart =
+    String(input.visitStartTime || "").trim().slice(0, 5) || DESK_PAPER_MISS_WINDOWS.LATE.start;
+  const earlyLabel = formatDeskNoteMonthDay(earlyDate);
+  const midLabel = formatDeskNoteMonthDay(midDate);
+  const lateLabel = formatDeskNoteMonthDay(lateDate);
+  if (!earlyLabel || !midLabel || !lateLabel) return null;
+
+  return [
+    `${earlyLabel} ${DESK_PAPER_MISS_WINDOWS.EARLY.start}訪視未遇`,
+    `${midLabel} ${DESK_PAPER_MISS_WINDOWS.MID.start}訪視未遇`,
+    `${lateLabel} ${lateStart}訪視未遇`,
+  ].join("；") + "。";
+}
+
 /**
  * 以已送出未遇紙本的訪視日 D 為準：本張＝D 晚（第 3 次），另兩張＝D-2 早、D-1 中。
  */

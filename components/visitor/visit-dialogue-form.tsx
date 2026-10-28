@@ -83,6 +83,7 @@ import {
   DESK_VISIT_DURATION_OPTIONS,
   addMinutesToTime,
   buildDeskCareFormPath,
+  buildDeskOnePaperMissedNote,
   chainDeskBatchAfterKeyed,
   endTimeFromStartAndDuration,
   findNextReadyDeskBatchItem,
@@ -94,6 +95,8 @@ import {
   type DeskBatchQueueItem,
   type DeskVisitDurationMinutes,
 } from "@/lib/domain/desk-care-batch";
+
+type DeskQuickSubmitKind = "missed" | "unknown_address";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -208,6 +211,8 @@ export function VisitDialogueForm({
   /** 訪查員 KEY：時段自動排除衝突後的輕提示（非阻擋 modal） */
   const [timeAdjustNotice, setTimeAdjustNotice] = useState<string | null>(null);
   const timeSyncSeqRef = useRef(0);
+  /** 一鍵未遇／住址不詳：一張紙結案，不呼叫 expand-missed 補兩張 */
+  const deskSkipMissedExpandRef = useRef(false);
   const [continuousNextHref, setContinuousNextHref] = useState<string | null>(null);
   const [continuousListHref, setContinuousListHref] = useState<string | null>(null);
   const [mohwErrors, setMohwErrors] = useState<MohwValidationError[]>([]);
@@ -519,24 +524,56 @@ export function VisitDialogueForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readonly, isDeskEntry, schedule.id]);
 
-  async function submitVisit() {
+  async function submitVisit(options?: {
+    submissionOverride?: Partial<typeof submission>;
+    answersPatch?: Partial<MohwLifeCareAnswers>;
+    deskSlotsOverride?: MissedVisitTimeSlot[];
+    closeAsMissedTriple?: boolean;
+    skipMissedExpand?: boolean;
+  }) {
     if (readonly) return;
     setIsSubmitting(true);
     setResult(null);
     setMohwErrors([]);
 
-    const synced = normalizeVisitorCareAnswers(
+    const nextSubmission = {
+      ...submission,
+      ...options?.submissionOverride,
+    };
+    const workingSlots =
+      options?.deskSlotsOverride ??
+      (isDeskEntry && nextSubmission.visitResult === "未遇" ? deskPaperSlots : deskPaperSlots);
+    const workingPhotoNames =
+      isDeskEntry && nextSubmission.visitResult === "未遇"
+        ? workingSlots.map((slot) => `${slot}：紙本·第${schedule.visitAttempt}次`)
+        : nextSubmission.photoNames;
+
+    let synced = normalizeVisitorCareAnswers(
       normalizeMohwAnswersOptions(
         syncMohwConsentFromSubmission(
-          syncMohwVisitMetaFromSubmission(careFormAnswers, submission),
-          submission,
+          syncMohwVisitMetaFromSubmission(
+            { ...careFormAnswers, ...options?.answersPatch },
+            nextSubmission,
+          ),
+          nextSubmission,
         ),
       ),
     );
+    if (options?.answersPatch?.visit_status) {
+      synced = { ...synced, visit_status: options.answersPatch.visit_status };
+    }
+    if (options?.answersPatch?.visit_notes) {
+      synced = { ...synced, visit_notes: options.answersPatch.visit_notes };
+    }
     const mohwAnswers = useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced;
     setCareFormAnswers(mohwAnswers);
+    setSubmission(nextSubmission);
+    if (options?.deskSlotsOverride) {
+      setDeskPaperSlots(options.deskSlotsOverride);
+    }
+    deskSkipMissedExpandRef.current = Boolean(options?.skipMissedExpand);
 
-    if (submission.visitResult !== "未遇") {
+    if (nextSubmission.visitResult !== "未遇") {
       const localCheck = validateMohwLifeCareRow(mohwAnswers, {
         row: 2,
         registryNationalId: elderCase.nationalId ?? "",
@@ -546,6 +583,7 @@ export function VisitDialogueForm({
         setMohwErrors(localCheck.errors);
         setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
         setIsSubmitting(false);
+        deskSkipMissedExpandRef.current = false;
         const firstError = localCheck.errors[0];
         if (firstError) {
           openAndJumpToCareField(firstError.key, setOpenSectionTitles);
@@ -554,15 +592,19 @@ export function VisitDialogueForm({
       }
     }
 
-    const missedPhotos = deskPaperMissed
-      ? []
-      : missedVisitTimeSlots
-          .map((slot) => missedSlotPhotos[slot])
-          .filter((item): item is MissedSlotPhoto => Boolean(item));
+    const missedPhotos =
+      isDeskEntry && nextSubmission.visitResult === "未遇"
+        ? []
+        : missedVisitTimeSlots
+            .map((slot) => missedSlotPhotos[slot])
+            .filter((item): item is MissedSlotPhoto => Boolean(item));
 
-    const deskAttemptNote = deskPaperMissed
-      ? `第${schedule.visitAttempt}次未遇紙本 時段(${deskPaperSlots.join("、") || "—"})`
-      : "";
+    const deskAttemptNote =
+      isDeskEntry && nextSubmission.visitResult === "未遇"
+        ? options?.skipMissedExpand
+          ? "一鍵未遇（一張紙・備註三次時段）"
+          : `第${schedule.visitAttempt}次未遇紙本 時段(${workingSlots.join("、") || "—"})`
+        : "";
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
@@ -585,17 +627,27 @@ export function VisitDialogueForm({
         registryNationalId: elderCase.nationalId ?? "",
         deskEntry: isDeskEntry,
         closeAsMissedTriple:
-          deskPaperMissed && schedule.visitAttempt >= missedVisitClosureAttempt,
+          Boolean(options?.closeAsMissedTriple) ||
+          (isDeskEntry &&
+            nextSubmission.visitResult === "未遇" &&
+            schedule.visitAttempt >= missedVisitClosureAttempt),
         missedVisitPhotos: missedPhotos.map((item) => ({
           slot: item.slot,
           fileName: item.fileName,
           dataUrl: item.dataUrl,
         })),
-        ...submission,
-        photoNames: effectivePhotoNames,
+        visitResult: nextSubmission.visitResult,
+        healthStatus: nextSubmission.healthStatus,
+        livingStatus: nextSubmission.livingStatus,
+        consentSigned: nextSubmission.consentSigned,
+        consentScope: nextSubmission.consentScope,
+        signatureDataUrl: nextSubmission.signatureDataUrl,
+        gpsLat: nextSubmission.gpsLat,
+        gpsLng: nextSubmission.gpsLng,
+        photoNames: workingPhotoNames,
         notes: isDeskEntry
-          ? [MANAGER_DESK_NOTE, deskAttemptNote, submission.notes].filter(Boolean).join("；")
-          : submission.notes,
+          ? [MANAGER_DESK_NOTE, deskAttemptNote, nextSubmission.notes].filter(Boolean).join("；")
+          : nextSubmission.notes,
       }),
     });
     const data = (await response.json()) as {
@@ -623,6 +675,7 @@ export function VisitDialogueForm({
           : (data.error?.message ?? "送出失敗"),
       );
       setIsSubmitting(false);
+      deskSkipMissedExpandRef.current = false;
       return;
     }
 
@@ -639,7 +692,7 @@ export function VisitDialogueForm({
         caseId: elderCase.id,
         caseName: elderCase.name,
         caseCode: elderCase.caseCode,
-        visitResult: submission.visitResult,
+        visitResult: nextSubmission.visitResult,
         visitDateRaw:
           normalizeDeskVisitDateToIso(mohwAnswers.visit_date) ||
           normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
@@ -648,7 +701,9 @@ export function VisitDialogueForm({
         visitStartTime: String(mohwAnswers.visit_start_time || "").trim().slice(0, 5),
         visitEndTime: String(mohwAnswers.visit_end_time || "").trim().slice(0, 5),
         returnPath: deskReturnPath || "/desk/care-forms",
+        skipMissedExpand: deskSkipMissedExpandRef.current,
       });
+      deskSkipMissedExpandRef.current = false;
       if (continuous.toastMessage) {
         successMessage = continuous.toastMessage;
       }
@@ -668,8 +723,61 @@ export function VisitDialogueForm({
       return;
     }
 
+    deskSkipMissedExpandRef.current = false;
     setResult(successMessage);
     setIsSubmitting(false);
+  }
+
+  async function runDeskQuickSubmit(kind: DeskQuickSubmitKind) {
+    if (readonly || !isDeskEntry || isSubmitting) return;
+    const visitDateRaw =
+      normalizeDeskVisitDateToIso(careFormAnswers.visit_date) ||
+      normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
+      normalizeDeskVisitDateToIso(schedule.visitDate) ||
+      "";
+    const visitStartTime = String(careFormAnswers.visit_start_time || "").trim().slice(0, 5);
+    if (!visitDateRaw || !visitStartTime) {
+      setResult("請先填訪視日期與起始時間（或勾選時長 1／5／10）後再使用快速鍵。");
+      return;
+    }
+    let visitEndTime = String(careFormAnswers.visit_end_time || "").trim().slice(0, 5);
+    if (!visitEndTime) {
+      visitEndTime = endTimeFromStartAndDuration(visitStartTime, 5) || "";
+    }
+    if (!visitEndTime) {
+      setResult("請先填訪視結束時間或勾選時長。");
+      return;
+    }
+    const note = buildDeskOnePaperMissedNote({
+      visitDateRaw,
+      visitStartTime,
+    });
+    if (!note) {
+      setResult("訪視日期無效，無法產生三次未遇備註。");
+      return;
+    }
+    const label = kind === "unknown_address" ? "一鍵住址不詳" : "一鍵未遇";
+    if (!window.confirm(`${label}：將以一張紙送出（備註含往前兩趟時間），並進入下一筆。確定？`)) {
+      return;
+    }
+    await submitVisit({
+      submissionOverride: {
+        visitResult: "未遇",
+        notes: note,
+        healthStatus: submission.healthStatus || "未遇無法評估",
+        livingStatus: submission.livingStatus || "未遇無法評估",
+      },
+      answersPatch: {
+        visit_date: careFormAnswers.visit_date || visitDateRaw,
+        visit_start_time: visitStartTime,
+        visit_end_time: visitEndTime,
+        visit_notes: note,
+        visit_status: kind === "unknown_address" ? "住址不詳" : "查無此人",
+      },
+      deskSlotsOverride: ["夜間"],
+      closeAsMissedTriple: true,
+      skipMissedExpand: true,
+    });
   }
 
   async function advanceDeskContinuousKey(input: {
@@ -682,6 +790,7 @@ export function VisitDialogueForm({
     visitStartTime?: string;
     visitEndTime?: string;
     returnPath: string;
+    skipMissedExpand?: boolean;
   }): Promise<{
     nextHref: string | null;
     listHref: string;
@@ -717,7 +826,9 @@ export function VisitDialogueForm({
       writeDeskBatchState(batch);
     }
 
-    if (input.visitResult === "未遇" && input.visitDateRaw) {
+    if (input.skipMissedExpand) {
+      toastMessage = "已一鍵送出（一張紙・備註三次時段），進入下一筆";
+    } else if (input.visitResult === "未遇" && input.visitDateRaw) {
       try {
         const expandRes = await fetch("/api/manager/care-forms/expand-missed", {
           method: "POST",
@@ -982,9 +1093,31 @@ export function VisitDialogueForm({
         </p>
         {isDeskEntry ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            一般完成／拒訪不需三次；僅「未遇」才需陸續 KEY 滿 {missedVisitClosureAttempt}{" "}
-            張紙本（每次各自確認訪視時間）。本次只填這一張。
+            一般完成／拒訪一張即可。手動勾「未遇」仍可走三張補件；上方快速鍵則一張紙結案（備註自動寫入往前兩趟時間）。
           </p>
+        ) : null}
+        {isDeskEntry && !readonly ? (
+          <div className="mt-3 flex flex-wrap gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <p className="w-full text-xs text-muted-foreground">
+              快速鍵（需已有訪視日期＋起始時間）：一張送出並進下一筆
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => void runDeskQuickSubmit("missed")}
+            >
+              一鍵未遇
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => void runDeskQuickSubmit("unknown_address")}
+            >
+              一鍵住址不詳
+            </Button>
+          </div>
         ) : null}
         {readonly ? (
           <p className="mt-3 rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">

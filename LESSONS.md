@@ -1,3 +1,11 @@
+## Lesson: Desk quick KEY — one-paper 未遇／住址不詳 with triple note
+
+- **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
+- **Cause:** Old U2 expand-missed always spawned D-2／D-1 papers after first 未遇 submit.
+- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote`; submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers.
+- **Evidence:** `lib/domain/desk-care-batch.ts`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-28
+
 ## Lesson: Desk clerks KEY all villages (no village-admin scope)
 
 - **Trigger:** TEMP staff need to KEY paper forms across villages; some names matched 里責任 and got a narrow village list, others got `mode: none` and could not select.
