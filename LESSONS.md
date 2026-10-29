@@ -1,3 +1,19 @@
+## Lesson: Audit queue「進表修正」fixes CW2 in place
+
+- **Trigger:** 稽核佇列 blocked on CW2（民政訪查人－身分證字號）but cards only had 核准／退回補件; no path to edit care form.
+- **Cause:** Manager desk form did not load existing answers from audit; `careform.submit` always appended a new row → duplicate audits if resubmitted.
+- **Rule:** Audit card「進表修正」→ `/manager/care-forms/[assignmentId]?return=/manager/audit`. Manager_desk stays editable, loads Sheets answers, skips local draft restore on audit return. GAS `careform.submit` **updates** latest 已提交／待補件／草稿 for that assignment (same `careform_id`) so pending audit re-validates. After save, return to `/manager/audit` and refresh. CW2 fix: re-pick 民政／社政 visitor (pulls `id_number`) or edit national id, then submit. Deploy GAS for upsert; Next alone only opens the form.
+- **Evidence:** `components/audit/audit-queue-card.tsx`, `app/manager/care-forms/[assignmentId]/page.tsx`, `gas/src/modules/CareFormModule.gs`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-29
+
+## Lesson: Disable test visitors via `visitors.update` status
+
+- **Trigger:** Live `訪查員主檔` mixed real 永和區 staff with seeded test rows (測試／驗證／`@eldervisit.org`／known fake IDs).
+- **Cause:** GAS has `visitors.create/update/approve` but **no delete**; hard Sheet wipes risk production rows.
+- **Rule:** Inventory first (`visitors.list`); only disable clearly marked test rows with `visitors.update` → `status: "停用"` (+ tag). Leave TEMP desk clerks and unmarked real staff. Note: `accounts.*` has no disable API — login may still succeed for linked emails until account status is handled separately; attendance already rejects `停用`.
+- **Evidence:** Live cleanup 2026-10-29, 15 rows; `gas/src/modules/VisitorModule.gs`, schema `待審/已核准/停用`.
+- **Added on:** 2026-10-29
+
 ## Lesson: Desk paper KEY skips 未遇 photo／GPS
 
 - **Trigger:** 公所代填紙本 KEY still looked like field 未遇 (photos + GPS), and client/`validateVisitSubmission` required 3 slot photos so one-slot desk papers (incl. 一鍵未遇) failed.
@@ -26,7 +42,7 @@
 
 - **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
 - **Cause:** Old U2 expand-missed always spawned D-2／D-1 papers after first 未遇 submit.
-- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote` into **`living_address_other`（居住-其他說明）** and `visit_notes`（補充紀錄）; also set `living_address_type=查無此人`（該類型下其他說明必填）. Submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers. 「Pass（下次再 KEY）」: **不送出**；batch 標 `skipped`、進下一筆；清單顯示「下次再 KEY／補 KEY」，進表時 `revive` 回 `ready`。
+- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote` into **`living_address_other`（居住-其他說明）** and `visit_notes`（補充紀錄）; also set `living_address_type=查無此人`（該類型下其他說明必填）. Submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers. 「一鍵拒訪」: date+start; `visitResult=拒訪` / `visit_status=拒絕訪視`; fixed note `紙本拒訪`; **keep** on-screen 民政／社政訪查人; one paper + next. 「Pass（下次再 KEY）」: **不送出**；batch 標 `skipped`、進下一筆；清單顯示「下次再 KEY／補 KEY」，進表時 `revive` 回 `ready`。
 - **Evidence:** `lib/domain/desk-care-batch.ts`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-28
 

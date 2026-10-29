@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle2,
   CircleDollarSign,
   FileCheck2,
+  FilePenLine,
   RotateCcw,
   Stamp,
 } from "lucide-react";
@@ -212,6 +214,21 @@ export function AuditQueueCard({
           </label>
         )}
 
+        {item.assignmentId ? (
+          <Button asChild variant="secondary" className="w-full">
+            <Link
+              href={`/manager/care-forms/${encodeURIComponent(item.assignmentId)}?return=/manager/audit`}
+            >
+              <FilePenLine className="h-4 w-4" />
+              進表修正
+            </Link>
+          </Button>
+        ) : (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            此筆缺派案編號，無法直接進表；請到「關懷表建檔」依個案再開表。
+          </p>
+        )}
+
         <div className="grid gap-2 sm:grid-cols-2">
           <Button
             onClick={() => submitDecision("approve")}
@@ -229,6 +246,11 @@ export function AuditQueueCard({
             退回補件
           </Button>
         </div>
+        {item.assignmentId ? (
+          <p className="text-xs leading-5 text-muted-foreground">
+            驗證錯誤（如 CW2 民政身分證）請先「進表修正」：重選民政／社政訪查員或改正後再送出，回佇列重新整理後再核准。
+          </p>
+        ) : null}
         {(!canApproveAudit || !canRejectAudit) && (
           <p className="rounded-md bg-secondary p-3 text-sm text-muted-foreground">
             目前角色缺少部分稽核決策權限，只能執行允許的操作。

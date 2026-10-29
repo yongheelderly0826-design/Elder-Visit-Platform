@@ -97,7 +97,7 @@ import {
   type DeskVisitDurationMinutes,
 } from "@/lib/domain/desk-care-batch";
 
-type DeskQuickSubmitKind = "missed" | "unknown_address";
+type DeskQuickSubmitKind = "missed" | "unknown_address" | "refused";
 
 type MissedSlotPhoto = {
   slot: MissedVisitTimeSlot;
@@ -168,6 +168,7 @@ export function VisitDialogueForm({
   selectedVisitor,
   initialTimes,
   initialAnswers,
+  initialSubmissionSeed,
   deskReturnPath,
   listReturnPath,
   formDefaults = "roster",
@@ -183,6 +184,8 @@ export function VisitDialogueForm({
   selectedVisitor?: DeskVisitorOption;
   initialTimes?: { visitDate?: string; visitStartTime?: string; visitEndTime?: string };
   initialAnswers?: MohwLifeCareAnswers;
+  /** 稽核進表等：覆寫預設訪查結果／同意狀態 */
+  initialSubmissionSeed?: Partial<Omit<VisitSubmission, "scheduleId">>;
   deskReturnPath?: string;
   /** 送出後回待訪／快速 KEY 名單（可帶 query） */
   listReturnPath?: string;
@@ -201,11 +204,16 @@ export function VisitDialogueForm({
   )
     ? (String(initialDeskMissedSlot).trim() as MissedVisitTimeSlot)
     : null;
-  const [submission, setSubmission] = useState(() =>
-    seededMissedSlot
-      ? { ...initialSubmission, visitResult: "未遇" as const }
-      : initialSubmission,
-  );
+  const [submission, setSubmission] = useState(() => {
+    const seeded = {
+      ...initialSubmission,
+      ...initialSubmissionSeed,
+    };
+    if (seededMissedSlot) {
+      return { ...seeded, visitResult: "未遇" as const };
+    }
+    return seeded;
+  });
   const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -224,6 +232,8 @@ export function VisitDialogueForm({
   );
   const [slotPhotoBusy, setSlotPhotoBusy] = useState<MissedVisitTimeSlot | null>(null);
   const isDeskEntry = variant === "manager_desk";
+  /** 稽核佇列「進表修正」：覆寫已送出關懷表後回佇列，不做連續 KEY。 */
+  const isAuditCorrection = isDeskEntry && deskReturnPath === "/manager/audit";
   const useDeskFormDefaults = isDeskEntry || formDefaults === "desk";
   /** 紙本未遇：本張紙＝本次第 N 次訪視；U2 補件預選本趟對應時段 */
   const [deskPaperSlots, setDeskPaperSlots] = useState<MissedVisitTimeSlot[]>(() =>
@@ -374,6 +384,8 @@ export function VisitDialogueForm({
 
   useEffect(() => {
     if (readonly) return;
+    // 稽核進表修正：以 Sheets 既有 answers 為準，勿被本機舊草稿蓋掉 CW2 等欄位。
+    if (isAuditCorrection) return;
     const stored = window.localStorage.getItem(draftKey);
 
     if (stored) {
@@ -416,6 +428,7 @@ export function VisitDialogueForm({
     initialTimes?.visitDate,
     initialTimes?.visitEndTime,
     initialTimes?.visitStartTime,
+    isAuditCorrection,
     readonly,
     schedule.id,
   ]);
@@ -692,6 +705,17 @@ export function VisitDialogueForm({
     window.localStorage.removeItem(careFormDraftKey);
 
     if (isDeskEntry) {
+      if (isAuditCorrection) {
+        deskSkipMissedExpandRef.current = false;
+        setContinuousNextHref(null);
+        setContinuousListHref("/manager/audit");
+        setResult("已更新關懷表欄位，請回稽核佇列重新整理後再核准／匯出");
+        setIsSubmitting(false);
+        window.setTimeout(() => {
+          router.push("/manager/audit");
+        }, 700);
+        return;
+      }
       const continuous = await advanceDeskContinuousKey({
         assignmentId: schedule.id,
         caseId: elderCase.id,
@@ -753,6 +777,32 @@ export function VisitDialogueForm({
       setResult("請先填訪視結束時間或勾選時長。");
       return;
     }
+
+    if (kind === "refused") {
+      const note = "紙本拒訪";
+      if (!window.confirm("一鍵拒訪：將以一張紙送出（備註「紙本拒訪」），並進入下一筆。確定？")) {
+        return;
+      }
+      await submitVisit({
+        submissionOverride: {
+          visitResult: "拒訪",
+          notes: note,
+          healthStatus: submission.healthStatus || "拒訪無法評估",
+          livingStatus: submission.livingStatus || "拒訪無法評估",
+        },
+        answersPatch: {
+          visit_date: careFormAnswers.visit_date || visitDateRaw,
+          visit_start_time: visitStartTime,
+          visit_end_time: visitEndTime,
+          visit_notes: note,
+          visit_status: "拒絕訪視",
+          // 訪查人沿用畫面上已選的民政／社政，不覆寫
+        },
+        skipMissedExpand: true,
+      });
+      return;
+    }
+
     const note = buildDeskOnePaperMissedNote({
       visitDateRaw,
       visitStartTime,
@@ -881,7 +931,10 @@ export function VisitDialogueForm({
     }
 
     if (input.skipMissedExpand) {
-      toastMessage = "已一鍵送出（一張紙・備註三次時段），進入下一筆";
+      toastMessage =
+        input.visitResult === "拒訪"
+          ? "已一鍵拒訪送出，進入下一筆"
+          : "已一鍵送出（一張紙・備註三次時段），進入下一筆";
     } else if (input.visitResult === "未遇" && input.visitDateRaw) {
       try {
         const expandRes = await fetch("/api/manager/care-forms/expand-missed", {
@@ -1145,15 +1198,21 @@ export function VisitDialogueForm({
           {schedule.visitAttempt} 次訪視
           {isDeskEntry && visitorName ? ` · 指定訪員 ${visitorName}` : ""}
         </p>
-        {isDeskEntry ? (
+        {isDeskEntry && !isAuditCorrection ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            一般完成／拒訪一張即可。手動勾「未遇」仍可走三張補件；「一鍵未遇／住址不詳」一張紙結案（三次時間寫入「居住-其他說明」）。紙本不全請用 Pass。
+            一般完成一張即可。手動勾「未遇」仍可走三張補件；快速鍵一張紙結案或 Pass 略過。紙本不全請用
+            Pass。
           </p>
         ) : null}
-        {isDeskEntry && !readonly ? (
+        {isAuditCorrection ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            稽核進表修正：請重選民政／社政訪查員（帶入身分證）或直接改正欄位後送出；會覆寫既有關懷表，再回佇列整理後核准。
+          </p>
+        ) : null}
+        {isDeskEntry && !readonly && !isAuditCorrection ? (
           <div className="mt-3 flex flex-wrap gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <p className="w-full text-xs text-muted-foreground">
-              快速鍵：未遇／住址不詳需已有訪視日期＋起始時間；Pass 不送出、可下次再 KEY
+              快速鍵：未遇／住址不詳／拒訪需已有訪視日期＋起始時間；Pass 不送出、可下次再 KEY
             </p>
             <Button
               type="button"
@@ -1170,6 +1229,14 @@ export function VisitDialogueForm({
               onClick={() => void runDeskQuickSubmit("unknown_address")}
             >
               一鍵住址不詳
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => void runDeskQuickSubmit("refused")}
+            >
+              一鍵拒訪
             </Button>
             <Button
               type="button"
@@ -1754,23 +1821,29 @@ export function VisitDialogueForm({
         <section className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <p className="text-sm font-medium text-primary">本次訪查已完成</p>
           <h2 className="mt-1 text-base font-semibold">
-            {isDeskEntry
-              ? continuousNextHref
-                ? "已 KEY 送出，即將開啟下一案"
-                : "已 KEY 送出"
-              : listReturnPath
-                ? "已 KEY 送出，可回名單繼續下一案"
-                : "紀錄已送出，下一步可返回任務清單"}
+            {isAuditCorrection
+              ? "關懷表已更新，可回稽核佇列"
+              : isDeskEntry
+                ? continuousNextHref
+                  ? "已 KEY 送出，即將開啟下一案"
+                  : "已 KEY 送出"
+                : listReturnPath
+                  ? "已 KEY 送出，可回名單繼續下一案"
+                  : "紀錄已送出，下一步可返回任務清單"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {isDeskEntry
+            {isAuditCorrection || isDeskEntry
               ? result
               : listReturnPath
                 ? "系統已清除本機草稿。請回待訪名單，再點下一案「確認」繼續 KEY。"
                 : "系統已清除本機草稿；若有督導補件或未遇續訪，會再出現在任務清單中。"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex">
-            {isDeskEntry ? (
+            {isAuditCorrection ? (
+              <Button asChild className="w-full sm:w-auto">
+                <a href="/manager/audit">回稽核佇列</a>
+              </Button>
+            ) : isDeskEntry ? (
               <>
                 {continuousNextHref ? (
                   <Button asChild className="w-full sm:w-auto">

@@ -99,6 +99,28 @@ export function parseCareformAnswers(row: unknown): MohwLifeCareAnswers | undefi
   return undefined;
 }
 
+/** 稽核進表修正：帶入既有訪查結果／同意狀態，避免覆寫時被預設值蓋掉。 */
+export function parseCareformSubmissionSeed(row: unknown): {
+  visitResult?: string;
+  consentSigned?: boolean;
+} {
+  if (!row || typeof row !== "object") return {};
+  const record = row as Record<string, unknown>;
+  const visitResult = String(record.visit_result ?? "").trim();
+  const consentRaw = record.consent_signed;
+  const consentSigned =
+    consentRaw === true ||
+    consentRaw === "true" ||
+    consentRaw === "是" ||
+    consentRaw === "TRUE" ||
+    consentRaw === 1 ||
+    consentRaw === "1";
+  return {
+    visitResult: visitResult || undefined,
+    consentSigned: consentRaw == null || consentRaw === "" ? undefined : consentSigned,
+  };
+}
+
 export function mapDeskCase(
   row: Record<string, unknown>,
   villageCodeByName?: Record<string, string>,

@@ -149,7 +149,17 @@ var CareFormModule = (function () {
       }
     }
 
-    var careformId = 'CF-' + Utilities.getUuid().slice(0, 8);
+    // 同派案已有「已提交／待補件／草稿」時就地覆寫，避免稽核進表修正（如 CW2）產生重複關懷表與佇列。
+    var existing = get(data.assignment_id);
+    var existingStatus = existing ? String(existing.status || '') : '';
+    var replaceExisting =
+      Boolean(existing && existing.careform_id) &&
+      (existingStatus === '已提交' ||
+        existingStatus === '待補件' ||
+        existingStatus === '草稿');
+    var careformId = replaceExisting
+      ? String(existing.careform_id)
+      : 'CF-' + Utilities.getUuid().slice(0, 8);
     var photoRecords = isMissed
       ? normalizeMissedPhotos_(data, careformId)
       : (data.photos || []);
@@ -166,10 +176,16 @@ var CareFormModule = (function () {
       photo_urls: JSON.stringify(photoRecords),
       status: '已提交',
       submitted_at: new Date().toISOString(),
+      audited_at: '',
     };
-    SheetHelper.appendRow(SHEET, record);
+    if (replaceExisting) {
+      var updated = SheetHelper.updateByKey(SHEET, 'careform_id', careformId, record);
+      if (updated) record = updated;
+    } else {
+      SheetHelper.appendRow(SHEET, record);
+    }
 
-    if (isMissed) {
+    if (isMissed && !replaceExisting) {
       SheetHelper.appendRow(MISSED_SHEET, {
         missed_visit_id: 'MV-' + Utilities.getUuid().slice(0, 8),
         assignment_id: data.assignment_id,
