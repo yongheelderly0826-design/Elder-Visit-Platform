@@ -103,6 +103,7 @@ export function MohwExportPanel({
   const [destination, setDestination] = useState<ExportDestination>("drive");
   const [a3BusyCaseId, setA3BusyCaseId] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState("");
+  const [filterDateEnd, setFilterDateEnd] = useState("");
   const [filterDateMode, setFilterDateMode] = useState<MohwDateFilterMode>("visit");
   const [filterArea, setFilterArea] = useState("");
 
@@ -161,7 +162,10 @@ export function MohwExportPanel({
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (filterDate && !mohwCandidateMatchesDateFilter(item, filterDate, filterDateMode)) {
+      if (
+        (filterDate || filterDateEnd) &&
+        !mohwCandidateMatchesDateFilter(item, filterDate, filterDateMode, filterDateEnd)
+      ) {
         return false;
       }
       if (filterArea) {
@@ -169,7 +173,7 @@ export function MohwExportPanel({
       }
       return true;
     });
-  }, [items, filterDate, filterDateMode, filterArea]);
+  }, [items, filterDate, filterDateEnd, filterDateMode, filterArea]);
 
   const readyCount = useMemo(
     () => items.filter((item) => item.exportReady).length,
@@ -194,7 +198,7 @@ export function MohwExportPanel({
     [items],
   );
 
-  const hasActiveFilter = Boolean(filterDate || filterArea);
+  const hasActiveFilter = Boolean(filterDate || filterDateEnd || filterArea);
 
   function toggle(caseId: string) {
     setSelected((current) => {
@@ -231,6 +235,7 @@ export function MohwExportPanel({
 
   function clearFilters() {
     setFilterDate("");
+    setFilterDateEnd("");
     setFilterArea("");
   }
 
@@ -417,12 +422,22 @@ export function MohwExportPanel({
           </div>
         </fieldset>
         <label className="grid gap-1 text-sm font-medium">
-          {filterDateMode === "submitted" ? "登打日期" : "訪視日期"}
+          {filterDateMode === "submitted" ? "登打日起" : "訪視日起"}
           <input
             type="date"
             className="h-9 rounded-md border bg-background px-3 font-normal"
             value={filterDate}
             onChange={(event) => setFilterDate(event.target.value)}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          {filterDateMode === "submitted" ? "登打日迄" : "訪視日迄"}
+          <input
+            type="date"
+            className="h-9 rounded-md border bg-background px-3 font-normal"
+            value={filterDateEnd}
+            min={filterDate || undefined}
+            onChange={(event) => setFilterDateEnd(event.target.value)}
           />
         </label>
         <label className="grid gap-1 text-sm font-medium">
@@ -462,12 +477,18 @@ export function MohwExportPanel({
           清除篩選
         </Button>
         <p className="w-full text-xs text-muted-foreground">
-          可單用日期、單用區里，或兩個一起。日期只依所選「訪視日」或「登打日」（送出時間的台北日）比對；剛 KEY
-          未稽核仍會列出，可匯出須稽核通過。
+          可填起迄（含兩端）、只填一天、單用區里，或一起用。日期只依所選「訪視日」或「登打日」（台北日）；剛
+          KEY 未稽核仍會列出，可匯出須稽核通過且驗證無錯。
           {hasActiveFilter
             ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。若筆數不如預期，可改切日期依據，或先「清除篩選」看全部。`
             : ` 候選共 ${items.length} 筆。`}
         </p>
+        {items.length > 0 && readyCount === 0 ? (
+          <p className="w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            目前「可匯出」為 0：請先到稽核佇列核准（或取消勾選「只顯示稽核通過」看全部），並展開紅字修正驗證錯誤（例如
+            CW2 身分證）後再匯出。
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

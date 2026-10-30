@@ -71,18 +71,36 @@ export function mohwCandidateFilterDate(item: Pick<MohwExportCandidate, "visitDa
 /** 匯出日期篩選基準：只依訪視日，或只依登打／送出日（台北）。 */
 export type MohwDateFilterMode = "visit" | "submitted";
 
-/** 是否符合日期篩選（依 mode 只比對一個欄位）。 */
+/** 依 mode 取出要比對的 yyyy-MM-dd（訪視日或登打／送出日）。 */
+export function mohwCandidateDateForMode(
+  item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">,
+  mode: MohwDateFilterMode = "visit",
+) {
+  if (mode === "submitted") {
+    return toTaipeiCalendarDate(item.submittedAt);
+  }
+  return normalizeMohwFilterDate(item.visitDate);
+}
+
+/** 是否符合日期篩選：可單日，或起迄區間（含兩端；依 mode 只比對一個欄位）。 */
 export function mohwCandidateMatchesDateFilter(
   item: Pick<MohwExportCandidate, "visitDate" | "submittedAt">,
   filterDate: string,
   mode: MohwDateFilterMode = "visit",
+  filterDateEnd?: string,
 ) {
-  const want = normalizeMohwFilterDate(filterDate);
-  if (!want) return true;
-  if (mode === "submitted") {
-    return toTaipeiCalendarDate(item.submittedAt) === want;
+  const from = normalizeMohwFilterDate(filterDate);
+  const to = normalizeMohwFilterDate(filterDateEnd);
+  if (!from && !to) return true;
+  const day = mohwCandidateDateForMode(item, mode);
+  if (!day) return false;
+  if (from && to) {
+    const start = from <= to ? from : to;
+    const end = from <= to ? to : from;
+    return day >= start && day <= end;
   }
-  return normalizeMohwFilterDate(item.visitDate) === want;
+  const want = from || to;
+  return day === want;
 }
 
 export function mohwCandidateAreaLabel(item: Pick<MohwExportCandidate, "district" | "village">) {
