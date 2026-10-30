@@ -109,7 +109,7 @@ var SheetHelper = (function () {
     var ss = getSpreadsheet();
     var templates = {
       '_設定': ['key', 'value', 'description'],
-      '訪查員主檔': ['visitor_id', 'name', 'id_number', 'phone', 'email', 'service_areas', 'volunteer_group', 'status', 'badge_no', 'photo_url', 'bank_account', 'registered_at', 'approved_at', 'updated_at'],
+      '訪查員主檔': ['visitor_id', 'name', 'id_number', 'phone', 'email', 'service_areas', 'volunteer_group', 'job_title', 'status', 'badge_no', 'photo_url', 'bank_account', 'registered_at', 'approved_at', 'updated_at'],
       '訪員註冊申請': ['request_id', 'account_id', 'email', 'full_name', 'requested_unit_name', 'requested_workspace_id', 'requested_workspace_name', 'requested_role_key', 'status', 'review_note', 'submitted_at', 'reviewed_at', 'visitor_id', 'profile_json', 'created_at', 'updated_at'],
       '訪員帳號': ['account_id', 'email', 'visitor_id', 'full_name', 'role_key', 'status', 'password_hash', 'password_salt', 'password_params', 'invite_token_hash', 'invite_expires_at', 'reset_token_hash', 'reset_expires_at', 'password_updated_at', 'last_login_at', 'created_at', 'updated_at'],
       '個案名冊': ['case_id', 'external_id', 'case_type', 'name', 'id_number', 'gender', 'birth_date', 'age', 'household_district', 'household_village', 'visit_district', 'visit_village', 'address', 'primary_phone', 'secondary_phone', 'contact_note', 'visit_status', 'dispatch_priority', 'village_seq', 'village_code', 'encoded_id', 'data_quality_tag', 'imported_at', 'updated_at'],

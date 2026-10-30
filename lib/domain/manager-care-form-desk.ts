@@ -25,6 +25,8 @@ export type DeskVisitorOption = {
   phone: string;
   email?: string;
   workerGroup: VisitorRegistrationWorkerGroup | "unknown";
+  /** 職稱／身分別（Sheets `job_title`；含永和「電話問安」） */
+  jobTitle?: string;
 };
 
 export type DeskCaseOption = {
@@ -214,6 +216,7 @@ export function formatDeskCasePaperLabel(
 
 export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption {
   const rawPhone = row.phone ?? row.primary_phone ?? row.mobile ?? "";
+  const jobTitle = String(row.job_title ?? row.jobTitle ?? "").trim();
   return {
     id: String(row.visitor_id ?? ""),
     name: String(row.name ?? row.full_name ?? ""),
@@ -225,6 +228,7 @@ export function mapDeskVisitor(row: Record<string, unknown>): DeskVisitorOption 
     workerGroup: normalizeDeskWorkerGroup(
       row.volunteer_group ?? row.worker_group ?? row.workerGroup,
     ),
+    ...(jobTitle ? { jobTitle } : {}),
   };
 }
 

@@ -120,6 +120,17 @@ export function normalizeMohwOptionValue(key: string, value: string): string {
   return trimmed;
 }
 
+function dedupePreserveOrder(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
 export function normalizeMohwAnswersOptions(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
   const next: MohwLifeCareAnswers = { ...answers };
 
@@ -128,15 +139,17 @@ export function normalizeMohwAnswersOptions(answers: MohwLifeCareAnswers): MohwL
     if (raw == null || raw === "") continue;
 
     if (Array.isArray(raw)) {
-      next[column.key] = raw.map((item) => normalizeMohwOptionValue(column.key, String(item)));
+      // Alias collapse（例：電話問安→關懷服務）後去重，避免多選重複 token
+      next[column.key] = dedupePreserveOrder(
+        raw.map((item) => normalizeMohwOptionValue(column.key, String(item))),
+      );
       continue;
     }
 
     if (typeof raw === "string" && column.inputType.includes("多選") && raw.includes(";")) {
-      next[column.key] = raw
-        .split(";")
-        .map((item) => normalizeMohwOptionValue(column.key, item))
-        .join(";");
+      next[column.key] = dedupePreserveOrder(
+        raw.split(";").map((item) => normalizeMohwOptionValue(column.key, item)),
+      ).join(";");
       continue;
     }
 

@@ -11,7 +11,7 @@ var VisitorModule = (function () {
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
 
-    SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
+    SheetHelper.ensureColumns(SHEET, ['volunteer_group', 'job_title']);
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
     if (params.status) {
       rows = rows.filter(function (r) { return r.status === params.status; });
@@ -28,6 +28,7 @@ var VisitorModule = (function () {
           status: r.status || '',
           badge_no: r.badge_no || '',
           volunteer_group: r.volunteer_group || '',
+          job_title: r.job_title || '',
         };
       });
     }
@@ -47,7 +48,7 @@ var VisitorModule = (function () {
   }
 
   function getByIdNumber(idNumber) {
-    SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
+    SheetHelper.ensureColumns(SHEET, ['volunteer_group', 'job_title']);
     var target = extractTaiwanId_(idNumber);
     if (!target) return null;
     var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
@@ -58,7 +59,7 @@ var VisitorModule = (function () {
   }
 
   function create(data) {
-    SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
+    SheetHelper.ensureColumns(SHEET, ['volunteer_group', 'job_title']);
     var deskMinimal = Boolean(data && data.desk_minimal);
     Validation.requireFields(data, deskMinimal ? ['name', 'phone'] : ['name', 'id_number', 'phone']);
     data.id_number = extractTaiwanId_(data.id_number);
@@ -91,7 +92,7 @@ var VisitorModule = (function () {
   }
 
   function update(data) {
-    SheetHelper.ensureColumns(SHEET, ['volunteer_group']);
+    SheetHelper.ensureColumns(SHEET, ['volunteer_group', 'job_title']);
     Validation.requireFields(data, ['visitor_id']);
     data.updated_at = new Date().toISOString();
     var updated = SheetHelper.updateByKey(SHEET, 'visitor_id', data.visitor_id, data);

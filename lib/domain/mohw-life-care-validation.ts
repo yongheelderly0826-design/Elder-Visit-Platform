@@ -14,6 +14,7 @@ import {
   type MohwLifeCareAnswers,
 } from "@/lib/domain/mohw-life-care-form";
 import {
+  normalizeMohwOptionValue,
   parseOfficialAllowedValues,
 } from "@/lib/domain/mohw-life-care-options";
 import {
@@ -642,7 +643,11 @@ export function validateMohwLifeCareRow(
     if (column.allowedValues) {
       const allowed = parseOfficialAllowedValues(column.allowedValues);
       const selected = column.inputType.includes("多選") ? text.split(";") : [text];
-      const invalid = selected.filter(value => !allowed.includes(value));
+      // Accept UI aliases（例：電話問安→關懷服務）before rejecting against official tokens
+      const invalid = selected.filter((value) => {
+        const normalized = normalizeMohwOptionValue(column.key, value);
+        return !allowed.includes(normalized);
+      });
       if (allowed.length && invalid.length) {
         pushError(errors, { key: column.key, row, code: "INVALID_OPTION", message: `選項不符合範本允許值（多選請用半形分號 ;）：${invalid.join("、")}` });
       }

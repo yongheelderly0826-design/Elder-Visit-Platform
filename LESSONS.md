@@ -1,3 +1,11 @@
+## Lesson: Desk visitor edit needs 職稱／身分別, not only 民政／社政
+
+- **Trigger:** 紙本 KEY「編輯訪查員」只有民政／社政兩項；承辦無法標「電話問安」等細身分。
+- **Cause:** Desk create/update only wrote `volunteer_group`（civil/social）；`job_title` 未進 Sheets slim list 與 UI。
+- **Rule:** Keep 民政／社政 as worker group for 帶入欄位分流；另編輯 `job_title`（`visitorRegistrationJobTitles`，含電話問安）。Persist via `visitors.update` `job_title`。帶入關懷表時用 `mapJobTitleToMohwWorkerRole`（電話問安→社政「其他／電話問安」或民政「公所人員」）。Deploy GAS for `job_title` column.
+- **Evidence:** `components/manage/care-form-desk-panel.tsx`, `app/api/manager/care-forms/visitors/route.ts`, `gas/src/modules/VisitorModule.gs`, `lib/domain/visitor-registration-options.ts`.
+- **Added on:** 2026-10-30
+
 ## Lesson: Audit queue「進表修正」fixes CW2 in place
 
 - **Trigger:** 稽核佇列 blocked on CW2（民政訪查人－身分證字號）but cards only had 核准／退回補件; no path to edit care form.

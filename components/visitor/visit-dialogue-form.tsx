@@ -20,6 +20,7 @@ import { visitQuestions } from "@/lib/domain/mock-data";
 import { createVisitDraft, getVisitDraftKey, type VisitDraft } from "@/lib/domain/offline-drafts";
 import { getVisitRequiredForms } from "@/lib/domain/visit-form-flow";
 import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
+import { mapJobTitleToMohwWorkerRole } from "@/lib/domain/visitor-registration-options";
 import {
   asMultiChoiceValues,
   createMohwDeskInitialAnswers,
@@ -2150,11 +2151,19 @@ function WorkerNamePicker({
   );
 }
 
-function defaultWorkerRole(kind: "social" | "civil", currentRole: unknown): string {
+function defaultWorkerRole(
+  kind: "social" | "civil",
+  currentRole: unknown,
+  jobTitle?: string | null,
+): { role: string; roleOther?: string } {
+  if (jobTitle) {
+    const mapped = mapJobTitleToMohwWorkerRole(kind, jobTitle);
+    if (mapped.role) return mapped;
+  }
   const existing = String(currentRole ?? "").trim();
-  if (existing) return existing;
+  if (existing) return { role: existing };
   // 社政選項含「志工」但產品用語優先「社會局/處」；民政預設公所人員
-  return kind === "civil" ? "公所人員" : "社會局/處";
+  return { role: kind === "civil" ? "公所人員" : "社會局/處" };
 }
 
 function applyVisitorToWorkerAnswers(
@@ -2169,6 +2178,7 @@ function applyVisitorToWorkerAnswers(
     CASE_PHONE_NONE;
   const nationalId = normalizeVisitorNationalId(visitor.nationalId || "");
   if (kind === "civil") {
+    const role = defaultWorkerRole("civil", current.civil_worker_role, visitor.jobTitle);
     return {
       social_worker_role: "",
       social_worker_role_other: "",
@@ -2176,20 +2186,22 @@ function applyVisitorToWorkerAnswers(
       social_worker_national_id: "",
       social_worker_phone: "",
       social_worker_date: "",
-      civil_worker_role: defaultWorkerRole("civil", current.civil_worker_role),
+      civil_worker_role: role.role,
       civil_worker_name: visitor.name,
       civil_worker_national_id: nationalId,
       civil_worker_phone: phone,
       civil_worker_date: String(current.civil_worker_date || visitDate),
     };
   }
+  const role = defaultWorkerRole("social", current.social_worker_role, visitor.jobTitle);
   return {
     civil_worker_role: "",
     civil_worker_name: "",
     civil_worker_national_id: "",
     civil_worker_phone: "",
     civil_worker_date: "",
-    social_worker_role: defaultWorkerRole("social", current.social_worker_role),
+    social_worker_role: role.role,
+    social_worker_role_other: role.roleOther ?? "",
     social_worker_name: visitor.name,
     social_worker_national_id: nationalId,
     social_worker_phone: phone,

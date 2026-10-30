@@ -138,9 +138,37 @@ export const mohwLifeCareSections: MohwCareFormSection[] = UI_SECTIONS.map((sect
   ).map((column) => columnToMohwField(column)),
 }));
 
+/**
+ * NTPC 紙本／永和 KEY 可勾選、但衛福官方允許值沒有的細項。
+ * 儲存／匯出前由 `MOHW_OPTION_ALIASES` 對回官方 token（例：電話問安→關懷服務）。
+ */
+const UI_EXTRA_OPTIONS: Record<string, string[]> = {
+  service_willingness: ["電話問安"],
+};
+
+function withUiExtraOptions(key: string, official: string[]): string[] {
+  const extras = UI_EXTRA_OPTIONS[key];
+  if (!extras?.length) return official;
+
+  const next = [...official];
+  for (const extra of extras) {
+    if (next.includes(extra)) continue;
+    if (key === "service_willingness" && extra === "電話問安") {
+      const careIdx = next.indexOf("關懷服務");
+      if (careIdx >= 0) {
+        next.splice(careIdx + 1, 0, extra);
+        continue;
+      }
+    }
+    next.push(extra);
+  }
+  return next;
+}
+
 export function columnToMohwField(column: MohwLifeCareColumn): MohwFormField {
   const label = column.header.replace(/\s*\*+$/, "").replace(/\*$/, "");
-  const options = parseOfficialAllowedValues(column.allowedValues);
+  const official = parseOfficialAllowedValues(column.allowedValues);
+  const options = withUiExtraOptions(column.key, official);
   let type: GovernmentFormField["type"] = "text";
 
   if (column.inputType.includes("多選")) {

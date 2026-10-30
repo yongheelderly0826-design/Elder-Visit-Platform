@@ -2,8 +2,17 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
 import { mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
+import { visitorRegistrationJobTitles } from "@/lib/domain/visitor-registration-options";
 import { gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
+
+const ALLOWED_JOB_TITLES = new Set<string>(visitorRegistrationJobTitles);
+
+function normalizeJobTitle(raw: unknown): string {
+  const title = String(raw ?? "").trim();
+  if (!title) return "";
+  return ALLOWED_JOB_TITLES.has(title) ? title : title.slice(0, 20);
+}
 
 export async function POST(request: NextRequest) {
   const forbidden = requireManagerCapability(request, "visits.submit");
@@ -17,6 +26,7 @@ export async function POST(request: NextRequest) {
     email?: string;
     idNumber?: string;
     workerGroup?: string;
+    jobTitle?: string;
   };
 
   const action = body.action === "update" ? "update" : "create";
@@ -24,6 +34,7 @@ export async function POST(request: NextRequest) {
   const phone = String(body.phone ?? "").trim();
   const workerGroup =
     body.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs";
+  const jobTitle = normalizeJobTitle(body.jobTitle);
 
   if (!name || !phone) {
     return NextResponse.json(
@@ -53,6 +64,7 @@ export async function POST(request: NextRequest) {
         email: String(body.email ?? "").trim().toLowerCase(),
         id_number: String(body.idNumber ?? "").trim().toUpperCase(),
         volunteer_group: workerGroup,
+        job_title: jobTitle,
       })) as Record<string, unknown>;
       invalidateGasReadCaches();
       return NextResponse.json({ data: mapDeskVisitor(updated) });
@@ -64,6 +76,7 @@ export async function POST(request: NextRequest) {
       email: String(body.email ?? "").trim().toLowerCase(),
       id_number: String(body.idNumber ?? "").trim().toUpperCase(),
       volunteer_group: workerGroup,
+      job_title: jobTitle || (workerGroup === "social_affairs" ? "志工" : "公所人員"),
       desk_minimal: true,
     })) as Record<string, unknown>;
 

@@ -45,7 +45,10 @@ import type {
   Workspace,
   WorkspaceRoleKey,
 } from "@/lib/domain/types";
-import type { VisitorCorrectionResult } from "@/lib/domain/visitor-registration-options";
+import {
+  visitorRegistrationJobTitles,
+  type VisitorCorrectionResult,
+} from "@/lib/domain/visitor-registration-options";
 
 type UsersPayload = {
   workspace: Workspace;
@@ -655,7 +658,7 @@ const visitorDepartments = [
   "其他",
 ];
 
-const visitorJobTitles = ["公所人員", "里長", "里幹事", "社工", "志工", "其他（鄰長）", "其他"];
+const visitorJobTitles = visitorRegistrationJobTitles;
 
 const workerGroupLabels: Record<VisitorRegistrationWorkerGroup, string> = {
   civil_affairs: "民政訪查人員",

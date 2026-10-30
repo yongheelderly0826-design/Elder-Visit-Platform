@@ -36,6 +36,10 @@ import {
   type DeskScope,
 } from "@/lib/domain/village-admins";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
+import {
+  defaultDeskJobTitle,
+  deskJobTitlesForWorkerGroup,
+} from "@/lib/domain/visitor-registration-options";
 
 type OptionsPayload = {
   cases: DeskCaseOption[];
@@ -83,19 +87,35 @@ export function CareFormDeskPanel({
   const [primaryVisitorId, setPrimaryVisitorId] = useState("");
   const [creatingVisitor, setCreatingVisitor] = useState(false);
   const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
-  const [newVisitor, setNewVisitor] = useState({
+  const [newVisitor, setNewVisitor] = useState<{
+    name: string;
+    phone: string;
+    email: string;
+    idNumber: string;
+    workerGroup: VisitorRegistrationWorkerGroup;
+    jobTitle: string;
+  }>({
     name: "",
     phone: "",
     email: "",
     idNumber: "",
-    workerGroup: "civil_affairs" as VisitorRegistrationWorkerGroup,
+    workerGroup: "civil_affairs",
+    jobTitle: defaultDeskJobTitle("civil_affairs"),
   });
-  const [editVisitor, setEditVisitor] = useState({
+  const [editVisitor, setEditVisitor] = useState<{
+    name: string;
+    phone: string;
+    email: string;
+    idNumber: string;
+    workerGroup: VisitorRegistrationWorkerGroup;
+    jobTitle: string;
+  }>({
     name: "",
     phone: "",
     email: "",
     idNumber: "",
-    workerGroup: "civil_affairs" as VisitorRegistrationWorkerGroup,
+    workerGroup: "civil_affairs",
+    jobTitle: defaultDeskJobTitle("civil_affairs"),
   });
   const [creating, setCreating] = useState(false);
   const [newCase, setNewCase] = useState({
@@ -547,13 +567,36 @@ export function CareFormDeskPanel({
   function startEditVisitor(visitor: DeskVisitorOption) {
     setCreatingVisitor(false);
     setEditingVisitorId(visitor.id);
+    const workerGroup =
+      visitor.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs";
+    const knownTitle = deskJobTitlesForWorkerGroup(workerGroup).find(
+      (title) => title === visitor.jobTitle,
+    );
     setEditVisitor({
       name: visitor.name,
       phone: visitor.phone,
       email: visitor.email || "",
       idNumber: visitor.nationalId || "",
-      workerGroup:
-        visitor.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs",
+      workerGroup,
+      jobTitle:
+        knownTitle ||
+        String(visitor.jobTitle || "").trim() ||
+        defaultDeskJobTitle(workerGroup),
+    });
+  }
+
+  function patchVisitorWorkerGroup(
+    setter: typeof setEditVisitor,
+    workerGroup: VisitorRegistrationWorkerGroup,
+  ) {
+    setter((current) => {
+      const titles = deskJobTitlesForWorkerGroup(workerGroup);
+      const keepTitle = titles.find((title) => title === current.jobTitle);
+      return {
+        ...current,
+        workerGroup,
+        jobTitle: keepTitle || defaultDeskJobTitle(workerGroup),
+      };
     });
   }
 
@@ -1114,7 +1157,7 @@ export function CareFormDeskPanel({
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。資料有誤可按「編輯」修正。
+          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。資料有誤可按「編輯」修正民政／社政與職稱／身分別（含電話問安等）。
         </p>
 
         {creatingVisitor ? (
@@ -1138,14 +1181,29 @@ export function CareFormDeskPanel({
                 className="h-11 w-full rounded-md border px-3 text-sm"
                 value={newVisitor.workerGroup}
                 onChange={(event) =>
-                  setNewVisitor((current) => ({
-                    ...current,
-                    workerGroup: event.target.value as VisitorRegistrationWorkerGroup,
-                  }))
+                  patchVisitorWorkerGroup(
+                    setNewVisitor,
+                    event.target.value as VisitorRegistrationWorkerGroup,
+                  )
                 }
               >
                 <option value="civil_affairs">民政訪查人員</option>
                 <option value="social_affairs">社政訪查人員</option>
+              </select>
+            </Field>
+            <Field label="職稱／身分別 *">
+              <select
+                className="h-11 w-full rounded-md border px-3 text-sm"
+                value={newVisitor.jobTitle}
+                onChange={(event) =>
+                  setNewVisitor((current) => ({ ...current, jobTitle: event.target.value }))
+                }
+              >
+                {deskJobTitlesForWorkerGroup(newVisitor.workerGroup).map((title) => (
+                  <option key={title} value={title}>
+                    {title}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="Email（可後補）">
@@ -1193,14 +1251,35 @@ export function CareFormDeskPanel({
                 className="h-11 w-full rounded-md border bg-background px-3 text-sm"
                 value={editVisitor.workerGroup}
                 onChange={(event) =>
-                  setEditVisitor((current) => ({
-                    ...current,
-                    workerGroup: event.target.value as VisitorRegistrationWorkerGroup,
-                  }))
+                  patchVisitorWorkerGroup(
+                    setEditVisitor,
+                    event.target.value as VisitorRegistrationWorkerGroup,
+                  )
                 }
               >
                 <option value="civil_affairs">民政訪查人員</option>
                 <option value="social_affairs">社政訪查人員</option>
+              </select>
+            </Field>
+            <Field label="職稱／身分別 *">
+              <select
+                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
+                value={editVisitor.jobTitle}
+                onChange={(event) =>
+                  setEditVisitor((current) => ({ ...current, jobTitle: event.target.value }))
+                }
+              >
+                {deskJobTitlesForWorkerGroup(editVisitor.workerGroup).map((title) => (
+                  <option key={title} value={title}>
+                    {title}
+                  </option>
+                ))}
+                {editVisitor.jobTitle &&
+                !deskJobTitlesForWorkerGroup(editVisitor.workerGroup).some(
+                  (title) => title === editVisitor.jobTitle,
+                ) ? (
+                  <option value={editVisitor.jobTitle}>{editVisitor.jobTitle}</option>
+                ) : null}
               </select>
             </Field>
             <Field label="身分證（可後補）">
@@ -1767,6 +1846,7 @@ function VisitorPickColumn({
                     <span className="block text-sm font-medium">{visitor.name}</span>
                     <span className="block text-xs text-muted-foreground">
                       {visitor.badgeNo || visitor.id}
+                      {visitor.jobTitle ? ` · ${visitor.jobTitle}` : ""}
                       {visitor.status ? ` · ${visitor.status}` : ""}
                       {visitor.workerGroup === "unknown" ? " · 未分類" : ""}
                       {visitor.phone ? ` · ${visitor.phone}` : ""}
