@@ -1,3 +1,19 @@
+## Lesson: Module-init const must not call later helpers (TDZ / Vercel build)
+
+- **Trigger:** `npm run build` failed collecting `/api/exports/mohw/candidates` with `ReferenceError: Cannot access 'n' before initialization`.
+- **Cause:** Added `UI_EXTRA_OPTIONS` / `withUiExtraOptions` between `mohwLifeCareSections` (module-level const that maps via `columnToMohwField`) and the helper bodies. Bundlers may rewrite `export function` to `const`, so call-order is not safely hoisted.
+- **Rule:** Any exported `const` that runs at import time must sit **below** every function/`const` it touches. Prefer defining helpers first, then `mohwLifeCareSections`.
+- **Evidence:** `lib/domain/mohw-life-care-ui.ts`, route `app/api/exports/mohw/candidates/route.ts`.
+- **Added on:** 2026-10-30
+
+## Lesson: Module-init consts used by hoisted builders must precede them
+
+- **Trigger:** Vercel Production failed on `5bc177c`; local `next build` → `Cannot access 'n' before initialization` while collecting `/api/exports/mohw/candidates`.
+- **Cause:** `UI_EXTRA_OPTIONS`（電話問安 UI extra）was declared **after** `mohwLifeCareSections`, which runs at module load via hoisted `columnToMohwField` → TDZ on the const.
+- **Rule:** Anything a module-level initializer reads must be declared above it (or inlined). typecheck alone will not catch TDZ; run `npm run build` before push when touching mohw-life-care-ui init paths.
+- **Evidence:** `lib/domain/mohw-life-care-ui.ts`.
+- **Added on:** 2026-10-30
+
 ## Lesson: Desk visitor edit needs 職稱／身分別, not only 民政／社政
 
 - **Trigger:** 紙本 KEY「編輯訪查員」只有民政／社政兩項；承辦無法標「電話問安」等細身分。

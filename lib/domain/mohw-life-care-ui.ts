@@ -131,16 +131,10 @@ const SENSITIVE_KEYS = new Set([
   "civil_worker_national_id",
 ]);
 
-export const mohwLifeCareSections: MohwCareFormSection[] = UI_SECTIONS.map((section) => ({
-  title: section.title,
-  fields: MOHW_LIFE_CARE_COLUMNS.filter(
-    (column) => column.col >= section.fromCol && column.col <= section.toCol,
-  ).map((column) => columnToMohwField(column)),
-}));
-
 /**
  * NTPC 紙本／永和 KEY 可勾選、但衛福官方允許值沒有的細項。
  * 儲存／匯出前由 `MOHW_OPTION_ALIASES` 對回官方 token（例：電話問安→關懷服務）。
+ * Must be declared before `mohwLifeCareSections` (module-init uses columnToMohwField).
  */
 const UI_EXTRA_OPTIONS: Record<string, string[]> = {
   service_willingness: ["電話問安"],
@@ -163,6 +157,14 @@ function withUiExtraOptions(key: string, official: string[]): string[] {
     next.push(extra);
   }
   return next;
+}
+
+function defaultOptionsForKey(key: string): string[] | undefined {
+  // Fallback only when schema allowedValues is empty (should be rare after official sync).
+  const defaults: Record<string, string[]> = {
+    visit_status: ["已完成", "拒絕訪視", "查無此人", "無法溝通", "住址不詳"],
+  };
+  return defaults[key];
 }
 
 export function columnToMohwField(column: MohwLifeCareColumn): MohwFormField {
@@ -199,13 +201,13 @@ export function columnToMohwField(column: MohwLifeCareColumn): MohwFormField {
   };
 }
 
-function defaultOptionsForKey(key: string): string[] | undefined {
-  // Fallback only when schema allowedValues is empty (should be rare after official sync).
-  const defaults: Record<string, string[]> = {
-    visit_status: ["已完成", "拒絕訪視", "查無此人", "無法溝通", "住址不詳"],
-  };
-  return defaults[key];
-}
+// Module-init: keep after columnToMohwField / UI helpers (bundlers may not hoist export function).
+export const mohwLifeCareSections: MohwCareFormSection[] = UI_SECTIONS.map((section) => ({
+  title: section.title,
+  fields: MOHW_LIFE_CARE_COLUMNS.filter(
+    (column) => column.col >= section.fromCol && column.col <= section.toCol,
+  ).map((column) => columnToMohwField(column)),
+}));
 
 export function isMohwQuestionnaireSkipped(answers: MohwLifeCareAnswers) {
   const status = String(answers.visit_status ?? "");
