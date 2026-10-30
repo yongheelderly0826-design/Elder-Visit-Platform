@@ -185,6 +185,13 @@ export function MohwExportPanel({
     [filteredItems],
   );
 
+  const hasActiveFilter = Boolean(filterDate || filterDateEnd || filterArea);
+  const selectReadyCount = hasActiveFilter ? filteredReadyCount : readyCount;
+  const selectErrorCount = useMemo(() => {
+    const scope = hasActiveFilter ? filteredItems : items;
+    return scope.filter((item) => !item.validationOk && item.errorCount > 0).length;
+  }, [hasActiveFilter, filteredItems, items]);
+
   const caseLabels = useMemo(() => {
     const map: Record<string, string> = {};
     for (const item of items) {
@@ -198,8 +205,6 @@ export function MohwExportPanel({
     [items],
   );
 
-  const hasActiveFilter = Boolean(filterDate || filterDateEnd || filterArea);
-
   function toggle(caseId: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -210,13 +215,37 @@ export function MohwExportPanel({
   }
 
   function selectReady() {
-    setSelected(new Set(items.filter((item) => item.exportReady).map((item) => item.caseId)));
+    const scope = hasActiveFilter ? filteredItems : items;
+    const readyIds = scope.filter((item) => item.exportReady).map((item) => item.caseId);
+    if (readyIds.length === 0) {
+      setMessage(
+        hasActiveFilter
+          ? "目前篩選範圍內沒有「可匯出」個案（須稽核通過且驗證無錯）。請先核准，或清除篩選／改日期後再試。"
+          : "目前沒有「可匯出」個案（須稽核通過且驗證無錯）。請先到稽核佇列核准，並修正紅字驗證錯誤。",
+      );
+      setSelected(new Set());
+      return;
+    }
+    setMessage(null);
+    setSelected(new Set(readyIds));
   }
 
   function selectWithErrors() {
-    setSelected(
-      new Set(items.filter((item) => !item.validationOk && item.errorCount > 0).map((item) => item.caseId)),
-    );
+    const scope = hasActiveFilter ? filteredItems : items;
+    const errorIds = scope
+      .filter((item) => !item.validationOk && item.errorCount > 0)
+      .map((item) => item.caseId);
+    if (errorIds.length === 0) {
+      setMessage(
+        hasActiveFilter
+          ? "目前篩選範圍內沒有驗證失敗的個案。"
+          : "目前沒有驗證失敗的個案。",
+      );
+      setSelected(new Set());
+      return;
+    }
+    setMessage(null);
+    setSelected(new Set(errorIds));
   }
 
   function selectFilteredReady() {
@@ -508,11 +537,28 @@ export function MohwExportPanel({
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           重新整理
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={selectReady}>
-          全選可匯出
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={selectReadyCount === 0}
+          onClick={selectReady}
+          title={
+            selectReadyCount === 0
+              ? "可匯出須「稽核通過」且驗證無錯；目前為 0 筆"
+              : undefined
+          }
+        >
+          全選可匯出（{selectReadyCount}）
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={selectWithErrors}>
-          全選驗證失敗
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={selectErrorCount === 0}
+          onClick={selectWithErrors}
+        >
+          全選驗證失敗（{selectErrorCount}）
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={clearSelection}>
           清除選取
