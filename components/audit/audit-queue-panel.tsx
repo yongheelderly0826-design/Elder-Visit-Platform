@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Loader2, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { AuditQueueCard } from "@/components/audit/audit-queue-card";
 import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { AuditQueueItem } from "@/lib/domain/types";
+
+function hasValidationFailure(item: AuditQueueItem) {
+  return Array.isArray(item.errorLines) && item.errorLines.length > 0;
+}
 
 type QueueResponse = {
   data?: {
@@ -38,6 +42,7 @@ export function AuditQueuePanel() {
   const [mode, setMode] = useState<"gas" | "demo">("demo");
   const [note, setNote] = useState<string | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [onlyValidationFailed, setOnlyValidationFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -71,7 +76,19 @@ export function AuditQueuePanel() {
     void loadQueue();
   }, [loadQueue]);
 
-  const visiblePending = pendingItems.filter((item) => !hiddenIds.has(item.id));
+  const validationFailedCount = useMemo(
+    () => pendingItems.filter((item) => !hiddenIds.has(item.id) && hasValidationFailure(item)).length,
+    [pendingItems, hiddenIds],
+  );
+
+  const visiblePending = useMemo(() => {
+    return pendingItems.filter((item) => {
+      if (hiddenIds.has(item.id)) return false;
+      if (onlyValidationFailed && !hasValidationFailure(item)) return false;
+      return true;
+    });
+  }, [pendingItems, hiddenIds, onlyValidationFailed]);
+
   const pendingByVisitor = groupByVisitor(visiblePending);
   const supplementByVisitor = groupByVisitor(supplementItems);
 
@@ -88,13 +105,24 @@ export function AuditQueuePanel() {
             </p>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            待稽核 {visiblePending.length} 筆 · 待補件 {supplementItems.length} 筆。核准後關懷表改為「已稽核」，匯出頁可勾選。
+            待稽核 {pendingItems.filter((item) => !hiddenIds.has(item.id)).length} 筆 · 驗證失敗{" "}
+            {validationFailedCount} 筆 · 待補件 {supplementItems.length} 筆。核准後關懷表改為「已稽核」，匯出頁可勾選。
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          重新整理
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={onlyValidationFailed}
+              onChange={(event) => setOnlyValidationFailed(event.target.checked)}
+            />
+            只顯示驗證失敗（{validationFailedCount}）
+          </label>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            重新整理
+          </Button>
+        </div>
       </div>
 
       {note ? <p className="text-sm text-amber-800">{note}</p> : null}
@@ -138,9 +166,13 @@ export function AuditQueuePanel() {
 
       <section className="grid gap-3">
         <div className="rounded-lg border bg-card p-4">
-          <h2 className="text-base font-semibold">待稽核</h2>
+          <h2 className="text-base font-semibold">
+            {onlyValidationFailed ? "待稽核・驗證失敗" : "待稽核"}
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            訪員送出關懷表後會出現在這裡；卡片會顯示個案編碼與負責訪員。
+            {onlyValidationFailed
+              ? "僅列出中央欄位驗證未過的案件。請逐筆「進表修正」→ 送出 → 回此頁重新整理後再「核准」，通過後即可到匯出頁勾選。"
+              : "訪員送出關懷表後會出現在這裡；卡片會顯示個案編碼與負責訪員。有驗證紅字請先「進表修正」，通過後再核准才能匯出。"}
           </p>
         </div>
 
@@ -149,8 +181,12 @@ export function AuditQueuePanel() {
         ) : visiblePending.length === 0 ? (
           <EmptyState
             icon={ClipboardCheck}
-            title="目前沒有待稽核案件"
-            description="真實待審為 0 筆時這裡會空白；上方步驟數字已改為即時統計，不再顯示示範的 27 件。"
+            title={onlyValidationFailed ? "目前沒有驗證失敗案件" : "目前沒有待稽核案件"}
+            description={
+              onlyValidationFailed
+                ? "可取消「只顯示驗證失敗」看全部待稽核；若皆已修正，請重新整理後逐筆核准。"
+                : "真實待審為 0 筆時這裡會空白；上方步驟數字已改為即時統計，不再顯示示範的 27 件。"
+            }
           />
         ) : (
           <>
