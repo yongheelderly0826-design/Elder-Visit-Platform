@@ -62,11 +62,19 @@
 - **Evidence:** Live cleanup 2026-10-29, 15 rows; `gas/src/modules/VisitorModule.gs`, schema `待審/已核准/停用`.
 - **Added on:** 2026-10-29
 
+## Lesson: 未遇一律一張紙（手動／訪查員／快速鍵）＋照片暫不強制
+
+- **Trigger:** Manual desk「未遇」仍走 expand-missed 建兩張；現場訪查員未遇要 3–5 時段照片＋GPS；與一鍵未遇一張紙政策不一致。
+- **Cause:** One-paper note + `skipMissedExpand` only on quick-key path; validator／GAS still enforced `missedVisitMinSlots=3`.
+- **Rule:** Any `visitResult===未遇` submit（desk manual、visitor、一鍵）: `buildDeskOnePaperMissedNote` → `living_address_other` + `visit_notes`／notes；`skipMissedExpand` + `closeAsMissedTriple`；**不**呼叫 expand-missed。`missedVisitPhotosRequired=false` → client／API／GAS `MISSED_MIN_SLOTS=0`，照片與 GPS 選填。
+- **Evidence:** `components/visitor/visit-dialogue-form.tsx`, `lib/domain/visits.ts`, `app/api/visits/submit/route.ts`, `gas/src/modules/CareFormModule.gs`.
+- **Added on:** 2026-10-31
+
 ## Lesson: Desk paper KEY skips 未遇 photo／GPS
 
 - **Trigger:** 公所代填紙本 KEY still looked like field 未遇 (photos + GPS), and client/`validateVisitSubmission` required 3 slot photos so one-slot desk papers (incl. 一鍵未遇) failed.
 - **Cause:** Field rule「未遇 3–5 時段各一張＋定位」was applied to desk; API already wanted floor=1 for desk but shared validator still used `missedVisitMinSlots`.
-- **Rule:** Desk (`isDeskEntry` / `deskEntry`): `minMissedPhotoSlots: 1` + `requireMissedGps: false`; keep time-slot chips only (synthetic `photoNames` labels); **hide** photo upload UI for desk 未遇. Field visitors unchanged (3–5 photos + GPS).
+- **Rule:** Superseded 2026-10-31: all 未遇 paths skip photos via `missedVisitPhotosRequired=false` (desk chips remain optional).
 - **Evidence:** `lib/domain/visits.ts`, `components/visitor/visit-dialogue-form.tsx`, `app/api/visits/submit/route.ts`.
 - **Added on:** 2026-10-29
 
@@ -90,7 +98,7 @@
 
 - **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
 - **Cause:** Old U2 expand-missed always spawned D-2／D-1 papers after first 未遇 submit.
-- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note `D-2 09:00；D-1 14:00；D+start` via `buildDeskOnePaperMissedNote` into **`living_address_other`（居住-其他說明）** and `visit_notes`（補充紀錄）; also set `living_address_type=查無此人`（該類型下其他說明必填）. Submit one paper (`visitResult=未遇`, 住址不詳 sets `visit_status=住址不詳`); `skipMissedExpand` + `closeAsMissedTriple`; advance continuous KEY. Manual 未遇 checkbox can still expand three papers. 「一鍵拒訪」: date+start; `visitResult=拒訪` / `visit_status=拒絕訪視`; fixed note `紙本拒訪`; **keep** on-screen 民政／社政訪查人; one paper + next. 「Pass（下次再 KEY）」: **不送出**；batch 標 `skipped`、進下一筆；清單顯示「下次再 KEY／補 KEY」，進表時 `revive` 回 `ready`。
+- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note via `buildDeskOnePaperMissedNote` into **`living_address_other`** and `visit_notes`; `living_address_type=查無此人`（住址不詳→`visit_status=住址不詳`）; one paper + `skipMissedExpand`. **Manual 未遇／visitor 未遇 same one-paper path** (no expand). 「一鍵拒訪」: `visitResult=拒訪` / `visit_status=拒絕訪視`; note `紙本拒訪`; keep 民政／社政. 「Pass」: 不送出、標 skipped、可補 KEY。
 - **Evidence:** `lib/domain/desk-care-batch.ts`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-28
 

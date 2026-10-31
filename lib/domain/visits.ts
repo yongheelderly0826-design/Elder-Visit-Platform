@@ -2,11 +2,14 @@ import type { ElderCase, VisitSchedule, VisitSubmission } from "@/lib/domain/typ
 
 export const missedVisitClosureAttempt = 3;
 
-/** 未遇佐證時段：至少 3、最多 5 個不同時段各留一張現場照。 */
+/** 未遇佐證時段標籤（照片／紙本勾選共用）；目前未遇改一張紙＋三次時間備註，照片暫不強制。 */
 export const missedVisitTimeSlots = ["上午", "中午", "下午", "傍晚", "夜間"] as const;
 export type MissedVisitTimeSlot = (typeof missedVisitTimeSlots)[number];
+/** 歷史欄位：曾要求 3–5 時段照片；`missedVisitPhotosRequired=false` 時驗證下限改為 0。 */
 export const missedVisitMinSlots = 3;
 export const missedVisitMaxSlots = missedVisitTimeSlots.length;
+/** 政策開關：未遇時段佐證照片／GPS 暫不強制（先取消）。 */
+export const missedVisitPhotosRequired = false;
 
 export function parseMissedVisitPhotoSlot(photoName: string): MissedVisitTimeSlot | null {
   const label = String(photoName ?? "").split("：")[0]?.trim();
@@ -49,14 +52,16 @@ export function validateVisitSubmission(
   submission: VisitSubmission,
   options?: {
     requireMissedGps?: boolean;
-    /** 未遇時段／佐證下限；紙本公所代填可為 1（僅勾時段、無需實拍）或 0（完全略過）。 */
+    /** 未遇時段／佐證下限；0＝不要求（現行一張紙政策）。 */
     minMissedPhotoSlots?: number;
   },
 ) {
   const missing: string[] = [];
   const hasGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
-  const requireMissedGps = options?.requireMissedGps !== false;
-  const minMissedPhotoSlots = options?.minMissedPhotoSlots ?? missedVisitMinSlots;
+  const defaultRequireGps = missedVisitPhotosRequired;
+  const defaultMinSlots = missedVisitPhotosRequired ? missedVisitMinSlots : 0;
+  const requireMissedGps = options?.requireMissedGps ?? defaultRequireGps;
+  const minMissedPhotoSlots = options?.minMissedPhotoSlots ?? defaultMinSlots;
 
   if (!submission.visitResult) {
     missing.push("訪查結果");

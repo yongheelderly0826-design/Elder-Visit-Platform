@@ -68,7 +68,7 @@ export function TaskCard({
           <p className="font-medium">未遇續訪任務</p>
           <p className="mt-1 flex items-start gap-2 leading-6">
             <Camera className="mt-0.5 h-4 w-4 shrink-0" />
-            若本次仍未遇，送出前需補上現場照片與自動定位。
+            若本次仍未遇，一張紙結案即可（三次時間寫入備註；照片／定位暫不強制）。
           </p>
         </div>
       )}

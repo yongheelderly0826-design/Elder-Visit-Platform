@@ -2,7 +2,8 @@ var CareFormModule = (function () {
   var SHEET = Config.SHEET_NAMES.CAREFORMS;
   var MISSED_SHEET = Config.SHEET_NAMES.MISSED;
   var MISSED_SLOTS = ['上午', '中午', '下午', '傍晚', '夜間'];
-  var MISSED_MIN_SLOTS = 3;
+  /** 未遇佐證照片下限；0＝暫不強制（一張紙＋三次時間寫備註）。 */
+  var MISSED_MIN_SLOTS = 0;
 
   function get(assignmentId) {
     var rows = SheetHelper.findByKey(SHEET, 'assignment_id', assignmentId);
@@ -116,13 +117,15 @@ var CareFormModule = (function () {
     var answers = data.answers || {};
 
     if (isMissed) {
-      var slotSource = (data.missed_visit_photos && data.missed_visit_photos.length)
-        ? data.missed_visit_photos
-        : data.photos;
-      if (countMissedSlots_(slotSource) < MISSED_MIN_SLOTS) {
-        var serr = new Error('未遇需至少 ' + MISSED_MIN_SLOTS + ' 個不同時段的佐證照片');
-        serr.code = 'VALIDATION_ERROR';
-        throw serr;
+      if (MISSED_MIN_SLOTS > 0) {
+        var slotSource = (data.missed_visit_photos && data.missed_visit_photos.length)
+          ? data.missed_visit_photos
+          : data.photos;
+        if (countMissedSlots_(slotSource) < MISSED_MIN_SLOTS) {
+          var serr = new Error('未遇需至少 ' + MISSED_MIN_SLOTS + ' 個不同時段的佐證照片');
+          serr.code = 'VALIDATION_ERROR';
+          throw serr;
+        }
       }
     } else if (!data.answers) {
       var aerr = new Error('answers required');

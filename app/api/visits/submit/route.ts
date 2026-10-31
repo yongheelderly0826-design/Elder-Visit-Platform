@@ -11,7 +11,6 @@ import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
 import {
   getPaymentEligibility,
-  missedVisitMinSlots,
   validateVisitSubmission,
 } from "@/lib/domain/visits";
 import { getSystemStatus } from "@/lib/system/env";
@@ -58,12 +57,10 @@ export async function POST(request: NextRequest) {
     notes: body.notes,
   };
 
-  // 紙本／公所代填：無需實拍與 GPS；時段以 photoNames 標籤記錄（至少 1）。
-  const deskEntry = body.deskEntry === true;
-  const missedSlotFloor = deskEntry ? 1 : missedVisitMinSlots;
+  // 未遇照片／GPS 暫不強制（一張紙＋三次時間備註）；desk／visitor 皆可 0 張送出。
   const validation = validateVisitSubmission(submission, {
-    requireMissedGps: !deskEntry,
-    minMissedPhotoSlots: missedSlotFloor,
+    requireMissedGps: false,
+    minMissedPhotoSlots: 0,
   });
 
   if (!validation.ok) {

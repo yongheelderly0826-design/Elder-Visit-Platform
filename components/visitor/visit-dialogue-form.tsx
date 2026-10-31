@@ -67,9 +67,7 @@ import {
   countMissedVisitPhotoSlots,
   getMissedVisitPolicy,
   getPaymentEligibility,
-  missedVisitClosureAttempt,
   missedVisitMaxSlots,
-  missedVisitMinSlots,
   missedVisitTimeSlots,
   type MissedVisitTimeSlot,
   validateVisitSubmission,
@@ -297,9 +295,6 @@ export function VisitDialogueForm({
     useDeskFormDefaults ? ":desk_defaults_v6" : ":phone_lead0_v1"
   }`;
   const deskPaperMissed = isDeskEntry && submission.visitResult === "未遇";
-  /** 紙本一張＝一次訪視：至少勾本趟 1 個時段；現場外勤仍要 3–5 個不同時段照片。 */
-  const deskPaperSlotsOk =
-    !deskPaperMissed || new Set(deskPaperSlots).size >= 1;
   const effectivePhotoNames = useMemo(
     () =>
       deskPaperMissed
@@ -314,12 +309,11 @@ export function VisitDialogueForm({
       validateVisitSubmission(
         { scheduleId: schedule.id, ...submission, photoNames: effectivePhotoNames },
         {
-          // 紙本／公所代填：無實拍與 GPS；時段標籤至少 1（對應紙本勾選）。
-          requireMissedGps: !isDeskEntry,
-          minMissedPhotoSlots: isDeskEntry ? 1 : missedVisitMinSlots,
+          requireMissedGps: false,
+          minMissedPhotoSlots: 0,
         },
       ),
-    [effectivePhotoNames, isDeskEntry, schedule.id, submission],
+    [effectivePhotoNames, schedule.id, submission],
   );
   const paymentEligibility = useMemo(
     () => getPaymentEligibility({ scheduleId: schedule.id, ...submission }),
@@ -371,15 +365,10 @@ export function VisitDialogueForm({
   const activePhotoCategories = optionalPhotoCategories;
   const hasVisitGps = typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number";
   const missedSlotCount = countMissedVisitPhotoSlots(effectivePhotoNames);
-  const needsMissedVisitEvidence =
-    isMissedVisit &&
-    !deskPaperMissed &&
-    (missedSlotCount < missedVisitMinSlots || (!isDeskEntry && !hasVisitGps));
   const canSubmitVisit =
     !readonly &&
     validation.ok &&
     !isSubmitting &&
-    deskPaperSlotsOk &&
     (isMissedVisit || (careFormCompletion.percent >= 100 && mohwValidation.ok));
   const locationLabel =
     typeof submission.gpsLat === "number" && typeof submission.gpsLng === "number"
@@ -562,15 +551,62 @@ export function VisitDialogueForm({
     setResult(null);
     setMohwErrors([]);
 
-    const nextSubmission = {
+    let nextSubmission = {
       ...submission,
       ...options?.submissionOverride,
     };
+    let answersPatch: Partial<MohwLifeCareAnswers> = { ...options?.answersPatch };
+    // 未遇／住址不詳：一律一張紙結案，不呼叫 expand-missed。
+    const isOnePaperMissed = nextSubmission.visitResult === "未遇";
+    if (isOnePaperMissed) {
+      const visitDateRaw =
+        normalizeDeskVisitDateToIso(String(answersPatch.visit_date || careFormAnswers.visit_date || "")) ||
+        normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
+        normalizeDeskVisitDateToIso(schedule.visitDate) ||
+        "";
+      const visitStartTime =
+        String(answersPatch.visit_start_time || careFormAnswers.visit_start_time || "")
+          .trim()
+          .slice(0, 5) || String(initialTimes?.visitStartTime || "").trim().slice(0, 5);
+      const alreadyHasTripleNote =
+        String(answersPatch.living_address_other || careFormAnswers.living_address_other || "").includes(
+          "訪視未遇",
+        ) || String(nextSubmission.notes || "").includes("訪視未遇");
+      if (!alreadyHasTripleNote) {
+        const note = buildDeskOnePaperMissedNote({
+          visitDateRaw,
+          visitStartTime,
+        });
+        if (!note) {
+          setResult("請先填訪視日期與起始時間，系統會寫入三次未遇時間備註。");
+          setIsSubmitting(false);
+          return;
+        }
+        const priorNotes = String(answersPatch.visit_notes || careFormAnswers.visit_notes || "").trim();
+        answersPatch = {
+          ...answersPatch,
+          living_address_other: note,
+          visit_notes: priorNotes && !priorNotes.includes("訪視未遇") ? `${priorNotes}；${note}` : note,
+          living_address_type:
+            answersPatch.living_address_type ||
+            careFormAnswers.living_address_type ||
+            "查無此人",
+          visit_status: answersPatch.visit_status || careFormAnswers.visit_status || "查無此人",
+        };
+        nextSubmission = {
+          ...nextSubmission,
+          notes: [nextSubmission.notes, note].filter(Boolean).join("；"),
+          healthStatus: nextSubmission.healthStatus || "未遇無法評估",
+          livingStatus: nextSubmission.livingStatus || "未遇無法評估",
+        };
+      }
+    }
+
     const workingSlots =
       options?.deskSlotsOverride ??
-      (isDeskEntry && nextSubmission.visitResult === "未遇" ? deskPaperSlots : deskPaperSlots);
+      (isOnePaperMissed && deskPaperSlots.length === 0 ? (["夜間"] as MissedVisitTimeSlot[]) : deskPaperSlots);
     const workingPhotoNames =
-      isDeskEntry && nextSubmission.visitResult === "未遇"
+      isDeskEntry && isOnePaperMissed
         ? workingSlots.map((slot) => `${slot}：紙本·第${schedule.visitAttempt}次`)
         : nextSubmission.photoNames;
 
@@ -578,26 +614,33 @@ export function VisitDialogueForm({
       normalizeMohwAnswersOptions(
         syncMohwConsentFromSubmission(
           syncMohwVisitMetaFromSubmission(
-            { ...careFormAnswers, ...options?.answersPatch },
+            { ...careFormAnswers, ...answersPatch },
             nextSubmission,
           ),
           nextSubmission,
         ),
       ),
     );
-    if (options?.answersPatch?.visit_status) {
-      synced = { ...synced, visit_status: options.answersPatch.visit_status };
+    if (answersPatch.visit_status) {
+      synced = { ...synced, visit_status: answersPatch.visit_status };
     }
-    if (options?.answersPatch?.visit_notes) {
-      synced = { ...synced, visit_notes: options.answersPatch.visit_notes };
+    if (answersPatch.visit_notes) {
+      synced = { ...synced, visit_notes: answersPatch.visit_notes };
+    }
+    if (answersPatch.living_address_other) {
+      synced = { ...synced, living_address_other: answersPatch.living_address_other };
+    }
+    if (answersPatch.living_address_type) {
+      synced = { ...synced, living_address_type: answersPatch.living_address_type };
     }
     const mohwAnswers = useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced;
     setCareFormAnswers(mohwAnswers);
     setSubmission(nextSubmission);
-    if (options?.deskSlotsOverride) {
-      setDeskPaperSlots(options.deskSlotsOverride);
+    if (options?.deskSlotsOverride || (isOnePaperMissed && deskPaperSlots.length === 0)) {
+      setDeskPaperSlots(workingSlots);
     }
-    deskSkipMissedExpandRef.current = Boolean(options?.skipMissedExpand);
+    // 未遇一律不 expand；拒訪等快速鍵也可顯式 skip。
+    deskSkipMissedExpandRef.current = isOnePaperMissed || Boolean(options?.skipMissedExpand);
 
     if (nextSubmission.visitResult !== "未遇") {
       const localCheck = validateMohwLifeCareRow(mohwAnswers, {
@@ -619,18 +662,14 @@ export function VisitDialogueForm({
     }
 
     const missedPhotos =
-      isDeskEntry && nextSubmission.visitResult === "未遇"
+      isDeskEntry && isOnePaperMissed
         ? []
         : missedVisitTimeSlots
             .map((slot) => missedSlotPhotos[slot])
             .filter((item): item is MissedSlotPhoto => Boolean(item));
 
     const deskAttemptNote =
-      isDeskEntry && nextSubmission.visitResult === "未遇"
-        ? options?.skipMissedExpand
-          ? "一鍵未遇（一張紙・備註三次時段）"
-          : `第${schedule.visitAttempt}次未遇紙本 時段(${workingSlots.join("、") || "—"})`
-        : "";
+      isDeskEntry && isOnePaperMissed ? "未遇（一張紙・備註三次時段）" : "";
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
@@ -653,10 +692,7 @@ export function VisitDialogueForm({
         registryNationalId: elderCase.nationalId ?? "",
         deskEntry: isDeskEntry,
         closeAsMissedTriple:
-          Boolean(options?.closeAsMissedTriple) ||
-          (isDeskEntry &&
-            nextSubmission.visitResult === "未遇" &&
-            schedule.visitAttempt >= missedVisitClosureAttempt),
+          Boolean(options?.closeAsMissedTriple) || isOnePaperMissed,
         missedVisitPhotos: missedPhotos.map((item) => ({
           slot: item.slot,
           fileName: item.fileName,
@@ -942,7 +978,7 @@ export function VisitDialogueForm({
       toastMessage =
         input.visitResult === "拒訪"
           ? "已一鍵拒訪送出，進入下一筆"
-          : "已一鍵送出（一張紙・備註三次時段），進入下一筆";
+          : "已送出（一張紙・備註三次時段），進入下一筆";
     } else if (input.visitResult === "未遇" && input.visitDateRaw) {
       try {
         const expandRes = await fetch("/api/manager/care-forms/expand-missed", {
@@ -1208,7 +1244,7 @@ export function VisitDialogueForm({
         </p>
         {isDeskEntry && !isAuditCorrection ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            一般完成一張即可。手動勾「未遇」仍可走三張補件；快速鍵一張紙結案或 Pass 略過。紙本不全請用
+            一般完成一張即可。「未遇／住址不詳」不論手動勾選或快速鍵，皆一張紙結案（三次時間寫入居住-其他說明與備註），不另建補件。紙本不全請用
             Pass。
           </p>
         ) : null}
@@ -1617,23 +1653,14 @@ export function VisitDialogueForm({
         {deskPaperMissed ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
             <h2 className="text-sm font-semibold text-amber-950">
-              本張紙本・第 {schedule.visitAttempt} 次未遇時段
+              未遇・一張紙結案
               {initialDeskPaperKey ? `（${initialDeskPaperKey}）` : ""}
             </h2>
             <p className="mt-1 text-sm leading-6 text-amber-900/90">
-              一張紙＝一次訪視：請勾本趟對應時段（早→上午、中→中午、晚→夜間）。紙本佐證即可，無需拍照或定位。
-              {schedule.visitAttempt < missedVisitClosureAttempt
-                ? ` 未遇滿 ${missedVisitClosureAttempt} 張後可結案；若這是第一張未遇，送出後會自動補另兩張紙本。`
-                : ` 已達第 ${missedVisitClosureAttempt} 次，可送出後由督導結案。`}
+              送出時會依訪視日期／起始時間，把三次未遇時間寫入「居住-其他說明」與備註；不另建兩張補件，也無需拍照或定位。下方時段勾選為選填。
             </p>
-            <p
-              className={`mt-3 rounded-md border px-3 py-2 text-sm ${
-                deskPaperSlotsOk
-                  ? "border-primary/30 bg-card text-primary"
-                  : "border-amber-300 bg-card text-amber-950"
-              }`}
-            >
-              已勾 {new Set(deskPaperSlots).size}／至少 1
+            <p className="mt-3 rounded-md border border-primary/30 bg-card px-3 py-2 text-sm text-primary">
+              已勾時段 {new Set(deskPaperSlots).size}（選填）
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {missedVisitTimeSlots.map((slot) => {
@@ -1662,26 +1689,19 @@ export function VisitDialogueForm({
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">
-                {isMissedVisit ? "未遇時段佐證（3–5 時段拍照）" : "拍照上傳（選填）"}
+                {isMissedVisit ? "未遇現場照片（選填）" : "拍照上傳（選填）"}
               </h2>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {isMissedVisit
-                ? `訪視未遇時，請在不同時段各拍一張門口／現場照片作為空訪紀錄（至少 ${missedVisitMinSlots} 個時段，最多 ${missedVisitMaxSlots} 個）。選照片時會自動取得定位並上傳存檔。`
-                : "一般訪視照片為選填；若結果改為「未遇」，需改填下方 3–5 個時段佐證。"}
+                ? `未遇改為一張紙結案：三次時間會寫入「居住-其他說明」與備註，照片與定位暫不強制。若要留存現場照，最多可選 ${missedVisitMaxSlots} 個時段上傳。`
+                : "一般訪視照片為選填；若結果改為「未遇」，同樣一張紙結案，照片非必填。"}
             </p>
             {isMissedVisit ? (
               <>
-                <p
-                  className={`mt-3 rounded-md border p-2 text-xs ${
-                    needsMissedVisitEvidence
-                      ? "border-amber-200 bg-amber-50 text-amber-900"
-                      : "border-primary/20 bg-primary/5 text-primary"
-                  }`}
-                >
-                  時段進度：{missedSlotCount}／{missedVisitMaxSlots}
-                  （至少需 {missedVisitMinSlots} 個時段）
-                  {hasVisitGps ? " · 定位已取得" : " · 尚缺定位"}
+                <p className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-2 text-xs text-primary">
+                  已上傳時段：{missedSlotCount}／{missedVisitMaxSlots}（選填）
+                  {hasVisitGps ? " · 定位已取得" : " · 定位選填"}
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {missedVisitTimeSlots.map((slot) => {
@@ -2915,7 +2935,7 @@ function SubmissionStatus({
         <p className="text-destructive">關懷表有 {mohwErrorCount} 項需修改，請看紅字說明</p>
       )}
       {isMissedVisit && validationOk && (
-        <p className="text-muted-foreground">未遇：已備齊時段佐證與定位，可送出空訪紀錄</p>
+        <p className="text-muted-foreground">未遇：一張紙結案（三次時間寫入備註），可送出</p>
       )}
       {result && (result.includes("需") || result.includes("失敗") ? (
         <p className="font-medium text-destructive">{result}</p>
