@@ -812,6 +812,71 @@ export function mapMohwErrorsToFields(
   return map;
 }
 
+function colLetterToIndex(letter: string): number {
+  let n = 0;
+  for (const ch of letter.toUpperCase()) {
+    n = n * 26 + (ch.charCodeAt(0) - 64);
+  }
+  return n;
+}
+
+function guessMohwErrorCode(message: string): MohwValidationError["code"] {
+  if (message.includes("擇一必填") && message.includes("訪查人")) return "VISITOR_REQUIRED";
+  if (message.includes("電話") && message.includes("手機") && message.includes("擇一")) return "PHONE_OR_MOBILE";
+  if (message.includes("身分證") && message.includes("格式")) return "INVALID_NATIONAL_ID";
+  if (message.includes("無個案")) return "CASE_NOT_FOUND";
+  if (message.includes("查無此里")) return "VILLAGE_NOT_FOUND";
+  if (message.includes("條件必填") || message.includes("為必填") || message.includes("必須填")) return "REQUIRED";
+  if (message.includes("字數")) return "MAX_LENGTH";
+  if (message.includes("時間")) return "INVALID_TIME";
+  if (message.includes("選項")) return "INVALID_OPTION";
+  return "REQUIRED";
+}
+
+export type MohwAuditErrorHint = {
+  cell: string;
+  key: string;
+  fieldLabel: string;
+  /** 白話：要改哪裡 */
+  action: string;
+  raw: string;
+};
+
+/** 稽核佇列 error_lines（如 `CW2 …`）→ 欄位中文＋修改說明，供進表修正導航。 */
+export function humanizeMohwAuditErrorLine(line: string): MohwAuditErrorHint {
+  const text = String(line ?? "").trim();
+  const match = text.match(/^([A-Za-z]+)(\d+)\s+(.+)$/);
+  if (!match) {
+    return {
+      cell: "",
+      key: "",
+      fieldLabel: "關懷表欄位",
+      action: text || "請進表檢查紅字欄位",
+      raw: text,
+    };
+  }
+  const colLetter = match[1].toUpperCase();
+  const cell = `${colLetter}${match[2]}`;
+  const column = MOHW_LIFE_CARE_COLUMNS.find((item) => item.col === colLetterToIndex(colLetter));
+  const key = column?.key ?? "";
+  const fieldLabel = column
+    ? column.header.replace(/\s*\*+$/, "").replace(/\*$/, "")
+    : colLetter;
+  const message = match[3].trim();
+  const code = guessMohwErrorCode(message);
+  const action = visitorFacingMohwError({
+    cell,
+    col: column?.col ?? 0,
+    colLetter,
+    key: key || "unknown",
+    label: fieldLabel,
+    code,
+    message,
+    display: text,
+  });
+  return { cell, key, fieldLabel, action, raw: text };
+}
+
 /** Plain-language copy for 訪查員. Keep Excel coordinates on manager export only. */
 export function visitorFacingMohwError(error: MohwValidationError): string {
   switch (error.code) {

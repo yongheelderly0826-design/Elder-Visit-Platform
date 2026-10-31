@@ -23,6 +23,7 @@ export default async function ManagerCareFormFillPage({
     villageCode?: string;
     missedSlot?: string;
     paperKey?: string;
+    focus?: string;
   }>;
 }) {
   const role = (await cookies()).get("demo_role")?.value;
@@ -99,6 +100,7 @@ export default async function ManagerCareFormFillPage({
         }}
         initialDeskMissedSlot={query.missedSlot}
         initialDeskPaperKey={query.paperKey}
+        initialFocusField={query.focus}
       />
     </AppShell>
   );

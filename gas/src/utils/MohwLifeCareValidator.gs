@@ -275,14 +275,26 @@ var MohwLifeCareValidator = (function () {
       pushErr(errors, 'social_worker_role', row, '社政訪查人與民政訪查人擇一必填');
     }
 
+    var socialKeys = options.allowMissingWorkerNationalId
+      ? ['social_worker_role', 'social_worker_name', 'social_worker_phone', 'social_worker_date']
+      : ['social_worker_role', 'social_worker_name', 'social_worker_national_id', 'social_worker_phone', 'social_worker_date'];
+    var civilKeys = options.allowMissingWorkerNationalId
+      ? ['civil_worker_role', 'civil_worker_name', 'civil_worker_phone', 'civil_worker_date']
+      : ['civil_worker_role', 'civil_worker_name', 'civil_worker_national_id', 'civil_worker_phone', 'civil_worker_date'];
     if (hasSocial) {
-      ['social_worker_role', 'social_worker_name', 'social_worker_national_id', 'social_worker_phone', 'social_worker_date'].forEach(function (k) {
-        if (!hasValue(answers[k])) pushErr(errors, k, row, '社政訪查人欄位為必填');
+      socialKeys.forEach(function (k) {
+        if (!hasValue(answers[k])) {
+          var hi = keyIndex(k);
+          pushErr(errors, k, row, (headers[hi - 1] || k).replace(/\s*\*+$/, '').replace(/\*$/, '') + '為必填（已填社政訪查人）');
+        }
       });
     }
     if (hasCivil) {
-      ['civil_worker_role', 'civil_worker_name', 'civil_worker_national_id', 'civil_worker_phone', 'civil_worker_date'].forEach(function (k) {
-        if (!hasValue(answers[k])) pushErr(errors, k, row, '民政訪查人欄位為必填');
+      civilKeys.forEach(function (k) {
+        if (!hasValue(answers[k])) {
+          var hi2 = keyIndex(k);
+          pushErr(errors, k, row, (headers[hi2 - 1] || k).replace(/\s*\*+$/, '').replace(/\*$/, '') + '為必填（已填民政訪查人）');
+        }
       });
     }
 

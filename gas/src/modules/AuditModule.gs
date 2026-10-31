@@ -47,8 +47,15 @@ var AuditModule = (function () {
     var answers = MohwLifeCareMapper.mergeInputs({ careform: careform, caseRow: caseRow });
     var validation = { ok: true, errorLines: [], errors: [] };
     if (typeof MohwLifeCareValidator !== 'undefined') {
+      // 紙本／公所代填：與 desk KEY 一致，訪查人身分證可暫缺（仍要姓名／身分／電話／日期）
+      var noteBlob = String(assignment.notes || '') + '|' + String(careform.notes || '');
+      var deskPaper =
+        noteBlob.indexOf('公所代填') !== -1 ||
+        noteBlob.indexOf('紙本') !== -1 ||
+        noteBlob.indexOf('desk') !== -1;
       validation = MohwLifeCareValidator.validateRow(answers, 2, {
-        registryNationalId: caseRow.id_number || caseRow.national_id || ''
+        registryNationalId: caseRow.id_number || caseRow.national_id || '',
+        allowMissingWorkerNationalId: deskPaper
       });
     }
 

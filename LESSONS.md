@@ -6,6 +6,13 @@
 - **Evidence:** `lib/domain/mohw-life-care-validation.ts` (`workerSideStarted`), `gas/src/utils/MohwLifeCareValidator.gs`, `lib/domain/mohw-desk-form-defaults.ts`.
 - **Added on:** 2026-10-31
 
+## Lesson: Audit errors must show field + jump; desk paper ID soft on audit
+
+- **Trigger:** 稽核卡只顯示 `CW2 …` 等 Excel 座標；紙本 KEY 送出時身分證可暫缺，稽核重驗卻強制 CW2 卡住。
+- **Rule:** `humanizeMohwAuditErrorLine` → 中文欄位＋白話說明＋`?focus=` 進表跳欄。AuditModule 對「公所代填／紙本」用 `allowMissingWorkerNationalId`（與 desk KEY 一致）。民政／社政是「至少一邊、兩邊也可」：兩邊都開始填（身分／姓名／證號／電話任一）才兩邊都要齊。
+- **Evidence:** `audit-queue-card.tsx`, `mohw-life-care-validation.ts`, `AuditModule.gs`, `MohwLifeCareValidator.gs`.
+- **Added on:** 2026-10-31
+
 ## Lesson: 1人獨自居住 must hide and clear cohabitant fields
 
 - **Trigger:** User selected `1人獨自居住` but still saw required `同住者為`／`同住者年齡` (desk defaults left `cohabitation_status=同住者有照顧能力`).

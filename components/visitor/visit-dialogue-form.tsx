@@ -177,6 +177,7 @@ export function VisitDialogueForm({
   formDefaults = "roster",
   initialDeskMissedSlot,
   initialDeskPaperKey,
+  initialFocusField,
 }: {
   elderCase: ElderCase;
   schedule: VisitSchedule;
@@ -200,6 +201,8 @@ export function VisitDialogueForm({
   /** 未遇補件紙本：預選 MissedVisitTimeSlot（上午／中午／夜間） */
   initialDeskMissedSlot?: string;
   initialDeskPaperKey?: string;
+  /** 稽核「前往修改」：進表後跳到該 MOHW key */
+  initialFocusField?: string;
 }) {
   const router = useRouter();
   const seededMissedSlot = (missedVisitTimeSlots as readonly string[]).includes(
@@ -432,6 +435,15 @@ export function VisitDialogueForm({
     readonly,
     schedule.id,
   ]);
+
+  useEffect(() => {
+    const key = String(initialFocusField ?? "").trim();
+    if (!key) return;
+    const timer = window.setTimeout(() => {
+      openAndJumpToCareField(key, setOpenSectionTitles);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [initialFocusField]);
 
   useEffect(() => {
     if (readonly) return;

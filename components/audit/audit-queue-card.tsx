@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCan } from "@/components/auth/permission-provider";
 import { Button } from "@/components/ui/button";
+import { humanizeMohwAuditErrorLine } from "@/lib/domain/mohw-life-care-validation";
 import { getAuditFormReviewItems } from "@/lib/domain/visit-form-flow";
 import type {
   AuditDecisionResult,
@@ -141,12 +142,41 @@ export function AuditQueueCard({
       </div>
 
       {item.errorLines && item.errorLines.length > 0 ? (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-          <p className="font-medium">驗證錯誤（前 {item.errorLines.length} 筆）</p>
-          <ul className="mt-2 max-h-28 list-disc space-y-1 overflow-auto pl-4 font-mono">
-            {item.errorLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="font-medium">
+            需修改 {item.errorLines.length} 處（點「前往修改」會進表並跳到該欄）
+          </p>
+          <ul className="mt-2 max-h-48 space-y-2 overflow-auto">
+            {item.errorLines.map((line) => {
+              const hint = humanizeMohwAuditErrorLine(line);
+              const fixHref = item.assignmentId
+                ? `/manager/care-forms/${encodeURIComponent(item.assignmentId)}?return=/manager/audit${
+                    hint.key ? `&focus=${encodeURIComponent(hint.key)}` : ""
+                  }`
+                : null;
+              return (
+                <li
+                  key={line}
+                  className="rounded-md border border-amber-200/80 bg-white/70 px-3 py-2"
+                >
+                  <p className="font-semibold">{hint.fieldLabel}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-amber-900/90">{hint.action}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    {hint.cell ? (
+                      <span className="font-mono text-[10px] text-muted-foreground">{hint.cell}</span>
+                    ) : null}
+                    {fixHref ? (
+                      <Link
+                        href={fixHref}
+                        className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                      >
+                        前往修改
+                      </Link>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -217,7 +247,14 @@ export function AuditQueueCard({
         {item.assignmentId ? (
           <Button asChild variant="secondary" className="w-full">
             <Link
-              href={`/manager/care-forms/${encodeURIComponent(item.assignmentId)}?return=/manager/audit`}
+              href={`/manager/care-forms/${encodeURIComponent(item.assignmentId)}?return=/manager/audit${
+                item.errorLines?.[0]
+                  ? (() => {
+                      const key = humanizeMohwAuditErrorLine(item.errorLines[0]).key;
+                      return key ? `&focus=${encodeURIComponent(key)}` : "";
+                    })()
+                  : ""
+              }`}
             >
               <FilePenLine className="h-4 w-4" />
               進表修正
