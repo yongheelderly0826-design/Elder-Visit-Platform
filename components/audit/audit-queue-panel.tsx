@@ -1,8 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Loader2, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
-import { AuditQueueCard } from "@/components/audit/audit-queue-card";
+import {
+  ClipboardCheck,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  Stamp,
+  UserRound,
+} from "lucide-react";
+import { AuditQueueCard, isAuditItemApprovable } from "@/components/audit/audit-queue-card";
+import { useCan } from "@/components/auth/permission-provider";
 import { ManagementWorkflowBar } from "@/components/manage/management-workflow-bar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -37,13 +45,16 @@ function groupByVisitor(items: AuditQueueItem[]) {
 }
 
 export function AuditQueuePanel() {
+  const canApproveAudit = useCan("audit.approve");
   const [pendingItems, setPendingItems] = useState<AuditQueueItem[]>([]);
   const [supplementItems, setSupplementItems] = useState<AuditQueueItem[]>([]);
   const [mode, setMode] = useState<"gas" | "demo">("demo");
   const [note, setNote] = useState<string | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [onlyValidationFailed, setOnlyValidationFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -61,6 +72,7 @@ export function AuditQueuePanel() {
       setPendingItems(json.data?.pendingItems ?? json.data?.items ?? []);
       setSupplementItems(json.data?.supplementItems ?? []);
       setHiddenIds(new Set());
+      setSelectedIds(new Set());
       setMode(json.data?.mode ?? "demo");
       setNote(json.data?.note ?? null);
     } catch {
@@ -89,8 +101,90 @@ export function AuditQueuePanel() {
     });
   }, [pendingItems, hiddenIds, onlyValidationFailed]);
 
+  const approvableVisible = useMemo(
+    () => visiblePending.filter((item) => isAuditItemApprovable(item)),
+    [visiblePending],
+  );
+
+  const selectedApprovableCount = useMemo(
+    () => approvableVisible.filter((item) => selectedIds.has(item.id)).length,
+    [approvableVisible, selectedIds],
+  );
+
   const pendingByVisitor = groupByVisitor(visiblePending);
   const supplementByVisitor = groupByVisitor(supplementItems);
+
+  function selectAllApprovable() {
+    setSelectedIds(new Set(approvableVisible.map((item) => item.id)));
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function approveAuditIds(ids: string[]) {
+    if (!ids.length || !canApproveAudit) return;
+    setBulkBusy(true);
+    setMessage(`正在批次核准 0／${ids.length}…`);
+    let ok = 0;
+    let fail = 0;
+    const failSamples: string[] = [];
+    const approved = new Set<string>();
+
+    for (let index = 0; index < ids.length; index += 1) {
+      const auditId = ids[index];
+      setMessage(`正在批次核准 ${index + 1}／${ids.length}…`);
+      try {
+        const response = await fetch("/api/audit/decision", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            auditId,
+            decision: "approve",
+            supervisorNote: "批次核准",
+            overrideWarnings: true,
+          }),
+        });
+        if (!response.ok) {
+          fail += 1;
+          const json = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          if (failSamples.length < 3) {
+            failSamples.push(json?.error?.message ?? `核准失敗（${auditId}）`);
+          }
+          continue;
+        }
+        ok += 1;
+        approved.add(auditId);
+      } catch {
+        fail += 1;
+        if (failSamples.length < 3) failSamples.push(`連線失敗（${auditId}）`);
+      }
+    }
+
+    setHiddenIds((current) => {
+      const next = new Set(current);
+      for (const id of approved) next.add(id);
+      return next;
+    });
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of approved) next.delete(id);
+      return next;
+    });
+    setBulkBusy(false);
+    setMessage(
+      `批次核准完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ""}${
+        failSamples.length ? `（${failSamples.join("；")}）` : ""
+      }。核准後可至匯出頁勾選。`,
+    );
+    if (ok > 0) {
+      window.setTimeout(() => {
+        void loadQueue();
+      }, 800);
+    }
+  }
 
   return (
     <div className="grid gap-3">
@@ -115,10 +209,11 @@ export function AuditQueuePanel() {
               type="checkbox"
               checked={onlyValidationFailed}
               onChange={(event) => setOnlyValidationFailed(event.target.checked)}
+              disabled={bulkBusy}
             />
             只顯示驗證失敗（{validationFailedCount}）
           </label>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading || bulkBusy}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             重新整理
           </Button>
@@ -174,6 +269,78 @@ export function AuditQueuePanel() {
               ? "僅列出中央欄位驗證未過的案件。請逐筆「進表修正」→ 送出 → 回此頁重新整理後再「核准」，通過後即可到匯出頁勾選。"
               : "訪員送出關懷表後會出現在這裡；卡片會顯示個案編碼與負責訪員。有驗證紅字請先「進表修正」，通過後再核准才能匯出。"}
           </p>
+          {canApproveAudit && !onlyValidationFailed ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy || loading || approvableVisible.length === 0}
+                onClick={selectAllApprovable}
+              >
+                全選可核准（{approvableVisible.length}）
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy || selectedIds.size === 0}
+                onClick={clearSelection}
+              >
+                清除選取
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={bulkBusy || loading || selectedApprovableCount === 0}
+                onClick={() => {
+                  const ids = approvableVisible
+                    .filter((item) => selectedIds.has(item.id))
+                    .map((item) => item.id);
+                  if (
+                    !window.confirm(
+                      `確定一次核准已選 ${ids.length} 筆？驗證失敗／阻擋案件不會核准。`,
+                    )
+                  ) {
+                    return;
+                  }
+                  void approveAuditIds(ids);
+                }}
+              >
+                {bulkBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Stamp className="h-4 w-4" />
+                )}
+                一次核准已選（{selectedApprovableCount}）
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={bulkBusy || loading || approvableVisible.length === 0}
+                onClick={() => {
+                  const ids = approvableVisible.map((item) => item.id);
+                  if (
+                    !window.confirm(
+                      `確定將目前列表中全部可核准 ${ids.length} 筆一次通過？驗證失敗／未同意／阻擋案件會略過。`,
+                    )
+                  ) {
+                    return;
+                  }
+                  setSelectedIds(new Set(ids));
+                  void approveAuditIds(ids);
+                }}
+              >
+                {bulkBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Stamp className="h-4 w-4" />
+                )}
+                全部可核准一鍵通過（{approvableVisible.length}）
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         {loading && visiblePending.length === 0 ? (
@@ -207,6 +374,15 @@ export function AuditQueuePanel() {
                 <AuditQueueCard
                   key={item.id}
                   item={item}
+                  selected={selectedIds.has(item.id)}
+                  onSelectedChange={(nextSelected) => {
+                    setSelectedIds((current) => {
+                      const next = new Set(current);
+                      if (nextSelected) next.add(item.id);
+                      else next.delete(item.id);
+                      return next;
+                    });
+                  }}
                   onDecided={() =>
                     setHiddenIds((current) => {
                       const next = new Set(current);

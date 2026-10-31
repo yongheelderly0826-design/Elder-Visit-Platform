@@ -22,12 +22,24 @@ import type {
 } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
+export function isAuditItemApprovable(item: AuditQueueItem) {
+  if (item.auditState === "blocked" || item.auditState === "approved" || item.auditState === "rejected") {
+    return false;
+  }
+  if (Array.isArray(item.errorLines) && item.errorLines.length > 0) return false;
+  return item.checks.every((check) => check.severity !== "blocking" || check.passed);
+}
+
 export function AuditQueueCard({
   item,
   onDecided,
+  selected = false,
+  onSelectedChange,
 }: {
   item: AuditQueueItem;
   onDecided?: () => void;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
 }) {
   const isBlocked = item.auditState === "blocked";
   const canApproveAudit = useCan("audit.approve");
@@ -35,6 +47,7 @@ export function AuditQueueCard({
   const canLockPayment = useCan("payments.lock");
   const hasWarnings = item.checks.some((check) => check.severity === "warning" && !check.passed);
   const formReviewItems = getAuditFormReviewItems(item);
+  const approvable = isAuditItemApprovable(item);
   const [supervisorNote, setSupervisorNote] = useState("");
   const [overrideWarnings, setOverrideWarnings] = useState(false);
   const [decisionResult, setDecisionResult] = useState<AuditDecisionResult | null>(null);
@@ -95,27 +108,42 @@ export function AuditQueueCard({
   return (
     <article className="rounded-lg border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">{item.elderName}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{item.caseCode}</p>
-          {item.visitorName || item.visitorId ? (
-            <p className="mt-1 text-sm text-foreground">
-              訪員：{item.visitorName || item.visitorId}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-amber-800">訪員：尚未對到派案資料</p>
-          )}
-          {item.village ? (
-            <p className="mt-1 text-xs text-muted-foreground">{item.village}</p>
+        <div className="flex min-w-0 items-start gap-2">
+          {onSelectedChange ? (
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={selected}
+              disabled={!approvable}
+              title={approvable ? "選取後可批次核准" : "此筆尚不可核准"}
+              onChange={(event) => onSelectedChange(event.target.checked)}
+              aria-label={`選取 ${item.elderName}`}
+            />
           ) : null}
+          <div className="min-w-0">
+            <h2 className="font-semibold">{item.elderName}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{item.caseCode}</p>
+            {item.visitorName || item.visitorId ? (
+              <p className="mt-1 text-sm text-foreground">
+                訪員：{item.visitorName || item.visitorId}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-amber-800">訪員：尚未對到派案資料</p>
+            )}
+            {item.village ? (
+              <p className="mt-1 text-xs text-muted-foreground">{item.village}</p>
+            ) : null}
+          </div>
         </div>
         <span
           className={cn(
             "rounded-md px-2 py-1 text-xs font-medium",
-            isBlocked ? "bg-destructive text-destructive-foreground" : "bg-secondary",
+            isBlocked || !approvable
+              ? "bg-destructive text-destructive-foreground"
+              : "bg-secondary",
           )}
         >
-          {isBlocked ? "阻擋" : "可稽核"}
+          {isBlocked || !approvable ? "阻擋" : "可稽核"}
         </span>
       </div>
 
