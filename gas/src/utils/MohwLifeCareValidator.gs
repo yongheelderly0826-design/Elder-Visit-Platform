@@ -253,18 +253,17 @@ var MohwLifeCareValidator = (function () {
       }
     }
 
+    // 「已開始填」只看身分相關欄；日期 alone 不算（desk 常預填兩邊日期）
     var hasSocial =
       hasValue(answers.social_worker_role) ||
       hasValue(answers.social_worker_name) ||
       hasValue(answers.social_worker_national_id) ||
-      hasValue(answers.social_worker_phone) ||
-      hasValue(answers.social_worker_date);
+      hasValue(answers.social_worker_phone);
     var hasCivil =
       hasValue(answers.civil_worker_role) ||
       hasValue(answers.civil_worker_name) ||
       hasValue(answers.civil_worker_national_id) ||
-      hasValue(answers.civil_worker_phone) ||
-      hasValue(answers.civil_worker_date);
+      hasValue(answers.civil_worker_phone);
 
     if (!hasSocial && !hasCivil) {
       pushErr(errors, 'social_worker_role', row, '社政訪查人與民政訪查人擇一必填');

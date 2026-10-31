@@ -1,3 +1,11 @@
+## Lesson: Worker side 「已開始填」 ignores date-only residue
+
+- **Trigger:** Care form showed「已開始填民政訪查人，請補齊身分／姓名／電話」even when only social was filled (user expected 擇一／至少一邊).
+- **Cause:** `hasCivil`/`hasSocial` treated any filled field including `*_worker_date` as started; desk seed sets both civil and social dates from `visit_date`.
+- **Rule:** A side is 「已開始」only on identity-bearing fields (role／name／national_id／phone)—**not date alone**. Still require at least one complete side; both sides OK when both intentional. Keep seeding both dates for convenience. Align TS + GAS validators.
+- **Evidence:** `lib/domain/mohw-life-care-validation.ts` (`workerSideStarted`), `gas/src/utils/MohwLifeCareValidator.gs`, `lib/domain/mohw-desk-form-defaults.ts`.
+- **Added on:** 2026-10-31
+
 ## Lesson: 社政身分官方四類；關懷表民政／社政至少一邊、兩邊可並存
 
 - **Trigger:** 衛福匯入範本「社政訪查人-身分」僅社會局/處、社工、志工、其他；產品曾把「電話問安」放進社政職稱，且帶入訪員時會清空另一邊。

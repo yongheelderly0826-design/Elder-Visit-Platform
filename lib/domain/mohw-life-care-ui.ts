@@ -56,8 +56,8 @@ const UI_SECTIONS: Array<{ title: string; fromCol: number; toCol: number }> = [
   { title: "問卷：生活困難、社交與服務", fromCol: 56, toCol: 81 },
   { title: "二、訪查員觀察題（用看的，不要直接問）", fromCol: 82, toCol: 89 },
   { title: "個資與健康資料同意（不套印 A3）", fromCol: 90, toCol: 92 },
-  { title: "社政訪查人（不套印 A3）", fromCol: 93, toCol: 98 },
-  { title: "民政訪查人（不套印 A3）", fromCol: 99, toCol: 103 },
+  { title: "社政訪查人（至少一邊／兩邊可；不套印 A3）", fromCol: 93, toCol: 98 },
+  { title: "民政訪查人（至少一邊／兩邊可；不套印 A3）", fromCol: 99, toCol: 103 },
 ];
 
 const CONDITIONAL_RULES: Record<string, MohwFieldCondition[]> = {

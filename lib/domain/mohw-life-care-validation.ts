@@ -333,6 +333,23 @@ function hasValue(value: MohwLifeCareAnswers[string]): boolean {
   return asString(value).length > 0;
 }
 
+/**
+ * Whether a visitor side was intentionally started (identity-bearing fields).
+ * Date alone does not count — desk defaults seed both worker dates from visit_date.
+ */
+export function workerSideStarted(
+  answers: MohwLifeCareAnswers,
+  side: "social" | "civil",
+): boolean {
+  const prefix = side === "social" ? "social_worker" : "civil_worker";
+  return (
+    hasValue(answers[`${prefix}_role`]) ||
+    hasValue(answers[`${prefix}_name`]) ||
+    hasValue(answers[`${prefix}_national_id`]) ||
+    hasValue(answers[`${prefix}_phone`])
+  );
+}
+
 function evalCond(answers: MohwLifeCareAnswers, cond: Cond): boolean {
   if (cond.type === "always") return true;
   if (cond.type === "equals") return asString(answers[cond.key]) === cond.value;
@@ -469,19 +486,11 @@ export function validateMohwLifeCareRow(
     }
   }
 
-  // Social / civil visitor either-or
-  const hasSocial =
-    hasValue(answers.social_worker_role) ||
-    hasValue(answers.social_worker_name) ||
-    hasValue(answers.social_worker_national_id) ||
-    hasValue(answers.social_worker_phone) ||
-    hasValue(answers.social_worker_date);
-  const hasCivil =
-    hasValue(answers.civil_worker_role) ||
-    hasValue(answers.civil_worker_name) ||
-    hasValue(answers.civil_worker_national_id) ||
-    hasValue(answers.civil_worker_phone) ||
-    hasValue(answers.civil_worker_date);
+  // Social / civil: at least one side; both OK.
+  // 「已開始填」只看身分相關欄（身分／姓名／證號／電話），不含日期 alone。
+  // Desk seed often writes both *_worker_date from visit_date; date-only must not force the other side.
+  const hasSocial = workerSideStarted(answers, "social");
+  const hasCivil = workerSideStarted(answers, "civil");
 
   if (!hasSocial && !hasCivil) {
     pushError(errors, {
@@ -826,7 +835,7 @@ export function visitorFacingMohwError(error: MohwValidationError): string {
     case "INVALID_PHONE":
       return error.message;
     case "VISITOR_REQUIRED":
-      return "社政訪查人或民政訪查人請擇一填寫";
+      return "社政訪查人或民政訪查人請至少填一邊（兩邊都填也可以）";
     default:
       return error.message;
   }
