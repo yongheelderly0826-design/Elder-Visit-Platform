@@ -52,13 +52,15 @@ export const deskCivilJobTitles = [
   "電話問安",
 ] as const satisfies readonly VisitorRegistrationJobTitle[];
 
-/** 紙本 KEY 編輯：社政職稱／身分別 */
+/**
+ * 紙本 KEY／關懷表社政職稱／身分別＝衛福官方四類（與匯入範本「社政訪查人-身分」一致）。
+ * 「電話問安」僅屬民政職稱選項，不可出現在社政身分。
+ */
 export const deskSocialJobTitles = [
   "社會局/處",
   "社工",
   "志工",
   "其他",
-  "電話問安",
 ] as const satisfies readonly VisitorRegistrationJobTitle[];
 
 export function deskJobTitlesForWorkerGroup(
@@ -88,12 +90,13 @@ export function mapJobTitleToMohwWorkerRole(
     return { role: "公所人員" };
   }
 
+  // 社政：僅官方四類。舊資料「電話問安」仍落到「其他」以免匯出失敗。
   if (title === "社會局/處") return { role: "社會局/處" };
   if (title === "社工") return { role: "社工" };
   if (title === "志工") return { role: "志工" };
+  if (title === "其他") return { role: "其他", roleOther: undefined };
   if (title === "電話問安") return { role: "其他", roleOther: "電話問安" };
   if (title === "其他（鄰長）") return { role: "其他", roleOther: "鄰長" };
-  if (title === "其他") return { role: "其他", roleOther: undefined };
   // 民政職稱被勾到社政欄時：保守用社會局/處
   return { role: "社會局/處" };
 }

@@ -92,6 +92,7 @@ import {
   insertDeskBatchItemsAfter,
   markDeskBatchItemSkipped,
   normalizeDeskVisitDateToIso,
+  parseDeskAssignmentNotes,
   readDeskBatchState,
   writeDeskBatchState,
   type DeskBatchQueueItem,
@@ -264,15 +265,21 @@ export function VisitDialogueForm({
             nationalId: "",
             phone: CASE_PHONE_NONE,
             workerGroup: workerKind === "civil" ? "civil_affairs" : "social_affairs",
+            jobTitle: "",
+            email: "",
           }
         : null);
-    // 訪員自填（含 roster）與 desk：有登入訪查員就帶入社政／民政電話（含前導 0）
+    // 訪員自填／desk：主填＋同行可各帶入民政／社政（至少一邊、兩邊也可；不清空另一邊）
+    // GAS notes 進前端為 schedule.assignmentReason（含「主填:…｜同行:…」）
     const seeded =
-      visitorForSeed &&
-      !withTimes.social_worker_name &&
-      !withTimes.civil_worker_name &&
-      (useDeskFormDefaults || Boolean(selectedVisitor))
-        ? applyVisitorToWorkerAnswers(withTimes, visitorForSeed, workerKind)
+      (useDeskFormDefaults || Boolean(selectedVisitor)) &&
+      (visitorForSeed || (visitorDirectory?.length && schedule.assignmentReason))
+        ? seedWorkerAnswersFromTeam(
+            withTimes,
+            visitorForSeed,
+            visitorDirectory,
+            schedule.assignmentReason,
+          )
         : {};
     // 草稿／主檔數字化可能丟前導 0；進畫面前記得補回
     return normalizeVisitorCareAnswers({ ...withTimes, ...seeded });
@@ -2079,7 +2086,10 @@ function WorkerNamePicker({
 
   const matches = useMemo(() => {
     const needle = query.trim();
-    const rows = directory.filter((item) => item.name);
+    const group = kind === "civil" ? "civil_affairs" : "social_affairs";
+    const rows = directory.filter(
+      (item) => item.name && (item.workerGroup === group || item.workerGroup === "unknown"),
+    );
     if (!needle) return rows.slice(0, 12);
     return rows
       .filter((item) =>
@@ -2088,7 +2098,7 @@ function WorkerNamePicker({
         ),
       )
       .slice(0, 12);
-  }, [directory, query]);
+  }, [directory, kind, query]);
 
   return (
     <div id={fieldId} className="relative grid scroll-mt-28 gap-1 text-sm font-medium">
@@ -2115,9 +2125,9 @@ function WorkerNamePicker({
         }}
       />
       <p className="text-xs font-normal leading-5 text-muted-foreground">
-        可搜尋已建檔訪查員；點選後自動帶入
+        可搜尋已建檔
         {kind === "social" ? "社政" : "民政"}
-        身分證與電話（並清空另一邊訪查人欄位）。
+        訪查員；點選後帶入本邊身分／證號／電話。民政與社政至少一邊即可，兩邊都可保留。
       </p>
       {open ? (
         <div className="absolute left-0 right-0 top-[4.75rem] z-20 max-h-56 overflow-auto rounded-md border bg-card shadow-md">
@@ -2166,6 +2176,52 @@ function defaultWorkerRole(
   return { role: kind === "civil" ? "公所人員" : "社會局/處" };
 }
 
+/** 主填＋同行：空的民政／社政欄各帶入一位對應訪查員（兩邊可並存）。 */
+function seedWorkerAnswersFromTeam(
+  current: MohwLifeCareAnswers,
+  primary: DeskVisitorOption | null,
+  directory: DeskVisitorOption[] | undefined,
+  notes: unknown,
+): MohwLifeCareAnswers {
+  const byId = new Map((directory ?? []).map((item) => [item.id, item]));
+  const teamIds = parseDeskAssignmentNotes(notes).teamVisitorIds;
+  const team: DeskVisitorOption[] = [];
+  for (const id of teamIds) {
+    const row = byId.get(id);
+    if (row) team.push(row);
+  }
+  if (primary && !team.some((item) => item.id === primary.id)) {
+    team.unshift(primary);
+  } else if (primary && team.length === 0) {
+    team.push(primary);
+  }
+
+  let next = { ...current };
+  const civil =
+    team.find((item) => item.workerGroup === "civil_affairs") ??
+    (primary?.workerGroup === "civil_affairs" ? primary : null);
+  const social =
+    team.find((item) => item.workerGroup === "social_affairs") ??
+    (primary && primary.workerGroup !== "civil_affairs" ? primary : null);
+
+  if (civil && !String(next.civil_worker_name ?? "").trim()) {
+    next = { ...next, ...applyVisitorToWorkerAnswers(next, civil, "civil") };
+  }
+  if (social && !String(next.social_worker_name ?? "").trim()) {
+    next = { ...next, ...applyVisitorToWorkerAnswers(next, social, "social") };
+  }
+  // 僅有主填且尚未寫入任一側時，依主填身分別帶入一邊
+  if (
+    primary &&
+    !String(next.civil_worker_name ?? "").trim() &&
+    !String(next.social_worker_name ?? "").trim()
+  ) {
+    const kind = primary.workerGroup === "civil_affairs" ? "civil" : "social";
+    next = { ...next, ...applyVisitorToWorkerAnswers(next, primary, kind) };
+  }
+  return next;
+}
+
 function applyVisitorToWorkerAnswers(
   current: MohwLifeCareAnswers,
   visitor: DeskVisitorOption,
@@ -2177,15 +2233,10 @@ function applyVisitorToWorkerAnswers(
     normalizeIndoorPhone(String(visitor.phone || "").trim()) ||
     CASE_PHONE_NONE;
   const nationalId = normalizeVisitorNationalId(visitor.nationalId || "");
+  // 民政／社政至少一邊、兩邊也可：只覆寫本邊，不清空另一邊。
   if (kind === "civil") {
     const role = defaultWorkerRole("civil", current.civil_worker_role, visitor.jobTitle);
     return {
-      social_worker_role: "",
-      social_worker_role_other: "",
-      social_worker_name: "",
-      social_worker_national_id: "",
-      social_worker_phone: "",
-      social_worker_date: "",
       civil_worker_role: role.role,
       civil_worker_name: visitor.name,
       civil_worker_national_id: nationalId,
@@ -2195,11 +2246,6 @@ function applyVisitorToWorkerAnswers(
   }
   const role = defaultWorkerRole("social", current.social_worker_role, visitor.jobTitle);
   return {
-    civil_worker_role: "",
-    civil_worker_name: "",
-    civil_worker_national_id: "",
-    civil_worker_phone: "",
-    civil_worker_date: "",
     social_worker_role: role.role,
     social_worker_role_other: role.roleOther ?? "",
     social_worker_name: visitor.name,

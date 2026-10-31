@@ -1,3 +1,11 @@
+## Lesson: 社政身分官方四類；關懷表民政／社政至少一邊、兩邊可並存
+
+- **Trigger:** 衛福匯入範本「社政訪查人-身分」僅社會局/處、社工、志工、其他；產品曾把「電話問安」放進社政職稱，且帶入訪員時會清空另一邊。
+- **Cause:** Desk social titles mirrored extended registry labels; `applyVisitorToWorkerAnswers` cleared the opposite side for exclusive 擇一 UX.
+- **Rule:** `deskSocialJobTitles` = official four only（電話問安只在民政）。關懷表驗證維持「至少一邊」；帶入／搜尋只覆寫本邊、不清空另一邊；開表依主填＋同行各填空的民政／社政欄。
+- **Evidence:** `lib/domain/visitor-registration-options.ts`, `components/visitor/visit-dialogue-form.tsx`.
+- **Added on:** 2026-10-31
+
 ## Lesson: Desk temp visitor create matches formal registration fields
 
 - **Trigger:** 現場建檔／紙本 KEY「新增訪查員」只填姓名＋手機（`desk_minimal` 允許空身分證），與正式註冊必填落差大。
@@ -26,7 +34,7 @@
 
 - **Trigger:** 紙本 KEY「編輯訪查員」只有民政／社政兩項；承辦無法標「電話問安」等細身分。
 - **Cause:** Desk create/update only wrote `volunteer_group`（civil/social）；`job_title` 未進 Sheets slim list 與 UI。
-- **Rule:** Keep 民政／社政 as worker group for 帶入欄位分流；另編輯 `job_title`（`visitorRegistrationJobTitles`，含電話問安）。Persist via `visitors.update` `job_title`。帶入關懷表時用 `mapJobTitleToMohwWorkerRole`（電話問安→社政「其他／電話問安」或民政「公所人員」）。Deploy GAS for `job_title` column.
+- **Rule:** Keep 民政／社政 as worker group for 帶入欄位分流；另編輯 `job_title`。社政職稱僅官方四類；「電話問安」屬民政（帶入→公所人員）。Persist via `visitors.update` `job_title`。Deploy GAS for `job_title` column.
 - **Evidence:** `components/manage/care-form-desk-panel.tsx`, `app/api/manager/care-forms/visitors/route.ts`, `gas/src/modules/VisitorModule.gs`, `lib/domain/visitor-registration-options.ts`.
 - **Added on:** 2026-10-30
 

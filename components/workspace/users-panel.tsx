@@ -46,6 +46,8 @@ import type {
   WorkspaceRoleKey,
 } from "@/lib/domain/types";
 import {
+  defaultDeskJobTitle,
+  deskJobTitlesForWorkerGroup,
   visitorRegistrationJobTitles,
   type VisitorCorrectionResult,
 } from "@/lib/domain/visitor-registration-options";
@@ -2313,9 +2315,18 @@ export function VisitorRegistrationForm({
             <select
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.workerGroup}
-              onChange={(event) =>
-                updateForm({ workerGroup: event.target.value as VisitorRegistrationWorkerGroup })
-              }
+              onChange={(event) => {
+                const workerGroup = event.target.value as VisitorRegistrationWorkerGroup;
+                const titles = deskJobTitlesForWorkerGroup(workerGroup);
+                const keepTitle = titles.includes(
+                  form.jobTitle as (typeof titles)[number],
+                );
+                updateForm({
+                  workerGroup,
+                  jobTitle: keepTitle ? form.jobTitle : defaultDeskJobTitle(workerGroup),
+                  jobTitleOther: null,
+                });
+              }}
             >
               <option value="civil_affairs">民政</option>
               <option value="social_affairs">社政</option>
@@ -2363,7 +2374,7 @@ export function VisitorRegistrationForm({
                 })
               }
             >
-              {visitorJobTitles.map((title) => (
+              {deskJobTitlesForWorkerGroup(form.workerGroup).map((title) => (
                 <option key={title} value={title}>
                   {title}
                 </option>

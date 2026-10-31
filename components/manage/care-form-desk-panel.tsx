@@ -1167,7 +1167,7 @@ export function CareFormDeskPanel({
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。資料有誤可按「編輯」修正民政／社政與職稱／身分別（含電話問安等）。
+          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。關懷表會依勾選帶入對應欄位（兩邊可並存）。社政身分別僅官方四類：社會局/處、社工、志工、其他；電話問安屬民政職稱。
         </p>
 
         {creatingVisitor ? (
