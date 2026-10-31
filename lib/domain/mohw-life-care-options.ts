@@ -131,8 +131,34 @@ function dedupePreserveOrder(values: string[]): string[] {
   return out;
 }
 
+/** 居住狀況非「與他人同住」時清空同住相關欄，避免獨居仍被殘值擋送出／套印。 */
+export function pruneCohabitantAnswersIfAlone(
+  answers: MohwLifeCareAnswers,
+): MohwLifeCareAnswers {
+  const living = String(answers.living_status ?? "").trim();
+  if (living === "與他人同住") {
+    const cohab = String(answers.cohabitation_status ?? "").trim();
+    if (cohab === "同住者有照顧能力") return answers;
+    return {
+      ...answers,
+      cohabitant_relation: "",
+      cohabitant_age: "",
+      ...(cohab === "同住者無照顧能力"
+        ? {}
+        : { cohabitant_no_care_capacity_note: "" }),
+    };
+  }
+  return {
+    ...answers,
+    cohabitation_status: "",
+    cohabitant_relation: "",
+    cohabitant_age: "",
+    cohabitant_no_care_capacity_note: "",
+  };
+}
+
 export function normalizeMohwAnswersOptions(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
-  const next: MohwLifeCareAnswers = { ...answers };
+  const next: MohwLifeCareAnswers = { ...pruneCohabitantAnswersIfAlone(answers) };
 
   for (const column of MOHW_LIFE_CARE_COLUMNS) {
     const raw = next[column.key];

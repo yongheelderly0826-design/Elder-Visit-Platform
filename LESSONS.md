@@ -6,6 +6,14 @@
 - **Evidence:** `lib/domain/mohw-life-care-validation.ts` (`workerSideStarted`), `gas/src/utils/MohwLifeCareValidator.gs`, `lib/domain/mohw-desk-form-defaults.ts`.
 - **Added on:** 2026-10-31
 
+## Lesson: 1人獨自居住 must hide and clear cohabitant fields
+
+- **Trigger:** User selected `1人獨自居住` but still saw required `同住者為`／`同住者年齡` (desk defaults left `cohabitation_status=同住者有照顧能力`).
+- **Cause:** Visibility/required only checked cohabitation_status, not living_status; switching 獨居 did not clear residues.
+- **Rule:** Show/require cohabitant_* only when living_status=`與他人同住` AND matching cohabitation_status. On change／normalize, `pruneCohabitantAnswersIfAlone`. Desk default living_status=`1人獨自居住` with empty cohabitant fields.
+- **Evidence:** `mohw-life-care-ui.ts`, `mohw-life-care-validation.ts`, `mohw-life-care-options.ts`, `MohwLifeCareValidator.gs`.
+- **Added on:** 2026-10-31
+
 ## Lesson: 社政身分官方四類；關懷表民政／社政至少一邊、兩邊可並存
 
 - **Trigger:** 衛福匯入範本「社政訪查人-身分」僅社會局/處、社工、志工、其他；產品曾把「電話問安」放進社政職稱，且帶入訪員時會清空另一邊。

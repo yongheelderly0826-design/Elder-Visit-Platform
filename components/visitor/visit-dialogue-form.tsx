@@ -40,7 +40,10 @@ import {
   syncMohwVisitMetaFromSubmission,
   type MohwFormField,
 } from "@/lib/domain/mohw-life-care-ui";
-import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
+import {
+  normalizeMohwAnswersOptions,
+  pruneCohabitantAnswersIfAlone,
+} from "@/lib/domain/mohw-life-care-options";
 import {
   CASE_PHONE_NONE,
   CASE_PHONE_REFUSED,
@@ -1521,7 +1524,14 @@ export function VisitDialogueForm({
                         deskVisitEnd={String(careFormAnswers.visit_end_time ?? "")}
                         onChange={(value) =>
                           setCareFormAnswers((current) => {
-                            const next = { ...current, [field.key]: value };
+                            let next = { ...current, [field.key]: value };
+                            // 一人獨居：關閉並清空同住者為／年齡等殘值
+                            if (
+                              field.key === "living_status" ||
+                              field.key === "cohabitation_status"
+                            ) {
+                              next = pruneCohabitantAnswersIfAlone(next);
+                            }
                             // 電話欄一律走補前導 0，避免只改畫面、answers 仍缺 0
                             if (
                               field.key === "phone" ||

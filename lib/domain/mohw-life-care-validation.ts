@@ -158,15 +158,33 @@ const CONDITIONAL_REQUIRED: Array<{ key: string; when: Cond; message?: string }>
   },
   {
     key: "cohabitant_relation",
-    when: { type: "equals", key: "cohabitation_status", value: "同住者有照顧能力" },
+    when: {
+      type: "and",
+      rules: [
+        { type: "equals", key: "living_status", value: "與他人同住" },
+        { type: "equals", key: "cohabitation_status", value: "同住者有照顧能力" },
+      ],
+    },
   },
   {
     key: "cohabitant_age",
-    when: { type: "equals", key: "cohabitation_status", value: "同住者有照顧能力" },
+    when: {
+      type: "and",
+      rules: [
+        { type: "equals", key: "living_status", value: "與他人同住" },
+        { type: "equals", key: "cohabitation_status", value: "同住者有照顧能力" },
+      ],
+    },
   },
   {
     key: "cohabitant_no_care_capacity_note",
-    when: { type: "equals", key: "cohabitation_status", value: "同住者無照顧能力" },
+    when: {
+      type: "and",
+      rules: [
+        { type: "equals", key: "living_status", value: "與他人同住" },
+        { type: "equals", key: "cohabitation_status", value: "同住者無照顧能力" },
+      ],
+    },
   },
   {
     key: "marital_status_other",

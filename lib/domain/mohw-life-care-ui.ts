@@ -84,9 +84,17 @@ const CONDITIONAL_RULES: Record<string, MohwFieldCondition[]> = {
   housing_type_other: [{ key: "housing_type", equals: "其他" }],
   social_worker_role_other: [{ key: "social_worker_role", equals: "其他" }],
   cohabitation_status: [{ key: "living_status", equals: "與他人同住" }],
-  cohabitant_relation: [{ key: "cohabitation_status", equals: "同住者有照顧能力" }],
-  cohabitant_age: [{ key: "cohabitation_status", equals: "同住者有照顧能力" }],
+  // 一人獨居時即使殘值仍為「同住者有照顧能力」，也不得顯示同住者為／年齡
+  cohabitant_relation: [
+    { key: "living_status", equals: "與他人同住" },
+    { key: "cohabitation_status", equals: "同住者有照顧能力" },
+  ],
+  cohabitant_age: [
+    { key: "living_status", equals: "與他人同住" },
+    { key: "cohabitation_status", equals: "同住者有照顧能力" },
+  ],
   cohabitant_no_care_capacity_note: [
+    { key: "living_status", equals: "與他人同住" },
     { key: "cohabitation_status", equals: "同住者無照顧能力" },
   ],
   marital_status_other: [{ key: "marital_status", equals: "其他" }],

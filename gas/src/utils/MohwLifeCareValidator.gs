@@ -48,11 +48,17 @@ var MohwLifeCareValidator = (function () {
       msg: '社政訪查人身分=其他時必須填寫其他身分別說明'
     },
     { key: 'cohabitation_status', equals: { living_status: '與他人同住' } },
-    { key: 'cohabitant_relation', equals: { cohabitation_status: '同住者有照顧能力' } },
-    { key: 'cohabitant_age', equals: { cohabitation_status: '同住者有照顧能力' } },
+    {
+      key: 'cohabitant_relation',
+      equals: { living_status: '與他人同住', cohabitation_status: '同住者有照顧能力' }
+    },
+    {
+      key: 'cohabitant_age',
+      equals: { living_status: '與他人同住', cohabitation_status: '同住者有照顧能力' }
+    },
     {
       key: 'cohabitant_no_care_capacity_note',
-      equals: { cohabitation_status: '同住者無照顧能力' }
+      equals: { living_status: '與他人同住', cohabitation_status: '同住者無照顧能力' }
     },
     { key: 'marital_status_other', equals: { marital_status: '其他' }, msg: '婚姻狀況=其他時必須填寫其他說明' },
     { key: 'sons_count', equals: { has_children: '存' } },
