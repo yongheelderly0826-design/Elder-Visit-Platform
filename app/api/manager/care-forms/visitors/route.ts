@@ -1,18 +1,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireManagerCapability } from "@/lib/api/authorization";
+import {
+  validateDeskVisitorCreate,
+  validateDeskVisitorUpdate,
+} from "@/lib/domain/desk-visitor-create";
 import { mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
-import { visitorRegistrationJobTitles } from "@/lib/domain/visitor-registration-options";
 import { gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
-
-const ALLOWED_JOB_TITLES = new Set<string>(visitorRegistrationJobTitles);
-
-function normalizeJobTitle(raw: unknown): string {
-  const title = String(raw ?? "").trim();
-  if (!title) return "";
-  return ALLOWED_JOB_TITLES.has(title) ? title : title.slice(0, 20);
-}
 
 export async function POST(request: NextRequest) {
   const forbidden = requireManagerCapability(request, "visits.submit");
@@ -25,28 +20,15 @@ export async function POST(request: NextRequest) {
     phone?: string;
     email?: string;
     idNumber?: string;
+    gender?: string;
     workerGroup?: string;
+    departmentName?: string;
+    departmentOther?: string;
     jobTitle?: string;
+    photoUrl?: string;
   };
 
   const action = body.action === "update" ? "update" : "create";
-  const name = String(body.name ?? "").trim();
-  const phone = String(body.phone ?? "").trim();
-  const workerGroup =
-    body.workerGroup === "social_affairs" ? "social_affairs" : "civil_affairs";
-  const jobTitle = normalizeJobTitle(body.jobTitle);
-
-  if (!name || !phone) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "VALIDATION",
-          message: action === "update" ? "請填姓名與手機。" : "新增訪查員請填姓名與手機。",
-        },
-      },
-      { status: 400 },
-    );
-  }
 
   try {
     if (action === "update") {
@@ -57,26 +39,49 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      const validated = validateDeskVisitorUpdate(body);
+      if ("error" in validated) {
+        return NextResponse.json(
+          { error: { code: "VALIDATION", message: validated.error } },
+          { status: 400 },
+        );
+      }
+      const { data } = validated;
       const updated = (await gasClient.visitors.update({
         visitor_id: visitorId,
-        name,
-        phone,
-        email: String(body.email ?? "").trim().toLowerCase(),
-        id_number: String(body.idNumber ?? "").trim().toUpperCase(),
-        volunteer_group: workerGroup,
-        job_title: jobTitle,
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        id_number: data.idNumber,
+        gender: data.gender,
+        department: data.department,
+        volunteer_group: data.workerGroup,
+        job_title: data.jobTitle,
       })) as Record<string, unknown>;
       invalidateGasReadCaches();
       return NextResponse.json({ data: mapDeskVisitor(updated) });
     }
 
+    const validated = validateDeskVisitorCreate(body);
+    if ("error" in validated) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION", message: validated.error } },
+        { status: 400 },
+      );
+    }
+    const { data } = validated;
+
     const created = (await gasClient.visitors.create({
-      name,
-      phone,
-      email: String(body.email ?? "").trim().toLowerCase(),
-      id_number: String(body.idNumber ?? "").trim().toUpperCase(),
-      volunteer_group: workerGroup,
-      job_title: jobTitle || (workerGroup === "social_affairs" ? "志工" : "公所人員"),
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      id_number: data.idNumber,
+      gender: data.gender,
+      department: data.department,
+      volunteer_group: data.workerGroup,
+      job_title: data.jobTitle,
+      photo_url: data.photoUrl,
+      // Keep auto-approve for KEY ops; still require full registration fields (no empty id).
       desk_minimal: true,
     })) as Record<string, unknown>;
 

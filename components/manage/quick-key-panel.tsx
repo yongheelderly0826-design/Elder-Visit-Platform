@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ClipboardPen, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageIntro } from "@/components/ui/page-intro";
+import { DeskVisitorFormFields } from "@/components/manage/desk-visitor-form-fields";
 
 import { formatYongheVillageCode } from "@/lib/domain/village-admins";
 import {
@@ -12,6 +13,12 @@ import {
   type DeskVisitorOption,
 } from "@/lib/domain/manager-care-form-desk";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
+import {
+  deskVisitorCreateCanSubmit,
+  emptyDeskVisitorForm,
+  type DeskVisitorFormValues,
+} from "@/lib/domain/desk-visitor-create";
+import { defaultDeskJobTitle, deskJobTitlesForWorkerGroup } from "@/lib/domain/visitor-registration-options";
 
 type QuickPendingItem = {
   caseId: string;
@@ -55,11 +62,7 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
   const [selectedVisitorId, setSelectedVisitorId] = useState(lockedVisitor?.id ?? "");
   const [selectedVisitorName, setSelectedVisitorName] = useState(lockedVisitor?.name ?? "");
   const [creating, setCreating] = useState(false);
-  const [newVisitor, setNewVisitor] = useState({
-    name: "",
-    phone: "",
-    workerGroup: "civil_affairs" as VisitorRegistrationWorkerGroup,
-  });
+  const [newVisitor, setNewVisitor] = useState<DeskVisitorFormValues>(emptyDeskVisitorForm());
   const [busy, setBusy] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -177,11 +180,25 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
     }
   }, [mode, selectedVisitorId, villageCodeInput]);
 
+  function patchNewVisitorWorkerGroup(workerGroup: VisitorRegistrationWorkerGroup) {
+    setNewVisitor((current) => {
+      const titles = deskJobTitlesForWorkerGroup(workerGroup);
+      const keepTitle = titles.find((title) => title === current.jobTitle);
+      return {
+        ...current,
+        workerGroup,
+        jobTitle: keepTitle || defaultDeskJobTitle(workerGroup),
+        departmentName:
+          workerGroup === "social_affairs" && current.departmentName === "民政課"
+            ? "志工"
+            : current.departmentName,
+      };
+    });
+  }
+
   async function createVisitor() {
-    const name = newVisitor.name.trim();
-    const phone = newVisitor.phone.trim();
-    if (!name || !phone) {
-      setMessage("現場建檔請填姓名與手機。");
+    if (!deskVisitorCreateCanSubmit(newVisitor)) {
+      setMessage("現場建檔請填姓名、信箱、身分證、手機、證件照、職稱與民政／社政。");
       return;
     }
     setBusy(true);
@@ -191,9 +208,16 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name,
-          phone,
+          name: newVisitor.name,
+          phone: newVisitor.phone,
+          email: newVisitor.email,
+          idNumber: newVisitor.idNumber,
+          gender: newVisitor.gender,
           workerGroup: newVisitor.workerGroup,
+          departmentName: newVisitor.departmentName,
+          departmentOther: newVisitor.departmentOther,
+          jobTitle: newVisitor.jobTitle,
+          photoUrl: newVisitor.photoUrl,
         }),
       });
       const json = (await response.json()) as {
@@ -208,7 +232,7 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
       setSelectedVisitorId(json.data.id);
       setSelectedVisitorName(json.data.name);
       setCreating(false);
-      setNewVisitor({ name: "", phone: "", workerGroup: "civil_affairs" });
+      setNewVisitor(emptyDeskVisitorForm());
       setMessage(`已現場建檔「${json.data.name}」，可載入待訪名單後確認 KEY。`);
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -378,39 +402,22 @@ export function QuickKeyPanel({ mode, lockedVisitor = null, returnPath }: Props)
             </div>
 
             {creating ? (
-              <div className="grid gap-2 rounded-md border border-dashed p-3 sm:grid-cols-3">
-                <input
-                  className="h-10 rounded-md border px-3 text-sm"
-                  placeholder="姓名 *"
-                  value={newVisitor.name}
-                  onChange={(event) =>
-                    setNewVisitor((current) => ({ ...current, name: event.target.value }))
-                  }
-                />
-                <input
-                  className="h-10 rounded-md border px-3 text-sm"
-                  placeholder="手機 *"
-                  value={newVisitor.phone}
-                  onChange={(event) =>
-                    setNewVisitor((current) => ({ ...current, phone: event.target.value }))
-                  }
-                />
-                <select
-                  className="h-10 rounded-md border px-3 text-sm"
-                  value={newVisitor.workerGroup}
-                  onChange={(event) =>
-                    setNewVisitor((current) => ({
-                      ...current,
-                      workerGroup: event.target.value as VisitorRegistrationWorkerGroup,
-                    }))
-                  }
+              <div className="rounded-md border border-dashed p-3">
+                <DeskVisitorFormFields
+                  mode="create"
+                  compact
+                  values={newVisitor}
+                  onChange={(patch) => setNewVisitor((current) => ({ ...current, ...patch }))}
+                  onWorkerGroupChange={patchNewVisitorWorkerGroup}
                 >
-                  <option value="civil_affairs">民政</option>
-                  <option value="social_affairs">社政</option>
-                </select>
-                <Button type="button" disabled={busy} onClick={() => void createVisitor()}>
-                  建立並選用
-                </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || !deskVisitorCreateCanSubmit(newVisitor)}
+                    onClick={() => void createVisitor()}
+                  >
+                    {busy ? "建立中…" : "建立並選用"}
+                  </Button>
+                </DeskVisitorFormFields>
               </div>
             ) : (
               <div className="grid gap-2">

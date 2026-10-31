@@ -58,16 +58,21 @@
 | name | 姓名 | text | ✅ | |
 | id_number | 身分證 | text | ✅ | 加密或遮罩 |
 | phone | 手機 | text | ✅ | |
-| email | Email | text | | |
+| email | Email | text | ✅* | 現場／紙本建檔必填 |
 | service_areas | 服務里別 | text | | 逗號分隔 |
-| volunteer_group | 志工組別 | text | | 如 meal／road／park（12 組 ID） |
+| volunteer_group | 志工組別 | text | ✅* | civil_affairs／social_affairs（或出勤組 ID） |
+| job_title | 職稱／身分別 | text | ✅* | 見 visitor-registration-options |
+| gender | 性別 | enum | | 男／女／其他（ensureColumns） |
+| department | 科室／單位 | text | | 民政課等（ensureColumns） |
 | status | 狀態 | enum | ✅ | 待審/已核准/停用 |
 | badge_no | 證件編號 | text | | |
-| photo_url | 照片 | url | | Drive 連結 |
+| photo_url | 照片 | url | ✅* | Drive `_訪員註冊證件照` 連結 |
 | bank_account | 匯款帳號 | text | | 車馬費用 |
 | registered_at | 建檔日 | date | | |
 | approved_at | 核准日 | date | | |
 | updated_at | 更新時間 | datetime | | |
+
+\* 現場建檔／紙本 KEY「新增訪查員」與正式註冊對齊的必填；出勤路徑仍可只帶姓名＋身分證＋手機。
 
 ---
 

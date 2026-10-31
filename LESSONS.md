@@ -1,3 +1,11 @@
+## Lesson: Desk temp visitor create matches formal registration fields
+
+- **Trigger:** 現場建檔／紙本 KEY「新增訪查員」只填姓名＋手機（`desk_minimal` 允許空身分證），與正式註冊必填落差大。
+- **Cause:** Desk shortcut prioritized KEY speed over registry completeness; GAS skipped Taiwan ID when `desk_minimal`.
+- **Rule:** Keep desk auto-approve (`status=已核准` + badge) for KEY ops, but **require** name／phone／email／valid Taiwan ID／job_title／volunteer_group／selfie. API validates via `lib/domain/desk-visitor-create.ts`; GAS always validates ID (no empty-id shortcut). Selfie: UI compresses JPEG → GAS uploads to Drive `_訪員註冊證件照` and stores Drive URL in `photo_url` (avoid raw data URL in Sheets cells). Gender／department via `ensureColumns` on 訪查員主檔. Edit no longer「可後補」for id/email. Deploy GAS after `VisitorModule` change.
+- **Evidence:** `components/manage/quick-key-panel.tsx`, `care-form-desk-panel.tsx`, `desk-visitor-form-fields.tsx`, `app/api/manager/care-forms/visitors/route.ts`, `gas/src/modules/VisitorModule.gs`.
+- **Added on:** 2026-10-31
+
 ## Lesson: Module-init const must not call later helpers (TDZ / Vercel build)
 
 - **Trigger:** `npm run build` failed collecting `/api/exports/mohw/candidates` with `ReferenceError: Cannot access 'n' before initialization`.

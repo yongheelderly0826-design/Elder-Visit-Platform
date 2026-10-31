@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ClipboardPen, Pencil, Plus, Search, UserRound } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
+import { DeskVisitorFormFields } from "@/components/manage/desk-visitor-form-fields";
 import {
   DESK_BATCH_SLOT_MINUTES,
   DESK_BATCH_TRAVEL_GAP_MINUTES,
@@ -36,6 +37,12 @@ import {
   type DeskScope,
 } from "@/lib/domain/village-admins";
 import type { VisitorRegistrationWorkerGroup } from "@/lib/domain/types";
+import {
+  deskVisitorCreateCanSubmit,
+  deskVisitorEditCanSubmit,
+  emptyDeskVisitorForm,
+  type DeskVisitorFormValues,
+} from "@/lib/domain/desk-visitor-create";
 import {
   defaultDeskJobTitle,
   deskJobTitlesForWorkerGroup,
@@ -87,36 +94,8 @@ export function CareFormDeskPanel({
   const [primaryVisitorId, setPrimaryVisitorId] = useState("");
   const [creatingVisitor, setCreatingVisitor] = useState(false);
   const [editingVisitorId, setEditingVisitorId] = useState<string | null>(null);
-  const [newVisitor, setNewVisitor] = useState<{
-    name: string;
-    phone: string;
-    email: string;
-    idNumber: string;
-    workerGroup: VisitorRegistrationWorkerGroup;
-    jobTitle: string;
-  }>({
-    name: "",
-    phone: "",
-    email: "",
-    idNumber: "",
-    workerGroup: "civil_affairs",
-    jobTitle: defaultDeskJobTitle("civil_affairs"),
-  });
-  const [editVisitor, setEditVisitor] = useState<{
-    name: string;
-    phone: string;
-    email: string;
-    idNumber: string;
-    workerGroup: VisitorRegistrationWorkerGroup;
-    jobTitle: string;
-  }>({
-    name: "",
-    phone: "",
-    email: "",
-    idNumber: "",
-    workerGroup: "civil_affairs",
-    jobTitle: defaultDeskJobTitle("civil_affairs"),
-  });
+  const [newVisitor, setNewVisitor] = useState<DeskVisitorFormValues>(emptyDeskVisitorForm());
+  const [editVisitor, setEditVisitor] = useState<DeskVisitorFormValues>(emptyDeskVisitorForm());
   const [creating, setCreating] = useState(false);
   const [newCase, setNewCase] = useState({
     name: "",
@@ -527,13 +506,29 @@ export function CareFormDeskPanel({
   }
 
   async function createVisitor() {
+    if (!deskVisitorCreateCanSubmit(newVisitor)) {
+      setMessage("新增訪查員請填姓名、信箱、身分證、手機、證件照、職稱與民政／社政。");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
       const response = await fetch("/api/manager/care-forms/visitors", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "create", ...newVisitor }),
+        body: JSON.stringify({
+          action: "create",
+          name: newVisitor.name,
+          phone: newVisitor.phone,
+          email: newVisitor.email,
+          idNumber: newVisitor.idNumber,
+          gender: newVisitor.gender,
+          workerGroup: newVisitor.workerGroup,
+          departmentName: newVisitor.departmentName,
+          departmentOther: newVisitor.departmentOther,
+          jobTitle: newVisitor.jobTitle,
+          photoUrl: newVisitor.photoUrl,
+        }),
       });
       const json = (await response.json()) as {
         data?: DeskVisitorOption;
@@ -556,6 +551,7 @@ export function CareFormDeskPanel({
       }
       if (!primaryVisitorId) setPrimaryVisitorId(created.id);
       setCreatingVisitor(false);
+      setNewVisitor(emptyDeskVisitorForm());
       setMessage(`已新增訪查員「${created.name}」，已勾入${created.workerGroup === "social_affairs" ? "社政" : "民政"}。`);
     } catch {
       setMessage("目前無法連線，請稍後再試。");
@@ -573,6 +569,7 @@ export function CareFormDeskPanel({
       (title) => title === visitor.jobTitle,
     );
     setEditVisitor({
+      ...emptyDeskVisitorForm(workerGroup),
       name: visitor.name,
       phone: visitor.phone,
       email: visitor.email || "",
@@ -582,6 +579,7 @@ export function CareFormDeskPanel({
         knownTitle ||
         String(visitor.jobTitle || "").trim() ||
         defaultDeskJobTitle(workerGroup),
+      photoUrl: null,
     });
   }
 
@@ -606,6 +604,10 @@ export function CareFormDeskPanel({
 
   async function saveEditVisitor() {
     if (!editingVisitorId) return;
+    if (!deskVisitorEditCanSubmit(editVisitor)) {
+      setMessage("請填姓名、手機、身分證與信箱。");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -615,7 +617,15 @@ export function CareFormDeskPanel({
         body: JSON.stringify({
           action: "update",
           visitorId: editingVisitorId,
-          ...editVisitor,
+          name: editVisitor.name,
+          phone: editVisitor.phone,
+          email: editVisitor.email,
+          idNumber: editVisitor.idNumber,
+          gender: editVisitor.gender,
+          workerGroup: editVisitor.workerGroup,
+          departmentName: editVisitor.departmentName,
+          departmentOther: editVisitor.departmentOther,
+          jobTitle: editVisitor.jobTitle,
         }),
       });
       const json = (await response.json()) as {
@@ -1161,157 +1171,50 @@ export function CareFormDeskPanel({
         </p>
 
         {creatingVisitor ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="訪查員姓名 *">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.name}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, name: event.target.value }))}
-              />
-            </Field>
-            <Field label="手機 *">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.phone}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, phone: event.target.value }))}
-              />
-            </Field>
-            <Field label="民政／社政 *">
-              <select
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.workerGroup}
-                onChange={(event) =>
-                  patchVisitorWorkerGroup(
-                    setNewVisitor,
-                    event.target.value as VisitorRegistrationWorkerGroup,
-                  )
-                }
-              >
-                <option value="civil_affairs">民政訪查人員</option>
-                <option value="social_affairs">社政訪查人員</option>
-              </select>
-            </Field>
-            <Field label="職稱／身分別 *">
-              <select
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.jobTitle}
-                onChange={(event) =>
-                  setNewVisitor((current) => ({ ...current, jobTitle: event.target.value }))
-                }
-              >
-                {deskJobTitlesForWorkerGroup(newVisitor.workerGroup).map((title) => (
-                  <option key={title} value={title}>
-                    {title}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Email（可後補）">
-              <input
-                className="h-11 w-full rounded-md border px-3 text-sm"
-                value={newVisitor.email}
-                onChange={(event) => setNewVisitor((current) => ({ ...current, email: event.target.value }))}
-              />
-            </Field>
-            <div className="sm:col-span-2">
+          <div className="mt-4 rounded-md border border-dashed p-3">
+            <DeskVisitorFormFields
+              mode="create"
+              values={newVisitor}
+              onChange={(patch) => setNewVisitor((current) => ({ ...current, ...patch }))}
+              onWorkerGroupChange={(workerGroup) =>
+                patchVisitorWorkerGroup(setNewVisitor, workerGroup)
+              }
+            >
               <Button
                 type="button"
-                disabled={busy || !newVisitor.name.trim() || !newVisitor.phone.trim()}
+                disabled={busy || !deskVisitorCreateCanSubmit(newVisitor)}
                 onClick={() => void createVisitor()}
               >
                 {busy ? "新增中…" : "建立訪查員並勾選"}
               </Button>
-            </div>
+            </DeskVisitorFormFields>
           </div>
         ) : editingVisitorId ? (
-          <div className="mt-4 grid gap-3 rounded-md border border-sky-200 bg-sky-50/60 p-3 sm:grid-cols-2">
-            <p className="sm:col-span-2 text-sm font-medium text-sky-950">
+          <div className="mt-4 rounded-md border border-sky-200 bg-sky-50/60 p-3">
+            <p className="mb-3 text-sm font-medium text-sky-950">
               編輯訪查員（{editingVisitorId}）
             </p>
-            <Field label="訪查員姓名 *">
-              <input
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.name}
-                onChange={(event) =>
-                  setEditVisitor((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="手機 *">
-              <input
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.phone}
-                onChange={(event) =>
-                  setEditVisitor((current) => ({ ...current, phone: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="民政／社政 *">
-              <select
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.workerGroup}
-                onChange={(event) =>
-                  patchVisitorWorkerGroup(
-                    setEditVisitor,
-                    event.target.value as VisitorRegistrationWorkerGroup,
-                  )
-                }
-              >
-                <option value="civil_affairs">民政訪查人員</option>
-                <option value="social_affairs">社政訪查人員</option>
-              </select>
-            </Field>
-            <Field label="職稱／身分別 *">
-              <select
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.jobTitle}
-                onChange={(event) =>
-                  setEditVisitor((current) => ({ ...current, jobTitle: event.target.value }))
-                }
-              >
-                {deskJobTitlesForWorkerGroup(editVisitor.workerGroup).map((title) => (
-                  <option key={title} value={title}>
-                    {title}
-                  </option>
-                ))}
-                {editVisitor.jobTitle &&
-                !deskJobTitlesForWorkerGroup(editVisitor.workerGroup).some(
-                  (title) => title === editVisitor.jobTitle,
-                ) ? (
-                  <option value={editVisitor.jobTitle}>{editVisitor.jobTitle}</option>
-                ) : null}
-              </select>
-            </Field>
-            <Field label="身分證（可後補）">
-              <input
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.idNumber}
-                onChange={(event) =>
-                  setEditVisitor((current) => ({ ...current, idNumber: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="Email（可後補）">
-              <input
-                className="h-11 w-full rounded-md border bg-background px-3 text-sm"
-                value={editVisitor.email}
-                onChange={(event) =>
-                  setEditVisitor((current) => ({ ...current, email: event.target.value }))
-                }
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2 sm:col-span-2">
-              <Button
-                type="button"
-                disabled={busy || !editVisitor.name.trim() || !editVisitor.phone.trim()}
-                onClick={() => void saveEditVisitor()}
-              >
-                {busy ? "儲存中…" : "儲存修改"}
-              </Button>
-              <Button type="button" variant="outline" disabled={busy} onClick={cancelEditVisitor}>
-                取消
-              </Button>
-            </div>
+            <DeskVisitorFormFields
+              mode="edit"
+              values={editVisitor}
+              onChange={(patch) => setEditVisitor((current) => ({ ...current, ...patch }))}
+              onWorkerGroupChange={(workerGroup) =>
+                patchVisitorWorkerGroup(setEditVisitor, workerGroup)
+              }
+            >
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={busy || !deskVisitorEditCanSubmit(editVisitor)}
+                  onClick={() => void saveEditVisitor()}
+                >
+                  {busy ? "儲存中…" : "儲存修改"}
+                </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={cancelEditVisitor}>
+                  取消
+                </Button>
+              </div>
+            </DeskVisitorFormFields>
           </div>
         ) : (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
