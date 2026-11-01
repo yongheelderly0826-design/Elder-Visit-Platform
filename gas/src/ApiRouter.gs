@@ -73,6 +73,9 @@ var ApiRouter = (function () {
     'careform.saveDraft': function (p, b) { return CareFormModule.saveDraft(b); },
     'careform.submit': function (p, b) { return CareFormModule.submit(b); },
     'careform.validate': function (p, b) { return CareFormModule.validate(b); },
+    'careform.listMissedStamps': function (p, b) {
+      return CareFormModule.listMissedStamps(b || p);
+    },
     'careform.generatePdf': function (p, b) { return NtpcCareFormPdfModule.generate(b || p); },
 
     'highcare.list': function (p) { return HighCareModule.list(p); },
@@ -110,6 +113,9 @@ var ApiRouter = (function () {
 
     'ops.clearVisitTestData': function (p, b) {
       return OpsModule.clearVisitTestData(b || p);
+    },
+    'ops.repairDuplicateMissedStamps': function (p, b) {
+      return OpsModule.repairDuplicateMissedStamps(b || p);
     },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },

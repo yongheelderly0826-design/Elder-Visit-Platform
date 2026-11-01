@@ -461,6 +461,16 @@ export const gasClient = {
     saveDraft: (body: unknown) =>
       gasFetch<unknown>("careform.saveDraft", { method: "POST", body }),
     submit: (body: unknown) => gasFetch<unknown>("careform.submit", { method: "POST", body }),
+    listMissedStamps: (body: {
+      visitor_ids: string[];
+      exclude_careform_id?: string;
+      exclude_assignment_id?: string;
+    }) =>
+      gasFetch<{
+        stamp_keys: string[];
+        scanned: number;
+        matched: number;
+      }>("careform.listMissedStamps", { method: "POST", body }),
     generatePdf: (body: {
       answers: Record<string, unknown>;
       elder_name?: string;

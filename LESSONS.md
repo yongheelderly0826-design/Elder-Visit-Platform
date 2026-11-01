@@ -1,3 +1,11 @@
+## Lesson: Same visitor 未遇 stamps must be unique (no clone 09:00／14:00)
+
+- **Trigger:** Continuous KEY 未遇 produced identical `10/26 09:00`／`10/27 14:00` across cases; only late time differed.
+- **Cause:** `buildDeskOnePaperMissedNote` hard-coded EARLY/MID from `DESK_PAPER_MISS_WINDOWS`; LATE used real `visitStartTime`.
+- **Rule:** Pass `slotOffsetMinutes` (queue index × 10) + `occupiedStampKeys` (same visitor team). Bump conflicting `M/D HH:mm訪視未遇` by +10. GAS `careform.submit` auto-uniquifies; `ops.repairDuplicateMissedStamps` repairs live rows. Parse with `(\d{1,2}/\d{1,2})\s+(\d{1,2}:\d{2})訪視未遇`.
+- **Evidence:** `lib/domain/desk-care-batch.ts`, `desk-visit-time-audit.ts`, `CareFormModule.gs`, `OpsModule.gs`, `MissedVisitStampHelper.gs`.
+- **Added on:** 2026-11-01
+
 ## Lesson: Worker side 「已開始填」 ignores date-only residue
 
 - **Trigger:** Care form showed「已開始填民政訪查人，請補齊身分／姓名／電話」even when only social was filled (user expected 擇一／至少一邊).

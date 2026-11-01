@@ -111,6 +111,135 @@ var CareFormModule = (function () {
     }
   }
 
+  function listMissedStamps(params) {
+    params = params || {};
+    var visitorIds = [];
+    if (params.visitor_ids && params.visitor_ids.length) {
+      visitorIds = params.visitor_ids.map(function (id) {
+        return String(id || '').trim();
+      }).filter(Boolean);
+    } else if (params.visitor_id) {
+      visitorIds = [String(params.visitor_id).trim()].filter(Boolean);
+    }
+    var excludeCareformId = String(params.exclude_careform_id || '').trim();
+    var excludeAssignmentId = String(params.exclude_assignment_id || '').trim();
+    if (!visitorIds.length) {
+      return { stamp_keys: [], scanned: 0, matched: 0 };
+    }
+
+    var careforms = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var assignments = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.ASSIGNMENTS)
+    );
+    var assignmentById = {};
+    assignments.forEach(function (row) {
+      assignmentById[String(row.assignment_id || '')] = row;
+    });
+
+    var occupied = {};
+    var matched = 0;
+    careforms.forEach(function (careform) {
+      var careformId = String(careform.careform_id || '').trim();
+      var assignmentId = String(careform.assignment_id || '').trim();
+      if (excludeCareformId && careformId === excludeCareformId) return;
+      if (excludeAssignmentId && assignmentId === excludeAssignmentId) return;
+
+      var team = MissedVisitStampHelper.teamVisitorIdsFromAssignment(
+        assignmentById[assignmentId] || { visitor_id: careform.visitor_id }
+      );
+      if (!team.length) {
+        var vid = String(careform.visitor_id || '').trim();
+        if (vid) team = [vid];
+      }
+      if (!MissedVisitStampHelper.intersects(visitorIds, team)) return;
+
+      var texts = MissedVisitStampHelper.noteTextsFromCareform(careform);
+      var stamps = [];
+      texts.forEach(function (text) {
+        MissedVisitStampHelper.parseStamps(text).forEach(function (stamp) {
+          stamps.push(stamp);
+        });
+      });
+      if (!stamps.length) return;
+      matched += 1;
+      stamps.forEach(function (stamp) {
+        occupied[stamp.key] = true;
+      });
+    });
+
+    return {
+      stamp_keys: Object.keys(occupied),
+      scanned: careforms.length,
+      matched: matched,
+    };
+  }
+
+  /**
+   * 未遇送出：若 living_address_other／visit_notes／notes 戳記與同訪查員衝突，自動 +10 解衝突。
+   */
+  function autoResolveMissedStampConflicts_(data, answers) {
+    var assignment = null;
+    try {
+      assignment = AssignmentModule.get(data.assignment_id);
+    } catch (eAsg) {}
+    var team = MissedVisitStampHelper.teamVisitorIdsFromAssignment(
+      assignment || { visitor_id: data.visitor_id }
+    );
+    if (!team.length && data.visitor_id) team = [String(data.visitor_id)];
+    var listed = listMissedStamps({
+      visitor_ids: team,
+      exclude_assignment_id: data.assignment_id,
+    });
+    var occupied = {};
+    (listed.stamp_keys || []).forEach(function (key) {
+      occupied[key] = true;
+    });
+
+    var living = String(answers.living_address_other || '');
+    var visitNotes = String(answers.visit_notes || '');
+    var notes = String(data.notes || '');
+    var blob = [living, visitNotes, notes].join('｜');
+    if (blob.indexOf('訪視未遇') === -1) {
+      return { answers: answers, notes: notes, changed: false };
+    }
+
+    var resolvedLiving = MissedVisitStampHelper.uniquifyNote(living, occupied);
+    resolvedLiving.stamps.forEach(function (stamp) {
+      occupied[stamp.key] = true;
+    });
+    // visit_notes／notes 常鏡像同一段；若已改 living，同步替換同原文。
+    var nextVisitNotes = visitNotes;
+    var nextNotes = notes;
+    if (resolvedLiving.changed && living && visitNotes.indexOf(living) !== -1) {
+      nextVisitNotes = visitNotes.split(living).join(resolvedLiving.note);
+    } else {
+      var resolvedVisit = MissedVisitStampHelper.uniquifyNote(visitNotes, occupied);
+      nextVisitNotes = resolvedVisit.note;
+      resolvedVisit.stamps.forEach(function (stamp) {
+        occupied[stamp.key] = true;
+      });
+    }
+    if (resolvedLiving.changed && living && notes.indexOf(living) !== -1) {
+      nextNotes = notes.split(living).join(resolvedLiving.note);
+    } else {
+      var resolvedNotes = MissedVisitStampHelper.uniquifyNote(nextNotes, occupied);
+      nextNotes = resolvedNotes.note;
+    }
+
+    var nextAnswers = answers;
+    var changed =
+      resolvedLiving.changed ||
+      nextVisitNotes !== visitNotes ||
+      nextNotes !== notes;
+    if (changed) {
+      nextAnswers = Object.assign({}, answers, {
+        living_address_other: resolvedLiving.note || answers.living_address_other,
+        visit_notes: nextVisitNotes || answers.visit_notes,
+      });
+    }
+    return { answers: nextAnswers, notes: nextNotes, changed: changed };
+  }
+
   function submit(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
     var isMissed = data.visit_result === '未遇';
@@ -127,6 +256,10 @@ var CareFormModule = (function () {
           throw serr;
         }
       }
+      var resolvedMissed = autoResolveMissedStampConflicts_(data, answers);
+      answers = resolvedMissed.answers;
+      data.answers = answers;
+      if (resolvedMissed.notes != null) data.notes = resolvedMissed.notes;
     } else if (!data.answers) {
       var aerr = new Error('answers required');
       aerr.code = 'VALIDATION_ERROR';
@@ -271,5 +404,11 @@ var CareFormModule = (function () {
     return MohwLifeCareValidator.validateRow(merged, data.row || 2, options);
   }
 
-  return { get: get, saveDraft: saveDraft, submit: submit, validate: validate };
+  return {
+    get: get,
+    saveDraft: saveDraft,
+    submit: submit,
+    validate: validate,
+    listMissedStamps: listMissedStamps,
+  };
 })();

@@ -87,6 +87,7 @@ import {
   buildDeskCareFormPath,
   buildDeskOnePaperMissedNote,
   chainDeskBatchAfterKeyed,
+  deskBatchMissedStampOffsetMinutes,
   endTimeFromStartAndDuration,
   findNextReadyDeskBatchItem,
   inferDeskVisitDurationMinutes,
@@ -99,6 +100,7 @@ import {
   type DeskBatchQueueItem,
   type DeskVisitDurationMinutes,
 } from "@/lib/domain/desk-care-batch";
+import { collectVisitorMissedStampKeys } from "@/lib/domain/desk-visit-time-audit";
 
 type DeskQuickSubmitKind = "missed" | "unknown_address" | "refused";
 
@@ -588,7 +590,7 @@ export function VisitDialogueForm({
           "訪視未遇",
         ) || String(nextSubmission.notes || "").includes("訪視未遇");
       if (!alreadyHasTripleNote) {
-        const note = buildDeskOnePaperMissedNote({
+        const note = await resolveOnePaperMissedNote({
           visitDateRaw,
           visitStartTime,
         });
@@ -816,6 +818,38 @@ export function VisitDialogueForm({
     setIsSubmitting(false);
   }
 
+  async function resolveOnePaperMissedNote(input: {
+    visitDateRaw: string;
+    visitStartTime?: string;
+  }) {
+    const batch = readDeskBatchState();
+    const slotOffsetMinutes = deskBatchMissedStampOffsetMinutes(batch, schedule.id);
+    const notesMeta = parseDeskAssignmentNotes(schedule.assignmentReason);
+    const visitorIds = [
+      ...new Set(
+        [
+          schedule.visitorId,
+          selectedVisitor?.id,
+          batch?.primaryVisitorId,
+          ...(batch?.companionVisitorIds ?? []),
+          ...notesMeta.teamVisitorIds,
+        ]
+          .map((id) => String(id || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const occupiedStampKeys = await collectVisitorMissedStampKeys({
+      visitorIds,
+      excludeAssignmentId: schedule.id,
+    });
+    return buildDeskOnePaperMissedNote({
+      visitDateRaw: input.visitDateRaw,
+      visitStartTime: input.visitStartTime,
+      slotOffsetMinutes,
+      occupiedStampKeys,
+    });
+  }
+
   async function runDeskQuickSubmit(kind: DeskQuickSubmitKind) {
     if (readonly || !isDeskEntry || isSubmitting) return;
     const visitDateRaw =
@@ -862,7 +896,7 @@ export function VisitDialogueForm({
       return;
     }
 
-    const note = buildDeskOnePaperMissedNote({
+    const note = await resolveOnePaperMissedNote({
       visitDateRaw,
       visitStartTime,
     });

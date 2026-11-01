@@ -2,8 +2,10 @@ import {
   DESK_BATCH_TRAVEL_GAP_MINUTES,
   DESK_NEXT_DAY_MORNING_START,
   addCalendarDaysIso,
+  collectMissedVisitStampKeys,
   findOverlappingWindow,
   parseDeskAssignmentNotes,
+  parseMissedVisitStamps,
   resolveNonOverlappingVisitSlot,
   teamIdsIntersect,
   type DeskVisitWindow,
@@ -249,4 +251,55 @@ function toMinutesSafe(time: string) {
   const match = time.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
+ * 同訪查員團隊既有「訪視未遇」戳記（M/D HH:mm）。
+ * 供一紙未遇備註避開分身；失敗時回空集合（仍可依 slotOffset 錯開）。
+ */
+export async function collectVisitorMissedStampKeys(input: {
+  visitorIds: string[];
+  excludeCareformId?: string;
+  excludeAssignmentId?: string;
+}): Promise<Set<string>> {
+  const team = [...new Set(input.visitorIds.map((id) => text(id)).filter(Boolean))];
+  if (!team.length) return new Set();
+
+  try {
+    const data = await gasClient.careform.listMissedStamps({
+      visitor_ids: team,
+      exclude_careform_id: input.excludeCareformId,
+      exclude_assignment_id: input.excludeAssignmentId,
+    });
+    const keys = Array.isArray(data?.stamp_keys) ? data.stamp_keys : [];
+    return new Set(keys.map((k) => text(k)).filter(Boolean));
+  } catch {
+    // Fallback: 從派案 notes 無法取得未遇戳記；回空，交由 slotOffset／GAS submit 兜底。
+    return new Set();
+  }
+}
+
+/** 本地文字（草稿／同批）合併進占用集合。 */
+export function mergeLocalMissedStampTexts(
+  base: Set<string>,
+  texts: Iterable<unknown>,
+): Set<string> {
+  const next = new Set(base);
+  for (const key of collectMissedVisitStampKeys(texts)) next.add(key);
+  return next;
+}
+
+export function hasDuplicateMissedStampConflict(input: {
+  noteText: string;
+  occupiedKeys: Iterable<string>;
+}): { ok: true } | { ok: false; conflicts: string[] } {
+  const occupied = new Set(
+    [...input.occupiedKeys].map((k) => text(k)).filter(Boolean),
+  );
+  const conflicts: string[] = [];
+  for (const stamp of parseMissedVisitStamps(input.noteText)) {
+    if (occupied.has(stamp.key)) conflicts.push(stamp.key);
+  }
+  if (conflicts.length) return { ok: false, conflicts };
+  return { ok: true };
 }

@@ -29,6 +29,8 @@ export const DESK_PAPER_MISS_WINDOWS = {
     paperKey: "早" as const,
     start: "09:00",
     end: "09:10",
+    /** 衝突上修時盡量留在上午 */
+    softEnd: "11:50",
     missedSlot: "上午" as MissedVisitTimeSlot,
     attempt: 1,
     dayOffsetFromLate: -2,
@@ -37,6 +39,7 @@ export const DESK_PAPER_MISS_WINDOWS = {
     paperKey: "中" as const,
     start: "14:00",
     end: "14:10",
+    softEnd: "16:50",
     missedSlot: "中午" as MissedVisitTimeSlot,
     attempt: 2,
     dayOffsetFromLate: -1,
@@ -45,11 +48,26 @@ export const DESK_PAPER_MISS_WINDOWS = {
     paperKey: "晚" as const,
     start: "19:00",
     end: "19:10",
+    softEnd: "23:50",
     missedSlot: "夜間" as MissedVisitTimeSlot,
     attempt: 3,
     dayOffsetFromLate: 0,
   },
 } as const;
+
+/** 同訪查員未遇戳記衝突時每次上修分鐘數（亦作連續 KEY 分身偏移）。 */
+export const DESK_MISS_STAMP_BUMP_MINUTES = 10;
+
+/** `10/26 09:00訪視未遇` 戳記。 */
+export const MISSED_VISIT_STAMP_PATTERN =
+  /(\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})訪視未遇/g;
+
+export type MissedVisitStamp = {
+  monthDay: string;
+  time: string;
+  key: string;
+  raw: string;
+};
 
 export type DeskPaperMissWindowKey = keyof typeof DESK_PAPER_MISS_WINDOWS;
 
@@ -715,14 +733,153 @@ export function formatDeskNoteMonthDay(isoDate: string): string | null {
   return `${Number(month)}/${Number(day)}`;
 }
 
+/** 正規化成 HH:mm；無效則 null。 */
+export function normalizeMissedStampTime(time: string): string | null {
+  const match = String(time || "")
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function missedVisitStampKey(monthDay: string, time: string): string | null {
+  const md = String(monthDay || "").trim();
+  const normalized = normalizeMissedStampTime(time);
+  if (!md || !normalized) return null;
+  return `${md} ${normalized}`;
+}
+
+/** 從 living_address_other／備註解析 `M/D HH:mm訪視未遇` 戳記。 */
+export function parseMissedVisitStamps(text: unknown): MissedVisitStamp[] {
+  const raw = String(text ?? "");
+  if (!raw.includes("訪視未遇")) return [];
+  const out: MissedVisitStamp[] = [];
+  const re = new RegExp(MISSED_VISIT_STAMP_PATTERN.source, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw)) !== null) {
+    const monthDay = String(match[1] || "").trim();
+    const time = normalizeMissedStampTime(String(match[2] || ""));
+    if (!monthDay || !time) continue;
+    const key = missedVisitStampKey(monthDay, time);
+    if (!key) continue;
+    out.push({
+      monthDay,
+      time,
+      key,
+      raw: match[0],
+    });
+  }
+  return out;
+}
+
+/**
+ * 連續紙本 KEY 佇列：以案件在佇列中的索引 × bump，避免同訪查員早／中戳記撞 09:00／14:00。
+ */
+export function deskBatchMissedStampOffsetMinutes(
+  state: Pick<DeskBatchState, "items"> | null | undefined,
+  assignmentId: string,
+  bumpMinutes: number = DESK_MISS_STAMP_BUMP_MINUTES,
+): number {
+  const id = String(assignmentId || "").trim();
+  if (!state?.items?.length || !id) return 0;
+  const idx = state.items.findIndex((item) => item.assignmentId === id);
+  if (idx <= 0) return 0;
+  const step = Number.isFinite(bumpMinutes) && bumpMinutes > 0 ? bumpMinutes : DESK_MISS_STAMP_BUMP_MINUTES;
+  return idx * step;
+}
+
+/**
+ * 在已占用戳記集合上，把偏好時間上修到不衝突（盡量留在 softEnd 前）。
+ */
+export function resolveUniqueMissedStampTime(input: {
+  monthDay: string;
+  preferredTime: string;
+  occupiedKeys: Set<string>;
+  bumpStepMinutes?: number;
+  softEnd?: string;
+  maxAttempts?: number;
+}): string | null {
+  const monthDay = String(input.monthDay || "").trim();
+  let time = normalizeMissedStampTime(input.preferredTime);
+  if (!monthDay || !time) return null;
+  const step =
+    input.bumpStepMinutes == null || !Number.isFinite(input.bumpStepMinutes)
+      ? DESK_MISS_STAMP_BUMP_MINUTES
+      : Math.max(1, Math.floor(input.bumpStepMinutes));
+  const softEndMin = toMinutes(String(input.softEnd || "").trim().slice(0, 5));
+  const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 72));
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const key = missedVisitStampKey(monthDay, time);
+    if (key && !input.occupiedKeys.has(key)) return time;
+    const next = addMinutesToTime(time, step);
+    if (!next) return null;
+    const nextMin = toMinutes(next);
+    if (nextMin == null) return null;
+    // softEnd 僅作偏好；超過仍繼續上修直到當日結束，避免無解。
+    if (softEndMin != null && nextMin > softEndMin && attempt > 0) {
+      // keep bumping; soft window already missed
+    }
+    time = next;
+  }
+  return null;
+}
+
+export function collectMissedVisitStampKeys(
+  texts: Iterable<unknown>,
+  excludeKeys?: Iterable<string>,
+): Set<string> {
+  const occupied = new Set<string>();
+  for (const text of texts) {
+    for (const stamp of parseMissedVisitStamps(text)) {
+      occupied.add(stamp.key);
+    }
+  }
+  if (excludeKeys) {
+    for (const key of excludeKeys) occupied.delete(String(key || "").trim());
+  }
+  return occupied;
+}
+
+/**
+ * 將備註內既有 `M/D HH:mm訪視未遇` 依 key→新時間改寫（修復／送出前自動解衝突用）。
+ */
+export function rewriteMissedVisitStampTimes(
+  note: string,
+  replacements: Map<string, string> | Record<string, string>,
+): string {
+  const map =
+    replacements instanceof Map
+      ? replacements
+      : new Map(Object.entries(replacements).map(([k, v]) => [k, v]));
+  if (!map.size) return note;
+  return String(note || "").replace(MISSED_VISIT_STAMP_PATTERN, (full, monthDay, time) => {
+    const key = missedVisitStampKey(String(monthDay), String(time));
+    if (!key || !map.has(key)) return full;
+    const nextTime = normalizeMissedStampTime(String(map.get(key) || ""));
+    if (!nextTime) return full;
+    return `${String(monthDay).trim()} ${nextTime}訪視未遇`;
+  });
+}
+
 /**
  * 一鍵未遇／住址不詳：一張紙，三次訪視時間寫入「居住-其他說明」與備註
  *（往前 D-2 早、D-1 中，本張 D＋當下起始）。
  * 例：`10/20 09:00訪視未遇；10/22 14:00訪視未遇；10/23 16:30訪視未遇。`
+ *
+ * `slotOffsetMinutes`：連續 KEY 分身偏移（早／中／預設晚）。
+ * `occupiedStampKeys`：同訪查員既有 `M/D HH:mm`，衝突則 +bump 直到唯一。
  */
 export function buildDeskOnePaperMissedNote(input: {
   visitDateRaw: string;
   visitStartTime?: string;
+  slotOffsetMinutes?: number;
+  occupiedStampKeys?: Iterable<string>;
+  bumpStepMinutes?: number;
 }): string | null {
   const lateDate = normalizeDeskVisitDateToIso(input.visitDateRaw);
   if (!lateDate) return null;
@@ -730,17 +887,75 @@ export function buildDeskOnePaperMissedNote(input: {
   const midDate = addCalendarDaysIso(lateDate, DESK_PAPER_MISS_WINDOWS.MID.dayOffsetFromLate);
   if (!earlyDate || !midDate) return null;
 
-  const lateStart =
+  const offset =
+    input.slotOffsetMinutes == null || !Number.isFinite(input.slotOffsetMinutes)
+      ? 0
+      : Math.max(0, Math.floor(input.slotOffsetMinutes));
+  const bumpStep =
+    input.bumpStepMinutes == null || !Number.isFinite(input.bumpStepMinutes)
+      ? DESK_MISS_STAMP_BUMP_MINUTES
+      : Math.max(1, Math.floor(input.bumpStepMinutes));
+
+  const earlyPreferred =
+    addMinutesToTime(DESK_PAPER_MISS_WINDOWS.EARLY.start, offset) ||
+    DESK_PAPER_MISS_WINDOWS.EARLY.start;
+  const midPreferred =
+    addMinutesToTime(DESK_PAPER_MISS_WINDOWS.MID.start, offset) ||
+    DESK_PAPER_MISS_WINDOWS.MID.start;
+  const lateRaw =
     String(input.visitStartTime || "").trim().slice(0, 5) || DESK_PAPER_MISS_WINDOWS.LATE.start;
+  // 有實際晚間起始則尊重（連續 KEY 已錯開）；僅預設晚間才套 offset。
+  const latePreferred = String(input.visitStartTime || "").trim()
+    ? lateRaw
+    : addMinutesToTime(DESK_PAPER_MISS_WINDOWS.LATE.start, offset) ||
+      DESK_PAPER_MISS_WINDOWS.LATE.start;
+
   const earlyLabel = formatDeskNoteMonthDay(earlyDate);
   const midLabel = formatDeskNoteMonthDay(midDate);
   const lateLabel = formatDeskNoteMonthDay(lateDate);
   if (!earlyLabel || !midLabel || !lateLabel) return null;
 
+  const occupied = new Set<string>();
+  for (const key of input.occupiedStampKeys ?? []) {
+    const text = String(key || "").trim();
+    if (text) occupied.add(text);
+  }
+
+  const earlyTime = resolveUniqueMissedStampTime({
+    monthDay: earlyLabel,
+    preferredTime: earlyPreferred,
+    occupiedKeys: occupied,
+    bumpStepMinutes: bumpStep,
+    softEnd: DESK_PAPER_MISS_WINDOWS.EARLY.softEnd,
+  });
+  if (!earlyTime) return null;
+  const earlyKey = missedVisitStampKey(earlyLabel, earlyTime);
+  if (earlyKey) occupied.add(earlyKey);
+
+  const midTime = resolveUniqueMissedStampTime({
+    monthDay: midLabel,
+    preferredTime: midPreferred,
+    occupiedKeys: occupied,
+    bumpStepMinutes: bumpStep,
+    softEnd: DESK_PAPER_MISS_WINDOWS.MID.softEnd,
+  });
+  if (!midTime) return null;
+  const midKey = missedVisitStampKey(midLabel, midTime);
+  if (midKey) occupied.add(midKey);
+
+  const lateTime = resolveUniqueMissedStampTime({
+    monthDay: lateLabel,
+    preferredTime: latePreferred,
+    occupiedKeys: occupied,
+    bumpStepMinutes: bumpStep,
+    softEnd: DESK_PAPER_MISS_WINDOWS.LATE.softEnd,
+  });
+  if (!lateTime) return null;
+
   return [
-    `${earlyLabel} ${DESK_PAPER_MISS_WINDOWS.EARLY.start}訪視未遇`,
-    `${midLabel} ${DESK_PAPER_MISS_WINDOWS.MID.start}訪視未遇`,
-    `${lateLabel} ${lateStart}訪視未遇`,
+    `${earlyLabel} ${earlyTime}訪視未遇`,
+    `${midLabel} ${midTime}訪視未遇`,
+    `${lateLabel} ${lateTime}訪視未遇`,
   ].join("；") + "。";
 }
 
