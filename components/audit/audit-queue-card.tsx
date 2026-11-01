@@ -48,6 +48,8 @@ export function AuditQueueCard({
   const hasWarnings = item.checks.some((check) => check.severity === "warning" && !check.passed);
   const formReviewItems = getAuditFormReviewItems(item);
   const approvable = isAuditItemApprovable(item);
+  // 僅 blocking 未過才叫「阻擋」；同意書等 warning 可核准，不顯示阻擋
+  const badgeLabel = isBlocked ? "阻擋" : approvable ? "可稽核" : "待修正";
   const [supervisorNote, setSupervisorNote] = useState("");
   const [overrideWarnings, setOverrideWarnings] = useState(false);
   const [decisionResult, setDecisionResult] = useState<AuditDecisionResult | null>(null);
@@ -138,12 +140,14 @@ export function AuditQueueCard({
         <span
           className={cn(
             "rounded-md px-2 py-1 text-xs font-medium",
-            isBlocked || !approvable
+            isBlocked
               ? "bg-destructive text-destructive-foreground"
-              : "bg-secondary",
+              : !approvable
+                ? "bg-amber-100 text-amber-950"
+                : "bg-secondary",
           )}
         >
-          {isBlocked || !approvable ? "阻擋" : "可稽核"}
+          {badgeLabel}
         </span>
       </div>
 
@@ -154,19 +158,27 @@ export function AuditQueueCard({
       </p>
 
       <div className="mt-4 space-y-2">
-        {item.checks.map((check) => (
-          <div key={check.key} className="flex gap-2 rounded-md border bg-background p-2 text-sm">
-            {check.passed ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            )}
-            <div>
-              <p className="font-medium">{check.label}</p>
-              <p className="mt-1 text-muted-foreground">{check.message}</p>
+        {item.checks.map((check) => {
+          const warnOnly = check.severity === "warning" && !check.passed;
+          return (
+            <div key={check.key} className="flex gap-2 rounded-md border bg-background p-2 text-sm">
+              {check.passed ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              ) : (
+                <AlertTriangle
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    warnOnly ? "text-amber-600" : "text-destructive",
+                  )}
+                />
+              )}
+              <div>
+                <p className="font-medium">{check.label}</p>
+                <p className="mt-1 text-muted-foreground">{check.message}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {item.errorLines && item.errorLines.length > 0 ? (

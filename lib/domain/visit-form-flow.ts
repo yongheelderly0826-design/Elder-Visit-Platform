@@ -115,11 +115,18 @@ export function getVisitRequiredForms(schedule: VisitSchedule) {
 
 export function getAuditFormReviewItems(item: AuditQueueItem) {
   const isBlocked = item.auditState === "blocked";
+  const consentPassed = item.checks.some(
+    (check) => check.key === "consent_required" && check.passed,
+  );
+  // 同意書暫不阻擋核准：未同意只標「待覆核」，不標「未通過／阻擋」
+  const consentStatus: VisitFormStatus = consentPassed
+    ? "completed"
+    : "needs_review";
 
   return getVisitFormFlowItems({
     gov_social_worker_confidentiality_115: "completed",
     gov_civil_affairs_confidentiality_115: "completed",
-    gov_personal_data_consent_115: isBlocked ? "blocked" : "completed",
+    gov_personal_data_consent_115: consentStatus,
     gov_care_visit_115: isBlocked ? "needs_review" : "completed",
   }).map((flowItem) => ({
     ...flowItem,
