@@ -30,12 +30,13 @@ export async function GET(request: NextRequest) {
 
   if (status.dataMode === "gas_ready") {
     try {
+      // Lite queue（不重跑 102 欄驗證）；overview 仍要 all 才能算待補件／已核准，但同一套 lite enrich。
       const [pendingRows, allRows, cases, assignments] = await Promise.all([
-        cachedRead(["audit-queue", "pending"], [GAS_READ_TAGS.auditQueue], () =>
+        cachedRead(["audit-queue", "pending", "lite"], [GAS_READ_TAGS.auditQueue], () =>
           gasClient.audit.queue({ decision: "pending" }),
         ),
         includeOverview
-          ? cachedRead(["audit-queue", "all"], [GAS_READ_TAGS.auditQueue], () =>
+          ? cachedRead(["audit-queue", "all", "lite"], [GAS_READ_TAGS.auditQueue], () =>
               gasClient.audit.queue({ decision: "all" }),
             )
           : Promise.resolve([] as Record<string, unknown>[]),

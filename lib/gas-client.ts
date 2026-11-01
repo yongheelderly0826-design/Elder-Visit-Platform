@@ -651,7 +651,7 @@ export const gasClient = {
       }),
   },
   audit: {
-    queue: (params?: { decision?: string }) =>
+    queue: (params?: { decision?: string; validate?: string }) =>
       gasFetch<Array<Record<string, unknown>>>("audit.queue", {
         params: params as Record<string, string> | undefined,
         revalidateSeconds: 20,
@@ -663,6 +663,17 @@ export const gasClient = {
       reason?: string;
       reviewer?: string;
     }) => gasFetch<Record<string, unknown>>("audit.decide", { method: "POST", body }),
+    decideBatch: (body: {
+      audit_ids: string[];
+      decision: string;
+      reason?: string;
+      reviewer?: string;
+    }) =>
+      gasFetch<{
+        success_count: number;
+        fail_count: number;
+        results: Array<Record<string, unknown>>;
+      }>("audit.decideBatch", { method: "POST", body }),
   },
   attendance: {
     identify: (body: { id_number: string }) =>

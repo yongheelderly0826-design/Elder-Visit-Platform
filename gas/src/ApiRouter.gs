@@ -85,7 +85,8 @@ var ApiRouter = (function () {
     'consent.generatePdf': function (p, b) { return ConsentModule.generatePdf(b || p); },
 
     'audit.queue': function (p) { return AuditModule.queue(p); },
-    'audit.decide': function (p, b) { return AuditModule.decide(b); },
+    'audit.decide': function (p, b) { return AuditModule.decide(b || p); },
+    'audit.decideBatch': function (p, b) { return AuditModule.decideBatch(b || p); },
 
     'export.lifeCareXlsx': function (p, b) { return ExportModule.exportLifeCareXlsx(b); },
     'export.listCandidates': function (p) { return ExportModule.listCandidates(p); },

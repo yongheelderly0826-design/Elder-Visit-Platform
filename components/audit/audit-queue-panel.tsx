@@ -124,6 +124,7 @@ export function AuditQueuePanel() {
 
   async function approveAuditIds(ids: string[]) {
     if (!ids.length || !canApproveAudit) return;
+    const CHUNK = 60;
     setBulkBusy(true);
     setMessage(`正在批次核准 0／${ids.length}…`);
     let ok = 0;
@@ -131,35 +132,50 @@ export function AuditQueuePanel() {
     const failSamples: string[] = [];
     const approved = new Set<string>();
 
-    for (let index = 0; index < ids.length; index += 1) {
-      const auditId = ids[index];
-      setMessage(`正在批次核准 ${index + 1}／${ids.length}…`);
+    for (let offset = 0; offset < ids.length; offset += CHUNK) {
+      const chunk = ids.slice(offset, offset + CHUNK);
+      setMessage(`正在批次核准 ${Math.min(offset + chunk.length, ids.length)}／${ids.length}…`);
       try {
-        const response = await fetch("/api/audit/decision", {
+        const response = await fetch("/api/audit/decision-batch", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            auditId,
+            auditIds: chunk,
             decision: "approve",
             supervisorNote: "批次核准",
-            overrideWarnings: true,
           }),
         });
-        if (!response.ok) {
-          fail += 1;
-          const json = (await response.json().catch(() => null)) as {
-            error?: { message?: string };
-          } | null;
+        const json = (await response.json().catch(() => null)) as {
+          data?: {
+            successCount?: number;
+            failCount?: number;
+            results?: Array<{
+              ok?: boolean;
+              auditId?: string;
+              message?: string;
+            }>;
+          };
+          error?: { message?: string };
+        } | null;
+        if (!response.ok || !json?.data) {
+          fail += chunk.length;
           if (failSamples.length < 3) {
-            failSamples.push(json?.error?.message ?? `核准失敗（${auditId}）`);
+            failSamples.push(json?.error?.message ?? "批次核准失敗");
           }
           continue;
         }
-        ok += 1;
-        approved.add(auditId);
+        for (const row of json.data.results ?? []) {
+          if (row.ok && row.auditId) {
+            ok += 1;
+            approved.add(row.auditId);
+          } else {
+            fail += 1;
+            if (failSamples.length < 3 && row.message) failSamples.push(row.message);
+          }
+        }
       } catch {
-        fail += 1;
-        if (failSamples.length < 3) failSamples.push(`連線失敗（${auditId}）`);
+        fail += chunk.length;
+        if (failSamples.length < 3) failSamples.push("連線失敗");
       }
     }
 
@@ -182,7 +198,7 @@ export function AuditQueuePanel() {
     if (ok > 0) {
       window.setTimeout(() => {
         void loadQueue();
-      }, 800);
+      }, 600);
     }
   }
 

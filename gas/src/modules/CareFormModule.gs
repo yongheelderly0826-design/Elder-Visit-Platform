@@ -133,6 +133,7 @@ var CareFormModule = (function () {
       throw aerr;
     }
 
+    var submitValidation = { ok: true, errorLines: [], errors: [] };
     if (!isMissed) {
       var caseRow = caseRowForAssignment_(data.assignment_id);
       var registryNationalId = (caseRow && (caseRow.id_number || caseRow.national_id)) || '';
@@ -140,14 +141,24 @@ var CareFormModule = (function () {
         mohwAnswers: answers,
         caseRow: caseRow || {}
       });
-      var validation = MohwLifeCareValidator.validateRow(mergedAnswers, data.row || 2, {
-        registryNationalId: registryNationalId
+      var noteBlob = String(data.notes || '');
+      try {
+        var asg = AssignmentModule.get(data.assignment_id);
+        if (asg && asg.notes) noteBlob += '|' + String(asg.notes);
+      } catch (eNotes) {}
+      var deskPaper =
+        noteBlob.indexOf('公所代填') !== -1 ||
+        noteBlob.indexOf('紙本') !== -1 ||
+        noteBlob.indexOf('desk') !== -1;
+      submitValidation = MohwLifeCareValidator.validateRow(mergedAnswers, data.row || 2, {
+        registryNationalId: registryNationalId,
+        allowMissingWorkerNationalId: deskPaper
       });
-      if (!validation.ok) {
-        var verr = new Error(validation.errorLines.join('；'));
+      if (!submitValidation.ok) {
+        var verr = new Error(submitValidation.errorLines.join('；'));
         verr.code = 'MOHW_VALIDATION_ERROR';
-        verr.errors = validation.errors;
-        verr.errorLines = validation.errorLines;
+        verr.errors = submitValidation.errors;
+        verr.errorLines = submitValidation.errorLines;
         throw verr;
       }
     }
@@ -180,7 +191,15 @@ var CareFormModule = (function () {
       status: '已提交',
       submitted_at: new Date().toISOString(),
       audited_at: '',
+      validation_ok: submitValidation.ok ? 'true' : 'false',
+      validation_error_lines: JSON.stringify((submitValidation.errorLines || []).slice(0, 12)),
+      validated_at: new Date().toISOString(),
     };
+    SheetHelper.ensureColumns(SHEET, [
+      'validation_ok',
+      'validation_error_lines',
+      'validated_at',
+    ]);
     if (replaceExisting) {
       var updated = SheetHelper.updateByKey(SHEET, 'careform_id', careformId, record);
       if (updated) record = updated;
@@ -233,7 +252,7 @@ var CareFormModule = (function () {
     );
     return {
       careform: record,
-      validation: { ok: true, errorLines: [] },
+      validation: submitValidation,
       highCare: highCare,
       missed_photo_count: isMissed ? photoRecords.length : 0,
     };

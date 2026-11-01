@@ -6,6 +6,14 @@
 - **Evidence:** `lib/domain/mohw-life-care-validation.ts` (`workerSideStarted`), `gas/src/utils/MohwLifeCareValidator.gs`, `lib/domain/mohw-desk-form-defaults.ts`.
 - **Added on:** 2026-10-31
 
+## Lesson: Audit queue must stay lite; batch decide once per index build
+
+- **Trigger:** 稽核頁／一鍵通過極慢（400+ 待審）。
+- **Cause:** `audit.queue` 對每筆跑 102 欄驗證；`decide` 每筆 `VisitRecordIndex.build()` 兩次並 `ReadCache.bump`；佇列 JSON 常 >90KB 導致 CacheService 放不進去。
+- **Rule:** Queue 預設 lite（用關懷表 `validation_ok`／`validation_error_lines` 快照，缺快照先當通過）；送出時寫入快照。`audit.decideBatch` 一次 build、多筆決定、結束才 bump／排程快照。前端每批 ≤60 筆呼叫 `/api/audit/decision-batch`。
+- **Evidence:** `gas/src/modules/AuditModule.gs`, `CareFormModule.gs`, `app/api/audit/decision-batch/route.ts`, `audit-queue-panel.tsx`.
+- **Added on:** 2026-11-01
+
 ## Lesson: Audit errors must show field + jump; desk paper ID soft on audit
 
 - **Trigger:** 稽核卡只顯示 `CW2 …` 等 Excel 座標；紙本 KEY 送出時身分證可暫缺，稽核重驗卻強制 CW2 卡住。

@@ -117,7 +117,7 @@ var SheetHelper = (function () {
       '派案紀錄': ['assignment_id', 'batch_id', 'case_id', 'encoded_id', 'visitor_id', 'visit_village', 'status', 'dispatched_at', 'confirmed_at', 'due_date', 'notes', 'updated_at'],
       '簽到退紀錄': ['attendance_id', 'visitor_id', 'assignment_id', 'session_date', 'checkin_at', 'checkout_at', 'checkin_lat', 'checkin_lng', 'checkout_lat', 'checkout_lng', 'session_type', 'duration_minutes', 'channel', 'site_id', 'site_name', 'group_id', 'group_name', 'worker_name', 'id_number', 'source', 'checkin_photo_url'],
       '出勤集合點': ['site_id', 'name', 'group_id', 'kind', 'note', 'status', 'created_at', 'created_by'],
-      '關懷表登打': ['careform_id', 'assignment_id', 'encoded_id', 'visitor_id', 'visit_result', 'completion_pct', 'answers_json', 'consent_signed', 'photo_urls', 'status', 'submitted_at', 'audited_at'],
+      '關懷表登打': ['careform_id', 'assignment_id', 'encoded_id', 'visitor_id', 'visit_result', 'completion_pct', 'answers_json', 'consent_signed', 'photo_urls', 'status', 'submitted_at', 'audited_at', 'validation_ok', 'validation_error_lines', 'validated_at'],
       '高關懷名冊': ['high_care_id', 'case_id', 'careform_id', 'assignment_id', 'encoded_id', 'elder_name', 'colors', 'primary_color', 'trigger_keys', 'trigger_labels', 'trigger_values', 'opened_at', 'status', 'owner', 'note', 'last_visit_triggered', 'updated_at'],
       '空訪紀錄': ['missed_visit_id', 'assignment_id', 'encoded_id', 'visitor_id', 'photo_urls', 'notes', 'recorded_at'],
       '稽核佇列': ['audit_id', 'careform_id', 'reviewer', 'decision', 'reason', 'decided_at'],
