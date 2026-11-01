@@ -305,6 +305,21 @@ var AuditModule = (function () {
       }
     }
 
+    // 核准時寫入驗證快照，匯出候選清單可走 lite、不必再對每筆 validateRow
+    if (decision === '通過' && preview.careform_id) {
+      try {
+        persistValidationSnapshot(preview.careform_id, {
+          ok: true,
+          errorLines: [],
+          errors: [],
+        });
+        if (index.careformById[preview.careform_id]) {
+          index.careformById[preview.careform_id].validation_ok = 'true';
+          index.careformById[preview.careform_id].validation_error_lines = '[]';
+        }
+      } catch (eSnap) {}
+    }
+
     var item = enrichFromIndex_(index, updated, { validate: false });
     item.decision = decision;
     return {

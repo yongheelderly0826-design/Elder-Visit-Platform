@@ -17,14 +17,85 @@ var ExportModule = (function () {
     }
   }
 
-  function candidateFrom_(index, careform, caseRow) {
+  function truthy_(value) {
+    return value === true || value === 'true' || value === '是' || value === 'TRUE';
+  }
+
+  function parseErrorLines_(raw) {
+    if (Object.prototype.toString.call(raw) === '[object Array]') {
+      return raw.map(function (line) { return String(line); }).filter(Boolean);
+    }
+    var text = String(raw || '').trim();
+    if (!text) return [];
+    try {
+      var parsed = JSON.parse(text);
+      if (Object.prototype.toString.call(parsed) === '[object Array]') {
+        return parsed.map(function (line) { return String(line); }).filter(Boolean);
+      }
+    } catch (e) {}
+    return text.split(/\n|；|;/).map(function (line) {
+      return String(line || '').trim();
+    }).filter(Boolean);
+  }
+
+  function deskPaper_(assignment, careform) {
+    var noteBlob = String((assignment && assignment.notes) || '') + '|' + String((careform && careform.notes) || '');
+    return (
+      noteBlob.indexOf('公所代填') !== -1 ||
+      noteBlob.indexOf('紙本') !== -1 ||
+      noteBlob.indexOf('desk') !== -1
+    );
+  }
+
+  /**
+   * @param {{ validate?: boolean }} options
+   *   validate=true：強制重跑 102 欄（不寫入 Sheets）
+   *   預設 lite：有快照用快照；無快照且已稽核通過 → 清單顯示 validation_ok=true（僅 list）；
+   *   無快照且未稽核 → validation_ok=false。list 路徑禁止 persist／validateRow。
+   */
+  function candidateFrom_(index, careform, caseRow, options) {
+    options = options || {};
+    var forceValidate = options.validate === true;
     var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
     var auditDecision = audit ? String(audit.decision || '') : '';
     var auditedPass = auditDecision === '通過' || String(careform.status) === '已稽核';
-    var answers = MohwLifeCareMapper.mergeInputs({ careform: careform, caseRow: caseRow });
-    var validation = MohwLifeCareValidator.validateRow(answers, 2, {
-      registryNationalId: (caseRow && (caseRow.id_number || caseRow.national_id)) || ''
-    });
+    var assignment = index.assignmentById[String(careform.assignment_id || '').trim()] || {};
+    var answers = null;
+    var validation = { ok: false, errorLines: [], errors: [] };
+    var hasSnapshot =
+      careform.validation_ok !== undefined &&
+      careform.validation_ok !== null &&
+      String(careform.validation_ok).trim() !== '';
+
+    if (forceValidate) {
+      answers = MohwLifeCareMapper.mergeInputs({ careform: careform, caseRow: caseRow });
+      validation = MohwLifeCareValidator.validateRow(answers, 2, {
+        registryNationalId: (caseRow && (caseRow.id_number || caseRow.national_id)) || '',
+        allowMissingWorkerNationalId: deskPaper_(assignment, careform),
+      });
+    } else if (hasSnapshot) {
+      validation = {
+        ok: truthy_(careform.validation_ok) || careform.validation_ok === true,
+        errorLines: parseErrorLines_(careform.validation_error_lines),
+        errors: [],
+      };
+    } else if (auditedPass) {
+      // Lite list only：舊列無快照但已稽核通過 → 顯示可匯出；真正產檔仍走 validateBatch
+      validation = { ok: true, errorLines: [], errors: [] };
+    } else {
+      validation = { ok: false, errorLines: [], errors: [] };
+    }
+
+    var visitDate = '';
+    if (answers) {
+      visitDate = String(answers.visit_date || '');
+    } else {
+      try {
+        var parsed = parseAnswers_(careform);
+        visitDate = String((parsed && parsed.visit_date) || '');
+      } catch (eDate) {}
+    }
+
     return {
       case_id: caseRow.case_id,
       encoded_id: caseRow.encoded_id,
@@ -32,7 +103,7 @@ var ExportModule = (function () {
       name: caseRow.name || '',
       visit_district: caseRow.visit_district || '',
       visit_village: caseRow.visit_village || '',
-      visit_date: String((answers && answers.visit_date) || careform.visit_date || ''),
+      visit_date: visitDate || String(careform.visit_date || ''),
       careform_id: careform.careform_id,
       careform_status: careform.status,
       visit_result: careform.visit_result || '',
@@ -41,8 +112,8 @@ var ExportModule = (function () {
       audit_decision: auditDecision || (auditedPass ? '通過' : '待稽核'),
       export_ready: auditedPass && validation.ok,
       validation_ok: validation.ok,
-      error_count: validation.errors.length,
-      error_lines: validation.errorLines.slice(0, 5),
+      error_count: (validation.errorLines && validation.errorLines.length) || 0,
+      error_lines: (validation.errorLines || []).slice(0, 5),
       assignment_id: careform.assignment_id || '',
     };
   }
@@ -53,6 +124,7 @@ var ExportModule = (function () {
   function listCandidatesFromIndex_(index, params) {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
+    var forceValidate = params.validate === '1' || params.validate === true || params.fresh === '1';
     var district = String(params.district || '').trim();
     var byCase = {};
 
@@ -74,7 +146,9 @@ var ExportModule = (function () {
     });
 
     var items = Object.keys(byCase).map(function (caseId) {
-      return candidateFrom_(index, byCase[caseId].careform, byCase[caseId].caseRow);
+      return candidateFrom_(index, byCase[caseId].careform, byCase[caseId].caseRow, {
+        validate: forceValidate,
+      });
     });
 
     return {
@@ -87,8 +161,14 @@ var ExportModule = (function () {
   function listCandidates(params) {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
+    var forceValidate = params.validate === '1' || params.validate === true || params.fresh === '1';
     var cacheKey = ReadCache.key(
-      'exportCand3:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+      'exportCand5:' +
+        (onlyAudited ? '1' : '0') +
+        ':' +
+        (forceValidate ? 'full' : 'lite') +
+        ':' +
+        String(params.district || '')
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
@@ -101,7 +181,7 @@ var ExportModule = (function () {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
     var cacheKey = ReadCache.key(
-      'exportMgr2:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+      'exportMgr3:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
@@ -337,7 +417,7 @@ var ExportModule = (function () {
     params = params || {};
     var onlyAudited = params.only_audited === true || params.only_audited === 'true';
     var cacheKey = ReadCache.key(
-      'exportWs:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
+      'exportWs2:' + (onlyAudited ? '1' : '0') + ':' + String(params.district || '')
     );
     var cached = ReadCache.getJson(cacheKey);
     if (cached) return cached;
