@@ -622,11 +622,587 @@ var OpsModule = (function () {
     };
   }
 
+  /**
+   * 稽核關懷表上某訪查人姓名的身分證／電話是否與預期一致。
+   * data: { name, national_id?, phone?, only_audited? }
+   */
+  function auditWorkerIdentityByName(data) {
+    data = data || {};
+    var name = String(data.name || '').trim();
+    if (!name) {
+      var err = new Error('name 必填');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    var expectNid = String(data.national_id || '').trim().toUpperCase();
+    var expectPhoneDigits = String(data.phone || '').replace(/\D/g, '');
+    if (expectPhoneDigits.length === 9 && expectPhoneDigits.charAt(0) === '9') {
+      expectPhoneDigits = '0' + expectPhoneDigits;
+    }
+    var onlyAudited = data.only_audited !== false && data.only_audited !== 'false';
+    var index = VisitRecordIndex.build();
+    var rows = [];
+    var okCount = 0;
+    var issueCount = 0;
+
+    function phoneDigits_(v) {
+      var d = String(v || '').replace(/\D/g, '');
+      if (d.length === 9 && d.charAt(0) === '9') d = '0' + d;
+      return d;
+    }
+
+    (index.careforms || []).forEach(function (careform) {
+      if (!careform) return;
+      if (onlyAudited) {
+        var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+        var pass = (audit && audit.decision === '通過') || String(careform.status) === '已稽核';
+        if (!pass) return;
+      }
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(careform.answers_json) || {};
+      } catch (e) {
+        answers = {};
+      }
+      var sides = [];
+      if (String(answers.social_worker_name || '').trim() === name) sides.push('社政');
+      if (String(answers.civil_worker_name || '').trim() === name) sides.push('民政');
+      if (!sides.length) return;
+
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform) || {};
+      sides.forEach(function (side) {
+        var nid =
+          side === '社政'
+            ? String(answers.social_worker_national_id || '').trim().toUpperCase()
+            : String(answers.civil_worker_national_id || '').trim().toUpperCase();
+        var phone =
+          side === '社政'
+            ? String(answers.social_worker_phone || '').trim()
+            : String(answers.civil_worker_phone || '').trim();
+        var role =
+          side === '社政'
+            ? String(answers.social_worker_role || '').trim()
+            : String(answers.civil_worker_role || '').trim();
+        var issues = [];
+        if (expectNid) {
+          if (!nid) issues.push('缺身分證');
+          else if (nid !== expectNid) issues.push('身分證不符:' + nid);
+        } else if (!nid) {
+          issues.push('缺身分證');
+        }
+        if (expectPhoneDigits) {
+          var got = phoneDigits_(phone);
+          if (!got) issues.push('缺電話');
+          else if (got !== expectPhoneDigits) issues.push('電話不符:' + phone);
+        }
+        var row = {
+          careform_id: careform.careform_id,
+          case_id: caseRow.case_id || '',
+          encoded_id: caseRow.encoded_id || '',
+          elder_name: caseRow.name || '',
+          visit_village: caseRow.visit_village || '',
+          careform_status: careform.status || '',
+          side: side,
+          role: role,
+          national_id: nid,
+          phone: phone,
+          ok: issues.length === 0,
+          issues: issues,
+        };
+        rows.push(row);
+        if (row.ok) okCount++;
+        else issueCount++;
+      });
+    });
+
+    return {
+      name: name,
+      expected_national_id: expectNid || null,
+      expected_phone: expectPhoneDigits || null,
+      only_audited: onlyAudited,
+      total: rows.length,
+      ok_count: okCount,
+      issue_count: issueCount,
+      rows: rows,
+    };
+  }
+
+  function phoneDigits_(v) {
+    var d = String(v || '').replace(/\D/g, '');
+    if (d.length === 9 && d.charAt(0) === '9') d = '0' + d;
+    return d;
+  }
+
+  function hammingOrNearPhone_(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      if (a.charAt(i) !== b.charAt(i)) diff++;
+      if (diff > 1) return false;
+    }
+    return diff === 1;
+  }
+
+  /**
+   * 標準自主稽核：關懷表訪查人證號／電話 vs 訪員名冊（同名）。
+   * 找出缺填、與名冊不符、疑似電話少打／錯一碼。
+   */
+  function auditAllWorkerIdentities(data) {
+    data = data || {};
+    var onlyAudited = data.only_audited !== false && data.only_audited !== 'false';
+    var index = VisitRecordIndex.build();
+
+    var rosterByName = {};
+    (index.visitors || []).forEach(function (v) {
+      var name = String((v && v.name) || '').trim();
+      if (!name) return;
+      var row = {
+        visitor_id: v.visitor_id || '',
+        name: name,
+        national_id: String(v.national_id || v.id_number || '').trim().toUpperCase(),
+        phone: phoneDigits_(v.phone || v.mobile || ''),
+      };
+      var prev = rosterByName[name];
+      if (!prev) {
+        rosterByName[name] = row;
+        return;
+      }
+      if (!prev.national_id && row.national_id) rosterByName[name] = row;
+      else {
+        if (!prev.phone && row.phone) prev.phone = row.phone;
+        if (prev.national_id && row.national_id && prev.national_id !== row.national_id) {
+          prev.roster_id_conflict = true;
+        }
+      }
+    });
+
+    // VisitRecordIndex 若無 visitors，改讀表
+    if (!Object.keys(rosterByName).length) {
+      try {
+        var vSheet = SheetHelper.getSheet(Config.SHEET_NAMES.VISITORS);
+        var vValues = vSheet.getDataRange().getValues();
+        var vHeaders = vValues[0];
+        var nameIdx = vHeaders.indexOf('name');
+        var idIdx = vHeaders.indexOf('national_id');
+        if (idIdx === -1) idIdx = vHeaders.indexOf('id_number');
+        var phoneIdx = vHeaders.indexOf('phone');
+        if (phoneIdx === -1) phoneIdx = vHeaders.indexOf('mobile');
+        var vidIdx = vHeaders.indexOf('visitor_id');
+        for (var vr = 1; vr < vValues.length; vr++) {
+          var nm = String(vValues[vr][nameIdx] || '').trim();
+          if (!nm) continue;
+          var row2 = {
+            visitor_id: vidIdx === -1 ? '' : String(vValues[vr][vidIdx] || ''),
+            name: nm,
+            national_id: idIdx === -1 ? '' : String(vValues[vr][idIdx] || '').trim().toUpperCase(),
+            phone: phoneIdx === -1 ? '' : phoneDigits_(vValues[vr][phoneIdx]),
+          };
+          var prev2 = rosterByName[nm];
+          if (!prev2) rosterByName[nm] = row2;
+          else if (!prev2.national_id && row2.national_id) rosterByName[nm] = row2;
+          else if (!prev2.phone && row2.phone) prev2.phone = row2.phone;
+        }
+      } catch (eVis) {}
+    }
+
+    var issues = [];
+    var fillSides = 0;
+    var scanned = 0;
+    var byType = {
+      missing_national_id: 0,
+      missing_phone: 0,
+      national_id_mismatch_roster: 0,
+      phone_mismatch_roster: 0,
+      phone_near_miss_roster: 0,
+      roster_missing_national_id: 0,
+      name_not_in_roster: 0,
+    };
+    var peopleMap = {};
+
+    function pushIssue_(row) {
+      issues.push(row);
+      byType[row.issue_type] = (byType[row.issue_type] || 0) + 1;
+      var key = row.worker_name + '|' + row.issue_type;
+      if (!peopleMap[key]) {
+        peopleMap[key] = {
+          worker_name: row.worker_name,
+          issue_type: row.issue_type,
+          roster_national_id: row.roster_national_id || '',
+          roster_phone: row.roster_phone || '',
+          count: 0,
+          sample_careform_ids: [],
+          sample_elders: [],
+        };
+      }
+      peopleMap[key].count++;
+      if (peopleMap[key].sample_careform_ids.length < 5) {
+        peopleMap[key].sample_careform_ids.push(row.careform_id);
+        peopleMap[key].sample_elders.push(row.elder_name || '');
+      }
+    }
+
+    (index.careforms || []).forEach(function (careform) {
+      if (!careform) return;
+      scanned++;
+      if (onlyAudited) {
+        var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+        var pass = (audit && audit.decision === '通過') || String(careform.status) === '已稽核';
+        if (!pass) return;
+      }
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(careform.answers_json) || {};
+      } catch (e) {
+        answers = {};
+      }
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform) || {};
+      var sides = [
+        {
+          side: '社政',
+          name: String(answers.social_worker_name || '').trim(),
+          national_id: String(answers.social_worker_national_id || '').trim().toUpperCase(),
+          phone: phoneDigits_(answers.social_worker_phone),
+          started:
+            hasVal_(answers.social_worker_role) ||
+            hasVal_(answers.social_worker_name) ||
+            hasVal_(answers.social_worker_national_id) ||
+            hasVal_(answers.social_worker_phone),
+        },
+        {
+          side: '民政',
+          name: String(answers.civil_worker_name || '').trim(),
+          national_id: String(answers.civil_worker_national_id || '').trim().toUpperCase(),
+          phone: phoneDigits_(answers.civil_worker_phone),
+          started:
+            hasVal_(answers.civil_worker_role) ||
+            hasVal_(answers.civil_worker_name) ||
+            hasVal_(answers.civil_worker_national_id) ||
+            hasVal_(answers.civil_worker_phone),
+        },
+      ];
+
+      sides.forEach(function (s) {
+        if (!s.started || !s.name) return;
+        fillSides++;
+        var roster = rosterByName[s.name] || null;
+        var base = {
+          careform_id: careform.careform_id,
+          case_id: caseRow.case_id || '',
+          encoded_id: caseRow.encoded_id || '',
+          elder_name: caseRow.name || '',
+          visit_village: caseRow.visit_village || '',
+          careform_status: careform.status || '',
+          side: s.side,
+          worker_name: s.name,
+          form_national_id: s.national_id,
+          form_phone: s.phone,
+          roster_national_id: roster ? roster.national_id : '',
+          roster_phone: roster ? roster.phone : '',
+          roster_visitor_id: roster ? roster.visitor_id : '',
+        };
+
+        if (!s.national_id) {
+          pushIssue_(Object.assign({}, base, { issue_type: 'missing_national_id' }));
+        } else if (roster && roster.national_id && s.national_id !== roster.national_id) {
+          pushIssue_(Object.assign({}, base, { issue_type: 'national_id_mismatch_roster' }));
+        } else if (roster && !roster.national_id) {
+          pushIssue_(Object.assign({}, base, { issue_type: 'roster_missing_national_id' }));
+        }
+
+        if (!s.phone) {
+          pushIssue_(Object.assign({}, base, { issue_type: 'missing_phone' }));
+        } else if (roster && roster.phone && s.phone !== roster.phone) {
+          if (hammingOrNearPhone_(s.phone, roster.phone)) {
+            pushIssue_(Object.assign({}, base, { issue_type: 'phone_near_miss_roster' }));
+          } else {
+            pushIssue_(Object.assign({}, base, { issue_type: 'phone_mismatch_roster' }));
+          }
+        }
+
+        if (!roster) {
+          pushIssue_(Object.assign({}, base, { issue_type: 'name_not_in_roster' }));
+        }
+      });
+    });
+
+    var people = Object.keys(peopleMap).map(function (k) { return peopleMap[k]; });
+    people.sort(function (a, b) {
+      return b.count - a.count || String(a.worker_name).localeCompare(String(b.worker_name), 'zh-Hant');
+    });
+
+    return {
+      only_audited: onlyAudited,
+      roster_names: Object.keys(rosterByName).length,
+      scanned_careforms: scanned,
+      fill_sides: fillSides,
+      issue_count: issues.length,
+      by_type: byType,
+      people_with_issues: people.slice(0, 80),
+      issues: issues.slice(0, 200),
+    };
+  }
+
+  /**
+   * 依 careform_id 覆寫社政／民政電話（僅指定欄）。
+   * data.patches: [{ careform_id, side: 'social'|'civil', phone }]
+   */
+  function patchWorkerPhoneByCareformIds(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var patches = data.patches || [];
+    if (!patches.length) {
+      var err = new Error('patches 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    var byId = {};
+    patches.forEach(function (p) {
+      var id = String((p && p.careform_id) || '').trim();
+      var phone = String((p && p.phone) || '').trim();
+      var side = String((p && p.side) || 'civil').trim();
+      if (!id || !phone) return;
+      byId[id] = { phone: phone, side: side };
+    });
+
+    var cfSheet = SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS);
+    var cfValues = cfSheet.getDataRange().getValues();
+    var cfHeaders = cfValues[0];
+    var idIdx = cfHeaders.indexOf('careform_id');
+    var answersIdx = cfHeaders.indexOf('answers_json');
+    if (idIdx === -1 || answersIdx === -1) {
+      var errCols = new Error('careforms missing careform_id/answers_json');
+      errCols.code = 'CONFIG';
+      throw errCols;
+    }
+
+    var planned = [];
+    var col = [];
+    var written = 0;
+    for (var r = 1; r < cfValues.length; r++) {
+      var cid = String(cfValues[r][idIdx] || '').trim();
+      var patch = byId[cid];
+      if (!patch) {
+        col.push([cfValues[r][answersIdx]]);
+        continue;
+      }
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(cfValues[r][answersIdx]) || {};
+      } catch (e) {
+        answers = {};
+      }
+      var before =
+        patch.side === 'social' || patch.side === '社政'
+          ? String(answers.social_worker_phone || '')
+          : String(answers.civil_worker_phone || '');
+      if (patch.side === 'social' || patch.side === '社政') {
+        answers.social_worker_phone = patch.phone;
+      } else {
+        answers.civil_worker_phone = patch.phone;
+      }
+      planned.push({
+        careform_id: cid,
+        side: patch.side,
+        before: before,
+        after: patch.phone,
+      });
+      if (apply) {
+        col.push([JSON.stringify(answers)]);
+        written++;
+      } else {
+        col.push([cfValues[r][answersIdx]]);
+      }
+    }
+
+    if (apply && written > 0) {
+      cfSheet.getRange(2, answersIdx + 1, col.length, 1).setValues(col);
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      planned_count: planned.length,
+      written: written,
+      applied: apply,
+      rows: planned,
+    };
+  }
+
+  function extractTaiwanIdOps_(raw) {
+    var normalized = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    var match = normalized.match(/[A-Z][0-9]{9}/);
+    return match ? match[0] : normalized;
+  }
+
+  /**
+   * 社政志工名冊批次匯入（Excel 去重後）。
+   * data.people: [{ name, id_number, phone, email?, gender?, notes? }]
+   * data.apply: true 才寫入
+   */
+  function importSocialVolunteers(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var people = data.people || [];
+    if (!people.length) {
+      var err = new Error('people 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    SheetHelper.ensureColumns(Config.SHEET_NAMES.VISITORS, [
+      'volunteer_group',
+      'job_title',
+      'gender',
+      'department',
+      'notes',
+    ]);
+
+    var sheet = SheetHelper.getSheet(Config.SHEET_NAMES.VISITORS);
+    var existing = SheetHelper.rowsToObjects(sheet);
+    var byId = {};
+    var emptyIdByName = {};
+    existing.forEach(function (row) {
+      var id = extractTaiwanIdOps_(row.id_number);
+      if (id) byId[id] = row;
+      else {
+        var nm = String(row.name || '').trim();
+        if (nm && !emptyIdByName[nm]) emptyIdByName[nm] = row;
+      }
+    });
+
+    var toCreate = [];
+    var toUpdate = [];
+    var skipped = [];
+    var now = new Date().toISOString();
+
+    people.forEach(function (raw) {
+      var name = String((raw && raw.name) || '').trim();
+      var idNumber = extractTaiwanIdOps_(raw && raw.id_number);
+      var phone = String((raw && raw.phone) || '').trim();
+      if (!name || !idNumber || !phone) {
+        skipped.push({ name: name, id_number: idNumber, reason: '缺姓名／證號／電話' });
+        return;
+      }
+      if (!Validation.validateTaiwanId(idNumber)) {
+        skipped.push({ name: name, id_number: idNumber, reason: '身分證格式不正確' });
+        return;
+      }
+      var email = String((raw && raw.email) || '').trim().toLowerCase();
+      var gender = String((raw && raw.gender) || '').trim();
+      var notes = String((raw && raw.notes) || '').trim();
+      var payload = {
+        name: name,
+        id_number: idNumber,
+        phone: phone,
+        email: email,
+        gender: gender,
+        volunteer_group: 'social_affairs',
+        job_title: '志工',
+        department: '志工',
+        status: '已核准',
+        notes: notes,
+        updated_at: now,
+      };
+
+      var hit = byId[idNumber];
+      if (!hit && emptyIdByName[name]) {
+        hit = emptyIdByName[name];
+      }
+      // 既有民政訪查員（visitor_id 含 CIV）不覆寫成社政志工
+      if (hit && hit.visitor_id && String(hit.visitor_id).indexOf('-CIV-') !== -1) {
+        skipped.push({
+          name: name,
+          id_number: idNumber,
+          reason: '既有民政訪查員（' + hit.visitor_id + '），略過不改',
+          visitor_id: hit.visitor_id,
+        });
+        return;
+      }
+      if (hit && String(hit.volunteer_group || '') === 'civil_affairs') {
+        skipped.push({
+          name: name,
+          id_number: idNumber,
+          reason: '既有 volunteer_group=civil_affairs，略過不改',
+          visitor_id: hit.visitor_id || '',
+        });
+        return;
+      }
+      if (hit && hit.visitor_id) {
+        toUpdate.push({
+          visitor_id: hit.visitor_id,
+          before_phone: hit.phone || '',
+          before_id: hit.id_number || '',
+          patch: payload,
+        });
+      } else {
+        payload.visitor_id =
+          'EV-115-YH-SOC-' + String(Utilities.getUuid()).replace(/-/g, '').slice(0, 8).toUpperCase();
+        payload.registered_at = now;
+        payload.approved_at = now;
+        payload.badge_no = 'BADGE-' + payload.visitor_id;
+        toCreate.push(payload);
+        // 避免同批重複證號
+        byId[idNumber] = payload;
+      }
+    });
+
+    var updated = 0;
+    var created = 0;
+    if (apply) {
+      toUpdate.forEach(function (item) {
+        SheetHelper.updateByKey(Config.SHEET_NAMES.VISITORS, 'visitor_id', item.visitor_id, item.patch);
+        updated++;
+      });
+      if (toCreate.length) {
+        SheetHelper.appendRows(Config.SHEET_NAMES.VISITORS, toCreate);
+        created = toCreate.length;
+      }
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      planned_update: toUpdate.length,
+      planned_create: toCreate.length,
+      skipped: skipped.length,
+      updated: updated,
+      created: created,
+      applied: apply,
+      update_sample: toUpdate.slice(0, 15).map(function (u) {
+        return {
+          visitor_id: u.visitor_id,
+          name: u.patch.name,
+          id_number: u.patch.id_number,
+          phone: u.patch.phone,
+          before_phone: u.before_phone,
+          before_id: u.before_id,
+        };
+      }),
+      create_sample: toCreate.slice(0, 15).map(function (c) {
+        return {
+          visitor_id: c.visitor_id,
+          name: c.name,
+          id_number: c.id_number,
+          phone: c.phone,
+        };
+      }),
+      skipped_rows: skipped.slice(0, 30),
+    };
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
     findMissingWorkerNationalIds: findMissingWorkerNationalIds,
     patchWorkerNationalIdsByName: patchWorkerNationalIdsByName,
+    auditWorkerIdentityByName: auditWorkerIdentityByName,
+    auditAllWorkerIdentities: auditAllWorkerIdentities,
+    patchWorkerPhoneByCareformIds: patchWorkerPhoneByCareformIds,
+    importSocialVolunteers: importSocialVolunteers,
   };
 })();
 
