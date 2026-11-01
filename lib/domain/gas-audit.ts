@@ -35,9 +35,12 @@ function buildChecks(row: GasAuditRow): AuditCheck[] {
     {
       key: "consent_required",
       label: "同意書狀態",
-      severity: "blocking",
+      // 暫不阻擋稽核／匯出；僅提醒補齊（政策：同意書先不處理）
+      severity: "warning",
       passed: consentSigned,
-      message: consentSigned ? "已取得同意。" : "未取得同意，不可核准匯出。",
+      message: consentSigned
+        ? "已取得同意。"
+        : "尚未取得同意（暫不阻擋核准；日後政策需要時再啟用）。",
     },
     {
       key: "mohw_validation",

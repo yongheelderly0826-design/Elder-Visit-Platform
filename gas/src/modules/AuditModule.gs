@@ -266,15 +266,7 @@ var AuditModule = (function () {
         item: preview,
       };
     }
-    if (decision === '通過' && !preview.consent_signed) {
-      return {
-        ok: false,
-        audit_id: auditId,
-        code: 'CONSENT_REQUIRED',
-        message: '未取得同意，不可核准',
-        item: preview,
-      };
-    }
+    // 同意書暫不阻擋核准（政策：先不處理同意書）
 
     var updated = SheetHelper.updateByKey(SHEET, 'audit_id', auditId, {
       decision: decision,

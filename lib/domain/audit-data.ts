@@ -33,14 +33,14 @@ export const auditQueue: AuditQueueItem[] = [
     caseCode: "EV-115-0002",
     elderName: "陳水木",
     submittedAt: "2026-04-26T14:30:00+08:00",
-    auditState: "blocked",
+    auditState: "ready",
     checks: [
       {
         key: "consent_required",
         label: "同意書狀態",
-        severity: "blocking",
+        severity: "warning",
         passed: false,
-        message: "未取得同意，不可核銷。",
+        message: "尚未取得同意（暫不阻擋核准）。",
       },
     ],
   },

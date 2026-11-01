@@ -339,7 +339,7 @@ export function AuditQueuePanel() {
                   const ids = approvableVisible.map((item) => item.id);
                   if (
                     !window.confirm(
-                      `確定將目前列表中全部可核准 ${ids.length} 筆一次通過？驗證失敗／未同意／阻擋案件會略過。`,
+                      `確定將目前列表中全部可核准 ${ids.length} 筆一次通過？驗證失敗／阻擋案件會略過。`,
                     )
                   ) {
                     return;

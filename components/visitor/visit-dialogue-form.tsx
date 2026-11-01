@@ -1299,7 +1299,7 @@ export function VisitDialogueForm({
         ) : null}
         {isAuditCorrection ? (
           <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            稽核進表修正：請重選民政／社政訪查員（帶入身分證）或直接改正欄位後送出；會覆寫既有關懷表，再回佇列整理後核准。
+            稽核進表修正：請依佇列標示的問題改正後送出（例如驗證紅字欄位）。會覆寫既有關懷表，再回佇列重新整理後核准。同意書目前暫不阻擋核准。
           </p>
         ) : null}
         {isDeskEntry && !readonly && !isAuditCorrection ? (

@@ -24,12 +24,13 @@ export function runVisitAuditChecks(submission: VisitSubmission): AuditCheck[] {
     {
       key: "consent_required",
       label: "同意書狀態",
-      severity: "blocking",
+      // 暫不阻擋稽核／核銷；僅提醒
+      severity: "warning",
       passed: submission.consentSigned && hasSignature,
       message:
         submission.consentSigned && hasSignature
           ? "已取得同意與簽名。"
-          : "未取得同意或簽名，不可核銷。",
+          : "尚未取得同意或簽名（暫不阻擋核准）。",
     },
     {
       key: "gps_recommended",

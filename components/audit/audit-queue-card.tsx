@@ -313,7 +313,7 @@ export function AuditQueueCard({
         </div>
         {item.assignmentId ? (
           <p className="text-xs leading-5 text-muted-foreground">
-            驗證錯誤（如 CW2 民政身分證）請先「進表修正」：重選民政／社政訪查員或改正後再送出，回佇列重新整理後再核准。
+            驗證錯誤（如 CW2 身分證）請先「進表修正」後再送出，回佇列重新整理後再核准。同意書暫不阻擋核准。
           </p>
         ) : null}
         {(!canApproveAudit || !canRejectAudit) && (
