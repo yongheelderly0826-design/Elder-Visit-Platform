@@ -117,6 +117,12 @@ var ApiRouter = (function () {
     'ops.repairDuplicateMissedStamps': function (p, b) {
       return OpsModule.repairDuplicateMissedStamps(b || p);
     },
+    'ops.findMissingWorkerNationalIds': function (p, b) {
+      return OpsModule.findMissingWorkerNationalIds(b || p);
+    },
+    'ops.patchWorkerNationalIdsByName': function (p, b) {
+      return OpsModule.patchWorkerNationalIdsByName(b || p);
+    },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },
     'deskClerks.get': function (p) {

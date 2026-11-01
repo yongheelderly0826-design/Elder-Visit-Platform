@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ExternalLink, FileText, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCan } from "@/components/auth/permission-provider";
 import { MohwBatchErrorPanel } from "@/components/export/mohw-batch-error-panel";
@@ -14,6 +14,18 @@ import {
   type MohwExportCandidate,
 } from "@/lib/domain/mohw-export-candidates";
 import type { ExportHistoryItem } from "@/components/export/export-history-panel";
+
+/** 單次 GAS 匯出無法回報真實 %；用階段＋預估進度避免畫面像當掉。 */
+function estimateExportProgress(elapsedMs: number, caseCount: number) {
+  const expectedMs = Math.min(280_000, Math.max(45_000, caseCount * 350));
+  const ratio = Math.min(0.92, elapsedMs / expectedMs);
+  const percent = Math.max(3, Math.round(ratio * 100));
+  let phase = "準備匯出資料…";
+  if (percent >= 15 && percent < 45) phase = "驗證 103 欄／核對快照…";
+  else if (percent >= 45 && percent < 80) phase = "產生 Excel 並上傳 Google Drive…";
+  else if (percent >= 80) phase = "即將完成，準備下載連結…";
+  return { percent, phase, expectedMs };
+}
 
 type CandidatesResponse = {
   data?: {
@@ -93,6 +105,10 @@ export function MohwExportPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportPhase, setExportPhase] = useState("");
+  const [exportElapsedSec, setExportElapsedSec] = useState(0);
+  const exportStartedAtRef = useRef<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [errorLines, setErrorLines] = useState<string[]>([]);
   const [skipped, setSkipped] = useState<Array<{ case_id: string; reason: string }>>([]);
@@ -106,6 +122,21 @@ export function MohwExportPanel({
   const [filterDateEnd, setFilterDateEnd] = useState("");
   const [filterDateMode, setFilterDateMode] = useState<MohwDateFilterMode>("visit");
   const [filterArea, setFilterArea] = useState("");
+
+  useEffect(() => {
+    if (!exporting) return;
+    const tick = () => {
+      const started = exportStartedAtRef.current ?? Date.now();
+      const elapsed = Date.now() - started;
+      const { percent, phase } = estimateExportProgress(elapsed, selected.size || 1);
+      setExportProgress(percent);
+      setExportPhase(phase);
+      setExportElapsedSec(Math.floor(elapsed / 1000));
+    };
+    tick();
+    const id = window.setInterval(tick, 800);
+    return () => window.clearInterval(id);
+  }, [exporting, selected.size]);
 
   const loadCandidates = useCallback(async () => {
     if (onRefresh) {
@@ -322,8 +353,17 @@ export function MohwExportPanel({
       return;
     }
 
+    const caseCount = selected.size;
+    exportStartedAtRef.current = Date.now();
     setExporting(true);
-    setMessage(null);
+    setExportProgress(3);
+    setExportPhase("送出匯出請求…");
+    setExportElapsedSec(0);
+    setMessage(
+      caseCount >= 200
+        ? `正在匯出 ${caseCount} 筆，大約需要 2–5 分鐘，請勿關閉或重新整理頁面。`
+        : `正在匯出 ${caseCount} 筆，請稍候…`,
+    );
     setErrorLines([]);
     setSkipped([]);
     setFileUrl(null);
@@ -349,6 +389,9 @@ export function MohwExportPanel({
         setMessage(json.error?.message ?? "匯出失敗");
         return;
       }
+
+      setExportProgress(100);
+      setExportPhase("匯出完成");
 
       if (json.data?.fileUrl) {
         setFileUrl(json.data.fileUrl);
@@ -399,9 +442,10 @@ export function MohwExportPanel({
       };
       onExportSuccess?.(entry);
     } catch {
-      setMessage("匯出失敗，請稍後再試");
+      setMessage("匯出失敗，請稍後再試（大批次若逾時，可改分批約 100–150 筆再匯）");
     } finally {
       setExporting(false);
+      exportStartedAtRef.current = null;
     }
   }
 
@@ -590,6 +634,34 @@ export function MohwExportPanel({
         <p className="mt-2 text-xs text-muted-foreground">
           Excel 由系統完成 103 欄驗證後下載至這台電腦；Google Drive 會保留一份產檔備份。
         </p>
+      ) : null}
+
+      {exporting ? (
+        <div
+          className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <p className="font-medium text-foreground">
+              <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+              {exportPhase || "匯出進行中…"}
+            </p>
+            <p className="tabular-nums text-muted-foreground">
+              {exportProgress}% · 已過 {exportElapsedSec} 秒
+            </p>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+              style={{ width: `${exportProgress}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            410 筆左右常見約 2–5 分鐘。進度為預估（後端一次產檔無法回報真實百分比）；畫面停住不代表當機，請等到
+            100% 或錯誤訊息。
+          </p>
+        </div>
       ) : null}
 
       {note ? <p className="mt-3 text-sm text-amber-800">{note}</p> : null}

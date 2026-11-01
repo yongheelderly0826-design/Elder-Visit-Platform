@@ -10,6 +10,9 @@ import { buildMohwLifeCareExportRow } from "@/lib/domain/mohw-life-care-export";
 import { mohwLifeCareSampleAnswers } from "@/lib/domain/mohw-life-care-ui";
 import { getSystemStatus } from "@/lib/system/env";
 
+/** 大批次（300–400+）GAS 產檔＋Drive 上傳常超過 60s；避免前端以為「停滯」。 */
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   const forbidden = requireCapability(request, "exports.create");
   if (forbidden) return forbidden;

@@ -359,9 +359,274 @@ var OpsModule = (function () {
     };
   }
 
+  function hasVal_(v) {
+    return String(v == null ? '' : v).trim() !== '';
+  }
+
+  /**
+   * 匯出卡「已填社政／民政但缺身分證」：列出缺證號的訪查人與對應關懷表。
+   */
+  function findMissingWorkerNationalIds(data) {
+    data = data || {};
+    var onlyAudited = data.only_audited !== false && data.only_audited !== 'false';
+    var index = VisitRecordIndex.build();
+    var missing = [];
+    var byName = {};
+
+    (index.careforms || []).forEach(function (careform) {
+      if (!careform) return;
+      if (onlyAudited) {
+        var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+        var pass = (audit && audit.decision === '通過') || String(careform.status) === '已稽核';
+        if (!pass) return;
+      }
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(careform.answers_json) || {};
+      } catch (e) {
+        answers = {};
+      }
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform) || {};
+      var assignment = index.assignmentById[String(careform.assignment_id || '').trim()] || {};
+
+      var hasSocial =
+        hasVal_(answers.social_worker_role) ||
+        hasVal_(answers.social_worker_name) ||
+        hasVal_(answers.social_worker_national_id) ||
+        hasVal_(answers.social_worker_phone);
+      var hasCivil =
+        hasVal_(answers.civil_worker_role) ||
+        hasVal_(answers.civil_worker_name) ||
+        hasVal_(answers.civil_worker_national_id) ||
+        hasVal_(answers.civil_worker_phone);
+
+      var socialMissing = hasSocial && !hasVal_(answers.social_worker_national_id);
+      var civilMissing = hasCivil && !hasVal_(answers.civil_worker_national_id);
+      if (!socialMissing && !civilMissing) return;
+
+      var socialName = String(answers.social_worker_name || '').trim();
+      var civilName = String(answers.civil_worker_name || '').trim();
+      var row = {
+        careform_id: careform.careform_id,
+        case_id: caseRow.case_id || '',
+        encoded_id: caseRow.encoded_id || careform.encoded_id || '',
+        elder_name: caseRow.name || '',
+        visit_village: caseRow.visit_village || '',
+        careform_status: careform.status || '',
+        assignment_id: careform.assignment_id || '',
+        visitor_id: assignment.visitor_id || careform.visitor_id || '',
+        social_worker_name: socialName,
+        social_worker_role: String(answers.social_worker_role || '').trim(),
+        social_worker_phone: String(answers.social_worker_phone || '').trim(),
+        social_missing_national_id: socialMissing,
+        civil_worker_name: civilName,
+        civil_worker_role: String(answers.civil_worker_role || '').trim(),
+        civil_worker_phone: String(answers.civil_worker_phone || '').trim(),
+        civil_missing_national_id: civilMissing,
+      };
+      missing.push(row);
+
+      if (socialMissing && socialName) {
+        if (!byName[socialName]) {
+          byName[socialName] = {
+            name: socialName,
+            side: '社政',
+            role: row.social_worker_role,
+            phone: row.social_worker_phone,
+            careform_ids: [],
+            case_ids: [],
+            elder_names: [],
+          };
+        }
+        byName[socialName].careform_ids.push(row.careform_id);
+        byName[socialName].case_ids.push(row.case_id);
+        byName[socialName].elder_names.push(row.elder_name);
+        if (!byName[socialName].phone && row.social_worker_phone) {
+          byName[socialName].phone = row.social_worker_phone;
+        }
+        if (!byName[socialName].role && row.social_worker_role) {
+          byName[socialName].role = row.social_worker_role;
+        }
+      }
+      if (civilMissing && civilName) {
+        var civilKey = 'civil:' + civilName;
+        if (!byName[civilKey]) {
+          byName[civilKey] = {
+            name: civilName,
+            side: '民政',
+            role: row.civil_worker_role,
+            phone: row.civil_worker_phone,
+            careform_ids: [],
+            case_ids: [],
+            elder_names: [],
+          };
+        }
+        byName[civilKey].careform_ids.push(row.careform_id);
+        byName[civilKey].case_ids.push(row.case_id);
+        byName[civilKey].elder_names.push(row.elder_name);
+      }
+    });
+
+    var people = Object.keys(byName).map(function (k) { return byName[k]; });
+    people.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+    });
+
+    return {
+      only_audited: onlyAudited,
+      missing_row_count: missing.length,
+      people_count: people.length,
+      people: people,
+      rows: missing.slice(0, 80),
+    };
+  }
+
+  /**
+   * 依社政／民政姓名補身分證字號（僅填空白，不覆蓋既有）。
+   * data.patches: [{ name, national_id, side?: 'social'|'civil'|'both' }]
+   */
+  function patchWorkerNationalIdsByName(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var patches = data.patches || [];
+    if (!patches.length) {
+      var err = new Error('patches 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var byName = {};
+    patches.forEach(function (p) {
+      var name = String((p && p.name) || '').trim();
+      var nid = String((p && p.national_id) || '').trim().toUpperCase();
+      if (!name || !nid) return;
+      byName[name] = {
+        national_id: nid,
+        side: String((p && p.side) || 'both').trim() || 'both',
+      };
+    });
+
+    var index = VisitRecordIndex.build();
+    var planned = [];
+    var idToNewAnswers = {};
+
+    (index.careforms || []).forEach(function (careform) {
+      if (!careform || !careform.careform_id) return;
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(careform.answers_json) || {};
+      } catch (eParse) {
+        answers = {};
+      }
+      var changed = false;
+      var socialName = String(answers.social_worker_name || '').trim();
+      var civilName = String(answers.civil_worker_name || '').trim();
+      var socialPatch = socialName && byName[socialName] ? byName[socialName] : null;
+      var civilPatch = civilName && byName[civilName] ? byName[civilName] : null;
+
+      if (
+        socialPatch &&
+        (socialPatch.side === 'both' || socialPatch.side === 'social' || socialPatch.side === '社政') &&
+        !hasVal_(answers.social_worker_national_id)
+      ) {
+        answers.social_worker_national_id = socialPatch.national_id;
+        changed = true;
+      }
+      if (
+        civilPatch &&
+        (civilPatch.side === 'both' || civilPatch.side === 'civil' || civilPatch.side === '民政') &&
+        !hasVal_(answers.civil_worker_national_id)
+      ) {
+        answers.civil_worker_national_id = civilPatch.national_id;
+        changed = true;
+      }
+      if (!changed) return;
+
+      var caseRow = VisitRecordIndex.caseForCareform(index, careform) || {};
+      planned.push({
+        careform_id: careform.careform_id,
+        case_id: caseRow.case_id || '',
+        elder_name: caseRow.name || '',
+        social_worker_name: socialName,
+        civil_worker_name: civilName,
+        social_worker_national_id: answers.social_worker_national_id || '',
+        civil_worker_national_id: answers.civil_worker_national_id || '',
+      });
+      idToNewAnswers[String(careform.careform_id)] = answers;
+    });
+
+    var written = 0;
+    var visitorPatched = 0;
+    if (apply && planned.length) {
+      var cfSheet = SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS);
+      var cfValues = cfSheet.getDataRange().getValues();
+      var cfHeaders = cfValues[0];
+      var idIdx = cfHeaders.indexOf('careform_id');
+      var answersIdx = cfHeaders.indexOf('answers_json');
+      if (idIdx === -1 || answersIdx === -1) {
+        var errCols = new Error('careforms missing careform_id/answers_json');
+        errCols.code = 'CONFIG';
+        throw errCols;
+      }
+      var col = [];
+      for (var r = 1; r < cfValues.length; r++) {
+        var cid = String(cfValues[r][idIdx] || '').trim();
+        if (idToNewAnswers[cid]) {
+          col.push([JSON.stringify(idToNewAnswers[cid])]);
+          written++;
+        } else {
+          col.push([cfValues[r][answersIdx]]);
+        }
+      }
+      if (written > 0) {
+        cfSheet.getRange(2, answersIdx + 1, col.length, 1).setValues(col);
+      }
+
+      // 名冊空白證號一併補上（同名且證號空）
+      try {
+        var vSheet = SheetHelper.getSheet(Config.SHEET_NAMES.VISITORS);
+        var vValues = vSheet.getDataRange().getValues();
+        var vHeaders = vValues[0];
+        var vNameIdx = vHeaders.indexOf('name');
+        var vNidIdx = vHeaders.indexOf('national_id');
+        if (vNidIdx === -1) vNidIdx = vHeaders.indexOf('id_number');
+        if (vNameIdx !== -1 && vNidIdx !== -1) {
+          var vChanged = false;
+          for (var vr = 1; vr < vValues.length; vr++) {
+            var vName = String(vValues[vr][vNameIdx] || '').trim();
+            var patch = byName[vName];
+            if (!patch) continue;
+            if (hasVal_(vValues[vr][vNidIdx])) continue;
+            vValues[vr][vNidIdx] = patch.national_id;
+            visitorPatched++;
+            vChanged = true;
+          }
+          if (vChanged) {
+            vSheet.getRange(1, 1, vValues.length, vHeaders.length).setValues(vValues);
+          }
+        }
+      } catch (eVis) {}
+
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      planned_count: planned.length,
+      written: written,
+      visitor_patched: visitorPatched,
+      applied: apply,
+      rows: planned.slice(0, 40),
+    };
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
+    findMissingWorkerNationalIds: findMissingWorkerNationalIds,
+    patchWorkerNationalIdsByName: patchWorkerNationalIdsByName,
   };
 })();
 

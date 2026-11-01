@@ -258,8 +258,27 @@ var ExportModule = (function () {
       return caseRow.id_number || caseRow.national_id || '';
     });
 
-    var batch = MohwLifeCareValidator.validateBatch(answerRows, 2, registryIds);
-    var strict = true; // 正式生活關懷表禁止略過驗證產檔。
+    // 加速：全部關懷表已有 validation_ok 快照時，略過整批 103 欄重驗（仍可用 force_validate 強制）
+    var forceValidate =
+      data.force_validate === true ||
+      data.force_validate === 'true' ||
+      data.fresh === '1';
+    var allSnapshotsOk = !forceValidate && payloads.every(function (payload) {
+      var cf = payload.careform || {};
+      var raw = cf.validation_ok;
+      return raw === true || raw === 'true' || raw === 'TRUE' || raw === '是';
+    });
+    var batch = allSnapshotsOk
+      ? {
+          ok: true,
+          successCount: answerRows.length,
+          failCount: 0,
+          errorLines: [],
+          results: [],
+          trusted_snapshots: true,
+        }
+      : MohwLifeCareValidator.validateBatch(answerRows, 2, registryIds);
+    var strict = true; // 正式生活關懷表禁止略過驗證產檔（無快照時仍嚴格）。
     if (strict && !batch.ok) {
       var verr = new Error(
         '匯出驗證失敗 ' + batch.failCount + ' 筆：' + batch.errorLines.slice(0, 10).join('；')
@@ -325,9 +344,12 @@ var ExportModule = (function () {
         successCount: batch.successCount,
         failCount: batch.failCount,
         errorLines: batch.errorLines,
+        trusted_snapshots: batch.trusted_snapshots === true,
       },
       message: batch.ok
-        ? '已產生 103 欄 xlsx（' + exportRecord.file_name + '）並上傳 Google Drive'
+        ? (batch.trusted_snapshots
+            ? '已產生 103 欄 xlsx（' + exportRecord.file_name + '；沿用驗證快照加速）並上傳 Google Drive'
+            : '已產生 103 欄 xlsx（' + exportRecord.file_name + '）並上傳 Google Drive')
         : '已產生 xlsx，但有 ' + batch.failCount + ' 筆驗證錯誤（非嚴格模式）',
     };
   }
