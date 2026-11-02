@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 import {
   buildDeskOnePaperMissedNote,
   deskBatchMissedStampOffsetMinutes,
+  notesIndicateDeceased,
   parseMissedVisitStamps,
   rewriteMissedVisitStampTimes,
+  stripMissedVisitStamps,
   type DeskBatchState,
 } from "../lib/domain/desk-care-batch.ts";
 
@@ -66,6 +68,13 @@ function main() {
   });
   assert.match(rewritten, /10\/26 09:20訪視未遇/);
   assert.match(rewritten, /10\/27 14:00訪視未遇/);
+
+  assert.equal(notesIndicateDeceased("社區管理員指案主已於115年9月往生"), true);
+  assert.equal(notesIndicateDeceased("10/25 09:20訪視未遇"), false);
+  const cleaned = stripMissedVisitStamps(
+    "社區管理員指案主已於115年9月往生；10/25 09:20訪視未遇；10/26 14:20訪視未遇；10/27 16:40訪視未遇。",
+  );
+  assert.equal(cleaned, "社區管理員指案主已於115年9月往生");
 
   console.log("desk missed stamp smoke passed");
 }

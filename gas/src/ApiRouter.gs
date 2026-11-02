@@ -123,6 +123,30 @@ var ApiRouter = (function () {
     'ops.patchWorkerNationalIdsByName': function (p, b) {
       return OpsModule.patchWorkerNationalIdsByName(b || p);
     },
+    'ops.auditWorkerIdentityByName': function (p, b) {
+      return OpsModule.auditWorkerIdentityByName(b || p);
+    },
+    'ops.auditAllWorkerIdentities': function (p, b) {
+      return OpsModule.auditAllWorkerIdentities(b || p);
+    },
+    'ops.patchWorkerPhoneByCareformIds': function (p, b) {
+      return OpsModule.patchWorkerPhoneByCareformIds(b || p);
+    },
+    'ops.importSocialVolunteers': function (p, b) {
+      return OpsModule.importSocialVolunteers(b || p);
+    },
+    'ops.peekCareformsByIds': function (p, b) {
+      return OpsModule.peekCareformsByIds(b || p);
+    },
+    'ops.scanCareformNotes': function (p, b) {
+      return OpsModule.scanCareformNotes(b || p);
+    },
+    'ops.deleteCareformsByIds': function (p, b) {
+      return OpsModule.deleteCareformsByIds(b || p);
+    },
+    'ops.patchCareformAnswers': function (p, b) {
+      return OpsModule.patchCareformAnswers(b || p);
+    },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },
     'deskClerks.get': function (p) {

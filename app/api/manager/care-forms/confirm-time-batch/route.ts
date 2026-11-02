@@ -6,6 +6,7 @@ import {
   deskStaleAssignmentMessage,
   findOverlappingWindow,
   parseAssignmentNotFoundId,
+  parseDeskAssignmentNotes,
   type DeskVisitWindow,
 } from "@/lib/domain/desk-care-batch";
 import { collectVisitorWindowsForDate } from "@/lib/domain/desk-visit-time-audit";
@@ -148,6 +149,16 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const item of planned) {
+      let primarySide: "civil" | "social" | undefined;
+      try {
+        const existing = (await gasClient.assignments.get(item.assignmentId!)) as {
+          notes?: string;
+        } | null;
+        primarySide = parseDeskAssignmentNotes(existing?.notes).primarySide ?? undefined;
+      } catch {
+        primarySide = undefined;
+      }
+
       const notes = buildDeskAssignmentNotes({
         primaryVisitorId,
         primaryVisitorName: nameById.get(primaryVisitorId) || "",
@@ -158,6 +169,7 @@ export async function POST(request: NextRequest) {
         visitDate: item.visitDate,
         visitStartTime: item.start,
         visitEndTime: item.end,
+        primarySide,
       });
 
       await gasClient.assignments.confirm({

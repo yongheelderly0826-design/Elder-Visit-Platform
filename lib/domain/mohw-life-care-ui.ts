@@ -429,9 +429,12 @@ export function syncMohwVisitMetaFromSubmission(
     拒訪: "拒絕訪視",
   };
 
+  // 關懷表「備註」欄為主；勿用空的／舊的 submission.notes 蓋掉場生手改內容。
+  const answerNotes = String(answers.visit_notes ?? "").trim();
+  const submissionNotes = String(submission.notes ?? "").trim();
   return {
     ...answers,
     visit_status: visitStatusMap[submission.visitResult] ?? answers.visit_status ?? "已完成",
-    visit_notes: submission.notes || answers.visit_notes,
+    visit_notes: answerNotes || submissionNotes || answers.visit_notes,
   };
 }

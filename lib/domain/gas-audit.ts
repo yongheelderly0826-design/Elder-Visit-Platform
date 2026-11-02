@@ -17,6 +17,13 @@ function buildChecks(row: GasAuditRow): AuditCheck[] {
   const errorCount = Number(row.error_count ?? 0);
   const status = asString(row.careform_status);
 
+  const duplicatePending =
+    row.duplicate_case_pending === true ||
+    row.duplicate_case_pending === "true" ||
+    Number(row.duplicate_case_count ?? 0) > 1;
+  const duplicateCount = Number(row.duplicate_case_count ?? 0);
+  const duplicateWarning = asString(row.duplicate_case_warning);
+
   return [
     {
       key: "careform_submitted",
@@ -41,6 +48,17 @@ function buildChecks(row: GasAuditRow): AuditCheck[] {
       message: consentSigned
         ? "已取得同意。"
         : "尚未取得同意（暫不阻擋核准；日後政策需要時再啟用）。",
+    },
+    {
+      key: "duplicate_case_careform",
+      label: "同案重複關懷表",
+      // 提醒督導只核准一筆；暫不硬擋（既有重複需人工判斷哪筆正確）
+      severity: "warning",
+      passed: !duplicatePending,
+      message: duplicatePending
+        ? duplicateWarning ||
+          `同個案有 ${duplicateCount || "多"} 筆待稽核，請只留正確一筆，避免重複核銷。`
+        : "同個案無重複待審關懷表。",
     },
     {
       key: "mohw_validation",

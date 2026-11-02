@@ -238,6 +238,36 @@ var SheetHelper = (function () {
     return count;
   }
 
+  /**
+   * 依 key 欄刪除符合的資料列（由下往上刪，避免列號位移）。
+   * 回傳刪除列數。
+   */
+  function deleteByKey(sheetName, keyColumn, keyValue) {
+    var sheet = getSheet(sheetName);
+    var headers = getHeaders(sheet);
+    var keyIdx = headers.indexOf(keyColumn);
+    if (keyIdx === -1) return 0;
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return 0;
+    var wanted = String(keyValue || '').trim();
+    if (!wanted) return 0;
+    var values = sheet.getRange(2, keyIdx + 1, lastRow - 1, 1).getValues();
+    var deleted = 0;
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (String(values[i][0] || '').trim() !== wanted) continue;
+      sheet.deleteRow(i + 2);
+      deleted += 1;
+    }
+    if (deleted) {
+      logOperation_('delete_by_key', sheetName, {
+        key: keyColumn,
+        value: wanted,
+        deleted: deleted,
+      });
+    }
+    return deleted;
+  }
+
   return {
     getSpreadsheet: getSpreadsheet,
     getSheet: getSheet,
@@ -247,6 +277,7 @@ var SheetHelper = (function () {
     appendRows: appendRows,
     findByKey: findByKey,
     updateByKey: updateByKey,
+    deleteByKey: deleteByKey,
     clearDataRows: clearDataRows,
     ensureColumns: ensureColumns,
     ensureSheet: ensureSheet,

@@ -76,6 +76,8 @@ export type DeskPrepareInput = {
   visitEndTime?: string;
   /** field_self＝訪員自領／現場 KEY；預設紙本代填 */
   source?: "desk_paper" | "field_self";
+  /** 主填在場生左欄民政／右欄社政哪一邊勾的 */
+  primarySide?: "civil" | "social";
 };
 
 export function isActiveAssignmentStatus(status: string) {

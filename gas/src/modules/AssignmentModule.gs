@@ -129,9 +129,54 @@ var AssignmentModule = (function () {
     });
   }
 
+  var REPLACEABLE_CAREFORM_STATUS_ = {
+    '已提交': true,
+    '待補件': true,
+    '草稿': true,
+  };
+
+  /**
+   * 同訪員＋同個案：若已有可修正關懷表（或進行中派案），回傳應重用的派案，避免再 KEY 出第二張表／重複核銷。
+   */
+  function findReusableVisitorCaseAssignment_(visitorId, caseId, allAssignments, careformByAssignment) {
+    var wantedVisitor = String(visitorId || '').trim();
+    var wantedCase = String(caseId || '').trim();
+    if (!wantedVisitor || !wantedCase) return null;
+
+    var candidates = [];
+    allAssignments.forEach(function (row) {
+      if (String(row.case_id || '').trim() !== wantedCase) return;
+      if (String(row.visitor_id || '').trim() !== wantedVisitor) return;
+      candidates.push(row);
+    });
+    if (!candidates.length) return null;
+
+    candidates.sort(function (a, b) {
+      return String(b.updated_at || b.dispatched_at || '').localeCompare(
+        String(a.updated_at || a.dispatched_at || '')
+      );
+    });
+
+    var withCareform = null;
+    var activeOnly = null;
+    candidates.forEach(function (row) {
+      var asgId = String(row.assignment_id || '').trim();
+      var cf = careformByAssignment[asgId];
+      if (cf && REPLACEABLE_CAREFORM_STATUS_[String(cf.status || '')]) {
+        if (!withCareform) withCareform = { assignment: row, careform: cf };
+      } else if (!activeOnly && ACTIVE_STATUSES[String(row.status || '')]) {
+        activeOnly = { assignment: row, careform: cf || null };
+      }
+    });
+    return withCareform || activeOnly;
+  }
+
   /**
    * 紙本一次多案：單次鎖 + appendRows + 一次 flush，避免 N 次 dispatch 把 UI 卡在「準備中」。
-   * body: { visitor_id, case_ids: string[], notes?, due_date?, auto_confirm?, allow_multi_active?, batch_id? }
+   * body: {
+   *   visitor_id, case_ids, notes?, due_date?, auto_confirm?, allow_multi_active?, batch_id?,
+   *   reuse_visitor_case?: true  // 同訪員同個案已有關懷表／進行中派案時重用，不另開
+   * }
    */
   function dispatchBatch(data) {
     Validation.requireFields(data, ['visitor_id']);
@@ -153,19 +198,82 @@ var AssignmentModule = (function () {
     return withScriptLock_(function () {
       var now = new Date().toISOString();
       var allowMulti = isAllowMulti_(data);
+      var reuseVisitorCase =
+        data.reuse_visitor_case === true ||
+        data.reuse_visitor_case === 'true' ||
+        String(data.notes || '').indexOf('公所代填') !== -1;
       var rows = [];
       var missing = [];
+      var reusedCount = 0;
+      var reusedNames = [];
 
+      var allAssignments = reuseVisitorCase
+        ? SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET))
+        : [];
+      var careformByAssignment = {};
+      if (reuseVisitorCase) {
+        SheetHelper.rowsToObjects(
+          SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+        ).forEach(function (cf) {
+          var asgId = String(cf.assignment_id || '').trim();
+          if (!asgId) return;
+          var prev = careformByAssignment[asgId];
+          if (!prev) {
+            careformByAssignment[asgId] = cf;
+            return;
+          }
+          // 同派案多列時取較新
+          if (
+            String(cf.submitted_at || cf.updated_at || '') >
+            String(prev.submitted_at || prev.updated_at || '')
+          ) {
+            careformByAssignment[asgId] = cf;
+          }
+        });
+      }
+
+      var toCreate = [];
       caseIds.forEach(function (caseId) {
         var caseRow = CaseModule.get(caseId);
         if (!caseRow) {
           missing.push(caseId);
           return;
         }
+        if (reuseVisitorCase) {
+          var reusable = findReusableVisitorCaseAssignment_(
+            data.visitor_id,
+            caseId,
+            allAssignments,
+            careformByAssignment
+          );
+          if (reusable && reusable.assignment) {
+            var reused = Object.assign({}, reusable.assignment);
+            reused.reused = true;
+            reused.reuse_reason = reusable.careform
+              ? '同訪員已有關懷表（' +
+                String(reusable.careform.status || '') +
+                '），改為進表修正，不另開第二張'
+              : '同訪員已有進行中派案，重用既有編號';
+            reused.prior_careform_id = reusable.careform
+              ? String(reusable.careform.careform_id || '')
+              : '';
+            reused.prior_careform_status = reusable.careform
+              ? String(reusable.careform.status || '')
+              : '';
+            reused.elder_name = caseRow.name || reused.elder_name || '';
+            reused.encoded_id = caseRow.encoded_id || reused.encoded_id || '';
+            rows.push(reused);
+            reusedCount += 1;
+            reusedNames.push(String(caseRow.name || caseRow.encoded_id || caseId));
+            return;
+          }
+        }
         if (!allowMulti) {
-          var existingActive = list({}).filter(function (r) {
-            return String(r.case_id) === String(caseId) && ACTIVE_STATUSES[r.status];
-          });
+          var existingActive = (reuseVisitorCase ? allAssignments : list({})).filter(
+            function (r) {
+              return String(r.case_id) === String(caseId) && ACTIVE_STATUSES[r.status];
+            }
+          );
           if (existingActive.length > 0) {
             var conflict = new Error(
               '此個案已有進行中的派案：' + existingActive[0].assignment_id + '，無法重複分配'
@@ -174,21 +282,23 @@ var AssignmentModule = (function () {
             throw conflict;
           }
         }
-        rows.push(
-          buildAssignmentRow_(
-            {
-              case_id: caseId,
-              visitor_id: data.visitor_id,
-              notes: data.notes || '',
-              due_date: data.due_date || '',
-              batch_id: data.batch_id || '',
-              auto_confirm: data.auto_confirm,
-              allow_multi_active: data.allow_multi_active,
-            },
-            caseRow,
-            now
-          )
+        var created = buildAssignmentRow_(
+          {
+            case_id: caseId,
+            visitor_id: data.visitor_id,
+            notes: data.notes || '',
+            due_date: data.due_date || '',
+            batch_id: data.batch_id || '',
+            auto_confirm: data.auto_confirm,
+            allow_multi_active: data.allow_multi_active,
+          },
+          caseRow,
+          now
         );
+        created.reused = false;
+        created.elder_name = caseRow.name || '';
+        toCreate.push(created);
+        rows.push(created);
       });
 
       if (missing.length) {
@@ -198,8 +308,10 @@ var AssignmentModule = (function () {
         throw new Error('沒有可派案的個案');
       }
 
-      SheetHelper.appendRows(SHEET, rows);
-      SpreadsheetApp.flush();
+      if (toCreate.length) {
+        SheetHelper.appendRows(SHEET, toCreate);
+        SpreadsheetApp.flush();
+      }
 
       // 一次讀派案表算 attempt，避免每案全表掃描
       var attemptCounts = {};
@@ -210,10 +322,12 @@ var AssignmentModule = (function () {
       });
 
       rows.forEach(function (row) {
-        SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', row.case_id, {
-          visit_status: '進行中',
-          updated_at: now,
-        });
+        if (!row.reused) {
+          SheetHelper.updateByKey(Config.SHEET_NAMES.CASES, 'case_id', row.case_id, {
+            visit_status: '進行中',
+            updated_at: now,
+          });
+        }
         row.visit_attempt = attemptCounts[String(row.case_id)] || 1;
       });
 
@@ -222,7 +336,21 @@ var AssignmentModule = (function () {
         String((rows[0] && rows[0].due_date) || '').slice(0, 10) ||
         Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
       ReportModule.scheduleDailyVisitSnapshot(dueHint);
-      return { items: rows, count: rows.length };
+      return {
+        items: rows,
+        count: rows.length,
+        created: toCreate.length,
+        reused: reusedCount,
+        reused_names: reusedNames.slice(0, 12),
+        warning:
+          reusedCount > 0
+            ? '有 ' +
+              reusedCount +
+              ' 案同訪員已有關懷表／派案，已改為進表修正既有筆（避免第二張表與重複核銷）：' +
+              reusedNames.slice(0, 8).join('、') +
+              (reusedNames.length > 8 ? '…' : '')
+            : '',
+      };
     });
   }
 

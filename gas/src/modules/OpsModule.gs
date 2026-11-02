@@ -1030,6 +1030,136 @@ var OpsModule = (function () {
     };
   }
 
+  /**
+   * 依 careform_id 合併覆寫 answers_json 欄位（營運修資料用）。
+   * data.patches: [{ careform_id, answers: { ...partial }, visit_result?, visit_date? }]
+   * visit_date 寫入 answers.visit_date；visit_result 寫入列欄（若有）。
+   * data.apply: true 才寫入
+   */
+  function patchCareformAnswers(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var patches = data.patches || [];
+    if (!patches.length) {
+      var err = new Error('patches 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var byId = {};
+    patches.forEach(function (p) {
+      var id = String((p && p.careform_id) || '').trim();
+      if (!id) return;
+      byId[id] = {
+        answers: (p && p.answers && typeof p.answers === 'object') ? p.answers : {},
+        visit_result:
+          p && p.visit_result != null && String(p.visit_result).trim() !== ''
+            ? String(p.visit_result).trim()
+            : null,
+      };
+    });
+
+    var ids = Object.keys(byId);
+    if (!ids.length) {
+      var errIds = new Error('patches 缺少有效 careform_id');
+      errIds.code = 'VALIDATION';
+      throw errIds;
+    }
+
+    var cfSheet = SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS);
+    var cfValues = cfSheet.getDataRange().getValues();
+    var cfHeaders = cfValues[0];
+    var idIdx = cfHeaders.indexOf('careform_id');
+    var answersIdx = cfHeaders.indexOf('answers_json');
+    var resultIdx = cfHeaders.indexOf('visit_result');
+    if (idIdx === -1 || answersIdx === -1) {
+      var errCols = new Error('careforms missing careform_id/answers_json');
+      errCols.code = 'SCHEMA';
+      throw errCols;
+    }
+
+    var planned = [];
+    var answersCol = [];
+    var resultCol = resultIdx !== -1 ? [] : null;
+    var written = 0;
+    var found = {};
+
+    for (var r = 1; r < cfValues.length; r++) {
+      var cid = String(cfValues[r][idIdx] || '').trim();
+      var patch = byId[cid];
+      if (!patch) {
+        answersCol.push([cfValues[r][answersIdx]]);
+        if (resultCol) resultCol.push([cfValues[r][resultIdx]]);
+        continue;
+      }
+      found[cid] = true;
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(cfValues[r][answersIdx]) || {};
+      } catch (eParse) {
+        answers = {};
+      }
+      var beforeLiving = String(answers.living_address_other || '');
+      var beforeNotes = String(answers.visit_notes || '');
+      var beforeVisitDate = String(answers.visit_date || '');
+      var beforeResult = resultIdx !== -1 ? String(cfValues[r][resultIdx] || '') : '';
+
+      Object.keys(patch.answers).forEach(function (key) {
+        answers[key] = patch.answers[key];
+      });
+
+      var nextResult = beforeResult;
+      if (patch.visit_result != null) nextResult = patch.visit_result;
+
+      planned.push({
+        careform_id: cid,
+        before: {
+          living_address_other: beforeLiving,
+          visit_notes: beforeNotes,
+          visit_date: beforeVisitDate,
+          visit_result: beforeResult,
+        },
+        after: {
+          living_address_other: String(answers.living_address_other || ''),
+          visit_notes: String(answers.visit_notes || ''),
+          visit_date: String(answers.visit_date || ''),
+          visit_result: nextResult,
+        },
+      });
+
+      if (apply) {
+        answersCol.push([JSON.stringify(answers)]);
+        if (resultCol) resultCol.push([nextResult]);
+        written += 1;
+      } else {
+        answersCol.push([cfValues[r][answersIdx]]);
+        if (resultCol) resultCol.push([cfValues[r][resultIdx]]);
+      }
+    }
+
+    if (apply && written > 0) {
+      cfSheet.getRange(2, answersIdx + 1, answersCol.length, 1).setValues(answersCol);
+      if (resultCol && resultIdx !== -1) {
+        cfSheet.getRange(2, resultIdx + 1, resultCol.length, 1).setValues(resultCol);
+      }
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      requested: ids.length,
+      found: Object.keys(found).length,
+      missing: ids.filter(function (id) {
+        return !found[id];
+      }),
+      written: written,
+      applied: apply,
+      rows: planned,
+    };
+  }
+
   function extractTaiwanIdOps_(raw) {
     var normalized = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     var match = normalized.match(/[A-Z][0-9]{9}/);
@@ -1194,6 +1324,284 @@ var OpsModule = (function () {
     };
   }
 
+  /**
+   * 刪除指定關懷表＋其稽核列（重複 KEY 清第1筆用）。
+   * data.careform_ids: string[]
+   * data.apply: true 才刪
+   */
+  function deleteCareformsByIds(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var ids = [];
+    var seen = {};
+    (data.careform_ids || []).forEach(function (id) {
+      var key = String(id || '').trim();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      ids.push(key);
+    });
+    if (!ids.length) {
+      var err = new Error('careform_ids 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var audits = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.AUDIT)
+    );
+    var byCf = {};
+    careforms.forEach(function (row) {
+      byCf[String(row.careform_id || '').trim()] = row;
+    });
+    var auditsByCf = {};
+    audits.forEach(function (row) {
+      var cf = String(row.careform_id || '').trim();
+      if (!auditsByCf[cf]) auditsByCf[cf] = [];
+      auditsByCf[cf].push(row);
+    });
+
+    var planned = ids.map(function (id) {
+      var cf = byCf[id] || null;
+      var auds = auditsByCf[id] || [];
+      return {
+        careform_id: id,
+        found: Boolean(cf),
+        assignment_id: cf ? String(cf.assignment_id || '') : '',
+        encoded_id: cf ? String(cf.encoded_id || '') : '',
+        visit_result: cf ? String(cf.visit_result || '') : '',
+        status: cf ? String(cf.status || '') : '',
+        submitted_at: cf ? String(cf.submitted_at || '') : '',
+        audit_ids: auds.map(function (a) {
+          return String(a.audit_id || '');
+        }),
+        audit_count: auds.length,
+      };
+    });
+
+    var deletedCareforms = 0;
+    var deletedAudits = 0;
+    var annotatedAssignments = 0;
+    if (apply) {
+      planned.forEach(function (item) {
+        if (!item.found) return;
+        deletedAudits += SheetHelper.deleteByKey(
+          Config.SHEET_NAMES.AUDIT,
+          'careform_id',
+          item.careform_id
+        );
+        deletedCareforms += SheetHelper.deleteByKey(
+          Config.SHEET_NAMES.CAREFORMS,
+          'careform_id',
+          item.careform_id
+        );
+        if (item.assignment_id) {
+          try {
+            var asg = AssignmentModule.get(item.assignment_id);
+            var oldNotes = String((asg && asg.notes) || '');
+            var marker = '重複KEY第1筆已刪:' + item.careform_id;
+            if (oldNotes.indexOf(marker) === -1) {
+              SheetHelper.updateByKey(
+                Config.SHEET_NAMES.ASSIGNMENTS,
+                'assignment_id',
+                item.assignment_id,
+                {
+                  notes: (oldNotes ? oldNotes + '｜' : '') + marker,
+                  updated_at: new Date().toISOString(),
+                }
+              );
+              annotatedAssignments += 1;
+            }
+          } catch (eAsg) {}
+        }
+      });
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      planned: planned.length,
+      found: planned.filter(function (p) {
+        return p.found;
+      }).length,
+      missing: planned
+        .filter(function (p) {
+          return !p.found;
+        })
+        .map(function (p) {
+          return p.careform_id;
+        }),
+      deleted_careforms: deletedCareforms,
+      deleted_audits: deletedAudits,
+      annotated_assignments: annotatedAssignments,
+      applied: apply,
+      items: planned,
+    };
+  }
+
+  /**
+   * 依 careform_id 讀取關懷表摘要（比對重複 KEY 用）。
+   * data.careform_ids: string[]
+   */
+  function peekCareformsByIds(data) {
+    data = data || {};
+    var wanted = {};
+    (data.careform_ids || []).forEach(function (id) {
+      var key = String(id || '').trim();
+      if (key) wanted[key] = true;
+    });
+    var ids = Object.keys(wanted);
+    if (!ids.length) {
+      var err = new Error('careform_ids 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var assignments = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.ASSIGNMENTS)
+    );
+    var asgById = {};
+    assignments.forEach(function (row) {
+      asgById[String(row.assignment_id || '').trim()] = row;
+    });
+
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+
+    var out = [];
+    careforms.forEach(function (cf) {
+      var id = String(cf.careform_id || '').trim();
+      if (!wanted[id]) return;
+      var answers = parseAnswers_(cf.answers_json);
+      var asg = asgById[String(cf.assignment_id || '').trim()] || {};
+      out.push({
+        careform_id: id,
+        assignment_id: String(cf.assignment_id || ''),
+        encoded_id: String(cf.encoded_id || ''),
+        visitor_id: String(cf.visitor_id || ''),
+        status: String(cf.status || ''),
+        visit_result: String(cf.visit_result || ''),
+        submitted_at: String(cf.submitted_at || ''),
+        consent_signed: cf.consent_signed,
+        validation_ok: cf.validation_ok,
+        completion_pct: cf.completion_pct,
+        assignment_status: String(asg.status || ''),
+        assignment_due_date: String(asg.due_date || ''),
+        assignment_notes: String(asg.notes || ''),
+        answers: {
+          name: answers.name || '',
+          id_number: answers.id_number || '',
+          visit_date: answers.visit_date || '',
+          visit_status: answers.visit_status || '',
+          visit_start_time: answers.visit_start_time || answers.visit_time_start || '',
+          visit_end_time: answers.visit_end_time || answers.visit_time_end || '',
+          visit_time_start: answers.visit_time_start || answers.visit_start_time || '',
+          visit_time_end: answers.visit_time_end || answers.visit_end_time || '',
+          living_village: answers.living_village || '',
+          living_address: answers.living_address || '',
+          living_address_type: answers.living_address_type || '',
+          living_address_other: String(answers.living_address_other || '').slice(0, 500),
+          visit_notes: String(answers.visit_notes || '').slice(0, 500),
+          notes: String(answers.notes || '').slice(0, 300),
+          living_status: answers.living_status || '',
+          civil_worker_name: answers.civil_worker_name || '',
+          civil_worker_role: answers.civil_worker_role || '',
+          social_worker_name: answers.social_worker_name || '',
+          social_worker_role: answers.social_worker_role || '',
+        },
+      });
+    });
+
+    return { count: out.length, items: out };
+  }
+
+  /**
+   * 營運搜尋：在 careforms.answers_json 的備註／居住其他說明找關鍵字。
+   * data.needles: string[]（任一命中）
+   * data.visit_result?: 過濾列上 visit_result
+   * data.limit?: 最多回傳筆數（預設 50、上限 200）
+   */
+  function scanCareformNotes(data) {
+    data = data || {};
+    var needles = [];
+    (data.needles || []).forEach(function (n) {
+      var text = String(n || '').trim();
+      if (text) needles.push(text);
+    });
+    if (!needles.length) {
+      var err = new Error('needles 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    var visitResultFilter =
+      data.visit_result != null && String(data.visit_result).trim() !== ''
+        ? String(data.visit_result).trim()
+        : '';
+    var limit = Number(data.limit);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 50;
+    if (limit > 200) limit = 200;
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var out = [];
+    for (var i = 0; i < careforms.length; i++) {
+      var cf = careforms[i];
+      var rowResult = String(cf.visit_result || '').trim();
+      if (visitResultFilter && rowResult !== visitResultFilter) continue;
+      var answers = {};
+      try {
+        answers = MissedVisitStampHelper.parseAnswersJson(cf.answers_json) || {};
+      } catch (eParse) {
+        answers = {};
+      }
+      var blob = [
+        answers.visit_notes,
+        answers.living_address_other,
+        answers.notes,
+      ].join(' ');
+      var hit = null;
+      for (var n = 0; n < needles.length; n++) {
+        if (blob.indexOf(needles[n]) !== -1) {
+          hit = needles[n];
+          break;
+        }
+      }
+      if (!hit) continue;
+      out.push({
+        careform_id: String(cf.careform_id || ''),
+        assignment_id: String(cf.assignment_id || ''),
+        encoded_id: String(cf.encoded_id || ''),
+        visitor_id: String(cf.visitor_id || ''),
+        visit_result: rowResult,
+        submitted_at: String(cf.submitted_at || ''),
+        matched_needle: hit,
+        name: answers.name || '',
+        visit_date: answers.visit_date || '',
+        visit_start_time: answers.visit_start_time || answers.visit_time_start || '',
+        visit_status: answers.visit_status || '',
+        visit_notes: String(answers.visit_notes || '').slice(0, 500),
+        living_address_other: String(answers.living_address_other || '').slice(0, 500),
+      });
+      if (out.length >= limit) break;
+    }
+    return { count: out.length, items: out, limited: out.length >= limit };
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
@@ -1203,6 +1611,10 @@ var OpsModule = (function () {
     auditAllWorkerIdentities: auditAllWorkerIdentities,
     patchWorkerPhoneByCareformIds: patchWorkerPhoneByCareformIds,
     importSocialVolunteers: importSocialVolunteers,
+    peekCareformsByIds: peekCareformsByIds,
+    scanCareformNotes: scanCareformNotes,
+    deleteCareformsByIds: deleteCareformsByIds,
+    patchCareformAnswers: patchCareformAnswers,
   };
 })();
 

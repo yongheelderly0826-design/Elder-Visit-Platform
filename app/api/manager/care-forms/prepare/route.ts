@@ -74,6 +74,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const primarySide =
+      body.primarySide === "civil" || body.primarySide === "social"
+        ? body.primarySide
+        : undefined;
     const notes = buildDeskAssignmentNotes({
       primaryVisitorId: visitorId,
       primaryVisitorName: primaryName,
@@ -83,6 +87,7 @@ export async function POST(request: NextRequest) {
       visitStartTime: body.visitStartTime,
       visitEndTime: body.visitEndTime,
       source: body.source === "field_self" ? "field_self" : "desk_paper",
+      primarySide,
     });
 
     if (!caseRefs.length && body.newCase?.name?.trim()) {
@@ -125,6 +130,7 @@ export async function POST(request: NextRequest) {
     const due = visitDate || new Date().toISOString().slice(0, 10);
 
     // 單次 GAS dispatchBatch：一次鎖 + appendRows + flush，避免 10 案逐筆卡在「準備中」
+    // reuse_visitor_case：同訪員同個案已有關懷表時重用派案（第二筆＝修正，不另開表）
     const batchResult = (await gasClient.assignments.dispatchBatch({
       visitor_id: visitorId,
       case_ids: caseRefs.map((ref) => ref.caseId),
@@ -132,7 +138,15 @@ export async function POST(request: NextRequest) {
       notes,
       auto_confirm: true,
       allow_multi_active: true,
-    })) as { items?: Record<string, unknown>[]; count?: number };
+      reuse_visitor_case: true,
+    })) as {
+      items?: Record<string, unknown>[];
+      count?: number;
+      created?: number;
+      reused?: number;
+      reused_names?: string[];
+      warning?: string;
+    };
 
     const savedRows = Array.isArray(batchResult?.items) ? batchResult.items : [];
     if (!savedRows.length) {
@@ -151,6 +165,9 @@ export async function POST(request: NextRequest) {
         ref?.caseName || String(saved.elder_name ?? "") || caseId;
       const caseCode =
         ref?.caseCode || String(saved.encoded_id ?? "") || caseId;
+      const reused =
+        saved.reused === true || saved.reused === "true" || saved.reused === 1;
+      const priorStatus = String(saved.prior_careform_status ?? "").trim();
       return {
         caseId,
         caseName,
@@ -158,15 +175,26 @@ export async function POST(request: NextRequest) {
         assignmentId,
         visitAttempt: Number(saved.visit_attempt ?? 1) || 1,
         schedule: toDeskSchedule(saved, due),
+        reused,
+        reuseReason: String(saved.reuse_reason ?? "").trim(),
+        priorCareformId: String(saved.prior_careform_id ?? "").trim(),
+        priorCareformStatus: priorStatus,
+        /** 已有送出／待補件 → 清單標「已 KEY」，引導再進表修正 */
+        alreadyKeyed:
+          reused && (priorStatus === "已提交" || priorStatus === "待補件"),
       };
     });
 
     invalidateGasReadCaches();
 
     const first = items[0];
+    const reusedCount = Number(batchResult.reused ?? items.filter((i) => i.reused).length);
     return NextResponse.json({
       data: {
-        reused: false,
+        reused: reusedCount > 0,
+        reusedCount,
+        createdCount: Number(batchResult.created ?? items.filter((i) => !i.reused).length),
+        warning: String(batchResult.warning ?? "").trim(),
         batch: true,
         count: items.length,
         items,

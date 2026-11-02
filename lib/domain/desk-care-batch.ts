@@ -94,6 +94,9 @@ export type DeskBatchQueueItem = {
   village?: string;
   villageSeq?: number | null;
   villageCode?: string;
+  /** 同訪員同個案重用既有派案（進表修正，不另開第二張） */
+  reused?: boolean;
+  reuseReason?: string;
 };
 
 export type DeskBatchState = {
@@ -128,6 +131,25 @@ export function normalizeDeskWorkerGroup(
     return "civil_affairs";
   }
   return "unknown";
+}
+
+/**
+ * 場生左右欄歸類：
+ * 1) 名冊 volunteer_group 明確民政／社政時以名冊為準
+ *    （例：高廷峯編號雖是 CIV，註冊實為社政志工）
+ * 2) 名冊未知時，才用 visitor_id 的 CIV／SOC 當提示
+ */
+export function deskVisitorColumnSide(input: {
+  id?: string;
+  workerGroup?: VisitorRegistrationWorkerGroup | "unknown" | string;
+}): "civil" | "social" {
+  const group = normalizeDeskWorkerGroup(input.workerGroup);
+  if (group === "social_affairs") return "social";
+  if (group === "civil_affairs") return "civil";
+  const id = String(input.id ?? "").toUpperCase();
+  if (id.includes("-SOC-")) return "social";
+  if (id.includes("-CIV-")) return "civil";
+  return "civil";
 }
 
 export function toMinutes(time: string) {
@@ -531,6 +553,11 @@ export function buildDeskAssignmentNotes(input: {
   visitEndTime?: string;
   /** 預設紙本代填；快速 KEY／訪員自領用 field_self */
   source?: "desk_paper" | "field_self";
+  /**
+   * 主填是在場生「民政／社政」哪一欄勾的。
+   * 開表帶入以此為準（不是只看名冊 volunteer_group）。
+   */
+  primarySide?: "civil" | "social";
 }) {
   const parts = [
     input.source === "field_self" ? FIELD_SELF_SOURCE_NOTE : DESK_PAPER_SOURCE_NOTE,
@@ -539,6 +566,9 @@ export function buildDeskAssignmentNotes(input: {
     ? `${input.primaryVisitorId}:${input.primaryVisitorName}`
     : input.primaryVisitorId;
   parts.push(`主填:${primaryLabel}`);
+  if (input.primarySide === "civil" || input.primarySide === "social") {
+    parts.push(`主填側:${input.primarySide === "civil" ? "民政" : "社政"}`);
+  }
   const companions = (input.companionVisitorIds ?? []).filter(Boolean);
   if (companions.length) {
     const labels = companions.map((id) => {
@@ -560,10 +590,13 @@ export function parseDeskAssignmentNotes(notes: unknown): {
   visitStartTime: string | null;
   visitEndTime: string | null;
   teamVisitorIds: string[];
+  /** 場生勾選欄：civil／social；舊派案可能沒有 */
+  primarySide: "civil" | "social" | null;
 } {
   const text = String(notes ?? "");
   const primaryMatch = text.match(/主填:([^｜|]+)/);
   const companionMatch = text.match(/同行:([^｜|]+)/);
+  const sideMatch = text.match(/主填側:(民政|社政)/);
   const windowMatch = text.match(
     /時段:(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/,
   );
@@ -577,6 +610,8 @@ export function parseDeskAssignmentNotes(notes: unknown): {
         .map((part) => String(part.split(":")[0] || "").trim())
         .filter(Boolean)
     : [];
+  const primarySide =
+    sideMatch?.[1] === "民政" ? "civil" : sideMatch?.[1] === "社政" ? "social" : null;
 
   return {
     primaryVisitorId,
@@ -589,6 +624,7 @@ export function parseDeskAssignmentNotes(notes: unknown): {
         [primaryVisitorId, ...companionVisitorIds].filter(Boolean) as string[],
       ),
     ],
+    primarySide,
   };
 }
 
@@ -774,6 +810,27 @@ export function parseMissedVisitStamps(text: unknown): MissedVisitStamp[] {
     });
   }
   return out;
+}
+
+/** 備註／居住其他說明是否已表達往生／死亡（勿再硬塞三次未遇戳）。 */
+export function notesIndicateDeceased(text: unknown): boolean {
+  return /往生|死亡|已歿|身故|過世|逝世/.test(String(text ?? ""));
+}
+
+/**
+ * 去掉 `M/D HH:mm訪視未遇` 戳記與多餘分隔，保留人工說明（如往生）。
+ */
+export function stripMissedVisitStamps(text: unknown): string {
+  const raw = String(text ?? "");
+  if (!raw.includes("訪視未遇")) return raw.trim();
+  return raw
+    .replace(new RegExp(MISSED_VISIT_STAMP_PATTERN.source, "g"), " ")
+    .replace(/[；;]\s*[；;]+/g, "；")
+    .replace(/^[；;\s]+|[；;\s.。]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[；;]\s*/g, "；")
+    .replace(/^[；;]+|[；;]+$/g, "")
+    .trim();
 }
 
 /**

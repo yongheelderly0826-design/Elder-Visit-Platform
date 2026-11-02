@@ -111,6 +111,35 @@ var CareFormModule = (function () {
     }
   }
 
+  var REPLACEABLE_STATUS_ = { '已提交': true, '待補件': true, '草稿': true };
+
+  /**
+   * 同訪員＋同編碼個案：找可覆寫的既有關懷表（可能在別的派案上）。
+   * 用於「第一筆打錯、再 KEY」時併回同一張，避免兩張表／兩筆核銷。
+   */
+  function findReplaceableByVisitorEncoded_(visitorId, encodedId, excludeAssignmentId) {
+    var wantedVisitor = String(visitorId || '').trim();
+    var wantedEncoded = String(encodedId || '').trim();
+    if (!wantedVisitor || !wantedEncoded) return null;
+    var exclude = String(excludeAssignmentId || '').trim();
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var best = null;
+    rows.forEach(function (row) {
+      if (String(row.visitor_id || '').trim() !== wantedVisitor) return;
+      if (String(row.encoded_id || '').trim() !== wantedEncoded) return;
+      if (exclude && String(row.assignment_id || '').trim() === exclude) return;
+      if (!REPLACEABLE_STATUS_[String(row.status || '')]) return;
+      if (
+        !best ||
+        String(row.submitted_at || row.updated_at || '') >
+          String(best.submitted_at || best.updated_at || '')
+      ) {
+        best = row;
+      }
+    });
+    return best;
+  }
+
   function listMissedStamps(params) {
     params = params || {};
     var visitorIds = [];
@@ -296,14 +325,26 @@ var CareFormModule = (function () {
       }
     }
 
-    // 同派案已有「已提交／待補件／草稿」時就地覆寫，避免稽核進表修正（如 CW2）產生重複關懷表與佇列。
+    // 同派案已有「已提交／待補件／草稿」時就地覆寫；若同訪員同個案在別派案已有表，也併回那張（第二筆＝修正）。
     var existing = get(data.assignment_id);
     var existingStatus = existing ? String(existing.status || '') : '';
     var replaceExisting =
       Boolean(existing && existing.careform_id) &&
-      (existingStatus === '已提交' ||
-        existingStatus === '待補件' ||
-        existingStatus === '草稿');
+      REPLACEABLE_STATUS_[existingStatus];
+    var supersededAssignmentId = '';
+    if (!replaceExisting) {
+      var cross = findReplaceableByVisitorEncoded_(
+        data.visitor_id,
+        data.encoded_id,
+        data.assignment_id
+      );
+      if (cross && cross.careform_id) {
+        existing = cross;
+        existingStatus = String(cross.status || '');
+        replaceExisting = true;
+        supersededAssignmentId = String(cross.assignment_id || '');
+      }
+    }
     var careformId = replaceExisting
       ? String(existing.careform_id)
       : 'CF-' + Utilities.getUuid().slice(0, 8);
@@ -361,8 +402,27 @@ var CareFormModule = (function () {
       assignment_id: data.assignment_id,
       status: isMissed ? '空訪' : '已完成',
     });
+    // 舊派案上的關懷表已併入本案：註記避免誤以為還有第二張有效表
+    if (supersededAssignmentId && supersededAssignmentId !== String(data.assignment_id)) {
+      try {
+        var oldAsg = AssignmentModule.get(supersededAssignmentId);
+        var oldNotes = String((oldAsg && oldAsg.notes) || '');
+        var marker = '重複KEY已併入' + String(data.assignment_id);
+        if (oldNotes.indexOf(marker) === -1) {
+          SheetHelper.updateByKey(
+            Config.SHEET_NAMES.ASSIGNMENTS,
+            'assignment_id',
+            supersededAssignmentId,
+            {
+              notes: (oldNotes ? oldNotes + '｜' : '') + marker,
+              updated_at: new Date().toISOString(),
+            }
+          );
+        }
+      } catch (eSupersede) {}
+    }
 
-    // 加入稽核佇列
+    // 加入稽核佇列（同一 careform_id 不會再開第二筆待審）
     AuditModule.enqueue(record.careform_id);
 
     var highCare = null;

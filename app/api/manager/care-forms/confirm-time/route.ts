@@ -5,6 +5,7 @@ import {
   buildDeskAssignmentNotes,
   deskStaleAssignmentMessage,
   parseAssignmentNotFoundId,
+  parseDeskAssignmentNotes,
   type DeskVisitWindow,
 } from "@/lib/domain/desk-care-batch";
 import { auditDeskVisitTime } from "@/lib/domain/desk-visit-time-audit";
@@ -77,6 +78,16 @@ export async function POST(request: NextRequest) {
         String(row.name ?? row.full_name ?? ""),
       ]),
     );
+    let primarySide: "civil" | "social" | undefined;
+    try {
+      const existing = (await gasClient.assignments.get(assignmentId)) as {
+        notes?: string;
+      } | null;
+      primarySide = parseDeskAssignmentNotes(existing?.notes).primarySide ?? undefined;
+    } catch {
+      primarySide = undefined;
+    }
+
     const notes = buildDeskAssignmentNotes({
       primaryVisitorId,
       primaryVisitorName: nameById.get(primaryVisitorId) || "",
@@ -87,6 +98,7 @@ export async function POST(request: NextRequest) {
       visitDate,
       visitStartTime,
       visitEndTime,
+      primarySide,
     });
 
     await gasClient.assignments.confirm({

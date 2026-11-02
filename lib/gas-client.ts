@@ -433,7 +433,14 @@ export const gasClient = {
     dispatch: (body: unknown) =>
       gasFetch<unknown>("assignments.dispatch", { method: "POST", body }),
     dispatchBatch: (body: unknown) =>
-      gasFetch<{ items?: unknown[]; count?: number }>("assignments.dispatchBatch", {
+      gasFetch<{
+        items?: unknown[];
+        count?: number;
+        created?: number;
+        reused?: number;
+        reused_names?: string[];
+        warning?: string;
+      }>("assignments.dispatchBatch", {
         method: "POST",
         body,
       }),

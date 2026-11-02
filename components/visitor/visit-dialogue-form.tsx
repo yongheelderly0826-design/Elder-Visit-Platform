@@ -88,14 +88,17 @@ import {
   buildDeskOnePaperMissedNote,
   chainDeskBatchAfterKeyed,
   deskBatchMissedStampOffsetMinutes,
+  deskVisitorColumnSide,
   endTimeFromStartAndDuration,
   findNextReadyDeskBatchItem,
   inferDeskVisitDurationMinutes,
   insertDeskBatchItemsAfter,
   markDeskBatchItemSkipped,
   normalizeDeskVisitDateToIso,
+  notesIndicateDeceased,
   parseDeskAssignmentNotes,
   readDeskBatchState,
+  stripMissedVisitStamps,
   writeDeskBatchState,
   type DeskBatchQueueItem,
   type DeskVisitDurationMinutes,
@@ -585,11 +588,42 @@ export function VisitDialogueForm({
         String(answersPatch.visit_start_time || careFormAnswers.visit_start_time || "")
           .trim()
           .slice(0, 5) || String(initialTimes?.visitStartTime || "").trim().slice(0, 5);
+      const priorNotes = String(
+        answersPatch.visit_notes || careFormAnswers.visit_notes || nextSubmission.notes || "",
+      ).trim();
+      const priorLiving = String(
+        answersPatch.living_address_other || careFormAnswers.living_address_other || "",
+      ).trim();
+      const deceasedNoted = notesIndicateDeceased(priorNotes) || notesIndicateDeceased(priorLiving);
       const alreadyHasTripleNote =
-        String(answersPatch.living_address_other || careFormAnswers.living_address_other || "").includes(
-          "訪視未遇",
-        ) || String(nextSubmission.notes || "").includes("訪視未遇");
-      if (!alreadyHasTripleNote) {
+        priorLiving.includes("訪視未遇") ||
+        priorNotes.includes("訪視未遇") ||
+        String(nextSubmission.notes || "").includes("訪視未遇");
+
+      if (deceasedNoted) {
+        // 已登記往生／死亡：保留人工說明，不硬塞三次未遇戳（也不另開兩張表）。
+        const cleanNote =
+          stripMissedVisitStamps(priorNotes) ||
+          stripMissedVisitStamps(priorLiving) ||
+          priorNotes ||
+          priorLiving;
+        answersPatch = {
+          ...answersPatch,
+          living_address_other: cleanNote,
+          visit_notes: cleanNote,
+          living_address_type:
+            answersPatch.living_address_type ||
+            careFormAnswers.living_address_type ||
+            "查無此人",
+          visit_status: answersPatch.visit_status || careFormAnswers.visit_status || "查無此人",
+        };
+        nextSubmission = {
+          ...nextSubmission,
+          notes: cleanNote,
+          healthStatus: nextSubmission.healthStatus || "未遇無法評估",
+          livingStatus: nextSubmission.livingStatus || "未遇無法評估",
+        };
+      } else if (!alreadyHasTripleNote) {
         const note = await resolveOnePaperMissedNote({
           visitDateRaw,
           visitStartTime,
@@ -599,7 +633,6 @@ export function VisitDialogueForm({
           setIsSubmitting(false);
           return;
         }
-        const priorNotes = String(answersPatch.visit_notes || careFormAnswers.visit_notes || "").trim();
         answersPatch = {
           ...answersPatch,
           living_address_other: note,
@@ -896,6 +929,48 @@ export function VisitDialogueForm({
       return;
     }
 
+    const label = kind === "unknown_address" ? "一鍵住址不詳" : "一鍵未遇";
+    const priorNotes = String(careFormAnswers.visit_notes || submission.notes || "").trim();
+    const priorLiving = String(careFormAnswers.living_address_other || "").trim();
+    const deceasedNoted = notesIndicateDeceased(priorNotes) || notesIndicateDeceased(priorLiving);
+
+    if (deceasedNoted) {
+      const cleanNote =
+        stripMissedVisitStamps(priorNotes) ||
+        stripMissedVisitStamps(priorLiving) ||
+        priorNotes ||
+        priorLiving;
+      if (
+        !window.confirm(
+          `${label}：備註已含往生／死亡說明，將以一張紙送出且不產生三次未遇時間戳（保留往生說明），並進入下一筆。確定？`,
+        )
+      ) {
+        return;
+      }
+      await submitVisit({
+        submissionOverride: {
+          visitResult: "未遇",
+          notes: cleanNote,
+          healthStatus: submission.healthStatus || "未遇無法評估",
+          livingStatus: submission.livingStatus || "未遇無法評估",
+        },
+        answersPatch: {
+          visit_date: careFormAnswers.visit_date || visitDateRaw,
+          visit_start_time: visitStartTime,
+          visit_end_time: visitEndTime,
+          visit_notes: cleanNote,
+          living_address_other: cleanNote,
+          ...(kind === "unknown_address"
+            ? { visit_status: "住址不詳" }
+            : { visit_status: "查無此人", living_address_type: "查無此人" }),
+        },
+        deskSlotsOverride: ["夜間"],
+        closeAsMissedTriple: true,
+        skipMissedExpand: true,
+      });
+      return;
+    }
+
     const note = await resolveOnePaperMissedNote({
       visitDateRaw,
       visitStartTime,
@@ -904,7 +979,6 @@ export function VisitDialogueForm({
       setResult("訪視日期無效，無法產生三次未遇備註。");
       return;
     }
-    const label = kind === "unknown_address" ? "一鍵住址不詳" : "一鍵未遇";
     if (
       !window.confirm(
         `${label}：將以一張紙送出（三次時間寫入「居住-其他說明」與備註），並進入下一筆。確定？`,
@@ -1568,7 +1642,11 @@ export function VisitDialogueForm({
                         deskEntry={useDeskFormDefaults}
                         deskVisitStart={String(careFormAnswers.visit_start_time ?? "")}
                         deskVisitEnd={String(careFormAnswers.visit_end_time ?? "")}
-                        onChange={(value) =>
+                        onChange={(value) => {
+                          if (field.key === "visit_notes") {
+                            const nextNotes = String(value ?? "");
+                            setSubmission((current) => ({ ...current, notes: nextNotes }));
+                          }
                           setCareFormAnswers((current) => {
                             let next = { ...current, [field.key]: value };
                             // 一人獨居：關閉並清空同住者為／年齡等殘值
@@ -1589,8 +1667,8 @@ export function VisitDialogueForm({
                               return normalizeVisitorCareAnswers(next);
                             }
                             return next;
-                          })
-                        }
+                          });
+                        }}
                         onPatchAnswers={(patchOrFn) =>
                           setCareFormAnswers((current) => {
                             const patch =
@@ -1713,7 +1791,7 @@ export function VisitDialogueForm({
               {initialDeskPaperKey ? `（${initialDeskPaperKey}）` : ""}
             </h2>
             <p className="mt-1 text-sm leading-6 text-amber-900/90">
-              送出時會依訪視日期／起始時間，把三次未遇時間寫入「居住-其他說明」與備註；不另建兩張補件，也無需拍照或定位。下方時段勾選為選填。
+              送出時會依訪視日期／起始時間，把三次未遇時間寫入「居住-其他說明」與備註；不另建兩張補件，也無需拍照或定位。下方時段勾選為選填。若備註已寫往生／死亡，則只保留說明、不自動補三次未遇戳。
             </p>
             <p className="mt-3 rounded-md border border-primary/30 bg-card px-3 py-2 text-sm text-primary">
               已勾時段 {new Set(deskPaperSlots).size}（選填）
@@ -2260,7 +2338,8 @@ function seedWorkerAnswersFromTeam(
   notes: unknown,
 ): MohwLifeCareAnswers {
   const byId = new Map((directory ?? []).map((item) => [item.id, item]));
-  const teamIds = parseDeskAssignmentNotes(notes).teamVisitorIds;
+  const parsed = parseDeskAssignmentNotes(notes);
+  const teamIds = parsed.teamVisitorIds;
   const team: DeskVisitorOption[] = [];
   for (const id of teamIds) {
     const row = byId.get(id);
@@ -2273,12 +2352,23 @@ function seedWorkerAnswersFromTeam(
   }
 
   let next = { ...current };
+
+  // 場生「主填側」優先：勾在社政欄就帶入社政欄，即使名冊是 CIV／民政
+  if (primary && parsed.primarySide) {
+    if (parsed.primarySide === "civil" && !String(next.civil_worker_name ?? "").trim()) {
+      next = { ...next, ...applyVisitorToWorkerAnswers(next, primary, "civil") };
+    }
+    if (parsed.primarySide === "social" && !String(next.social_worker_name ?? "").trim()) {
+      next = { ...next, ...applyVisitorToWorkerAnswers(next, primary, "social") };
+    }
+  }
+
   const civil =
-    team.find((item) => item.workerGroup === "civil_affairs") ??
-    (primary?.workerGroup === "civil_affairs" ? primary : null);
+    team.find((item) => deskVisitorColumnSide(item) === "civil") ??
+    (primary && deskVisitorColumnSide(primary) === "civil" ? primary : null);
   const social =
-    team.find((item) => item.workerGroup === "social_affairs") ??
-    (primary && primary.workerGroup !== "civil_affairs" ? primary : null);
+    team.find((item) => deskVisitorColumnSide(item) === "social") ??
+    (primary && deskVisitorColumnSide(primary) === "social" ? primary : null);
 
   if (civil && !String(next.civil_worker_name ?? "").trim()) {
     next = { ...next, ...applyVisitorToWorkerAnswers(next, civil, "civil") };
@@ -2286,13 +2376,15 @@ function seedWorkerAnswersFromTeam(
   if (social && !String(next.social_worker_name ?? "").trim()) {
     next = { ...next, ...applyVisitorToWorkerAnswers(next, social, "social") };
   }
-  // 僅有主填且尚未寫入任一側時，依主填身分別帶入一邊
+  // 僅有主填且尚未寫入任一側時，依主填欄／名冊帶入一邊
   if (
     primary &&
     !String(next.civil_worker_name ?? "").trim() &&
     !String(next.social_worker_name ?? "").trim()
   ) {
-    const kind = primary.workerGroup === "civil_affairs" ? "civil" : "social";
+    const kind =
+      parsed.primarySide ??
+      (deskVisitorColumnSide(primary) === "civil" ? "civil" : "social");
     next = { ...next, ...applyVisitorToWorkerAnswers(next, primary, kind) };
   }
   return next;
@@ -2678,6 +2770,43 @@ function CareFormInput({
       : isPhoneField
         ? "只填數字，O 會自動改成 0"
         : null;
+
+  const isNotesField = field.key === "visit_notes" || field.mohwKey === "visit_notes";
+  const isLongTextField =
+    isNotesField ||
+    field.key === "living_address_other" ||
+    field.mohwKey === "living_address_other";
+
+  if (isLongTextField) {
+    return (
+      <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium md:col-span-2 xl:col-span-3">
+        {field.label}
+        {requiredMark}
+        <textarea
+          className={`min-h-24 w-full rounded-md bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring ${
+            error
+              ? "border border-destructive focus-visible:ring-destructive/40"
+              : "border"
+          }`}
+          value={rawText}
+          placeholder={
+            isNotesField
+              ? "可手改備註；若已寫往生／死亡說明，送出未遇時不會再自動補三次未遇時間戳"
+              : "查無此人時請說明原因（未遇三次時間或往生等）"
+          }
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {isNotesField ? (
+          <p className="text-xs font-normal leading-5 text-muted-foreground">
+            場生／訪員可直接編輯；送出會寫回關懷表。未勾一鍵未遇、且備註已含往生說明時，不會強制覆寫成三次未遇戳。
+          </p>
+        ) : null}
+        {errorText}
+      </label>
+    );
+  }
 
   return (
     <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">

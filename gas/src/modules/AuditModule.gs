@@ -173,6 +173,27 @@ var AuditModule = (function () {
     var result = rows.map(function (audit) {
       return enrichFromIndex_(index, audit, { validate: forceValidate });
     });
+
+    // 同 encoded_id 多筆待審＝可能重複 KEY；標示提醒（不自動擋核准，由督導處理）
+    if (!params.decision || params.decision === 'pending') {
+      var pendingByEncoded = {};
+      result.forEach(function (item) {
+        var enc = String(item.encoded_id || '').trim();
+        if (!enc) return;
+        pendingByEncoded[enc] = (pendingByEncoded[enc] || 0) + 1;
+      });
+      result.forEach(function (item) {
+        var enc = String(item.encoded_id || '').trim();
+        var dupCount = enc ? pendingByEncoded[enc] || 0 : 0;
+        item.duplicate_case_pending = dupCount > 1;
+        item.duplicate_case_count = dupCount;
+        if (dupCount > 1) {
+          item.duplicate_case_warning =
+            '同個案有 ' + dupCount + ' 筆待稽核關懷表，請只留正確一筆再核准，避免重複核銷';
+        }
+      });
+    }
+
     // 佇列可能超過 CacheService 90KB；寫入失敗就略過，仍回傳結果
     ReadCache.putJson(cacheKey, result);
     return result;

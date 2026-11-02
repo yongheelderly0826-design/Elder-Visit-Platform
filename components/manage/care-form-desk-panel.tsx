@@ -14,6 +14,7 @@ import {
   DESK_BATCH_STATUS_RETRY_MS,
   clearDeskBatchState,
   deskStaleAssignmentClearedMessage,
+  deskVisitorColumnSide,
   isAssignmentNotFoundError,
   isDeskBatchFresh,
   readDeskBatchState,
@@ -389,13 +390,11 @@ export function CareFormDeskPanel({
   );
   const allVisitors = options?.visitors ?? [];
 
-  // 未分類只放民政欄，避免同一人出現兩欄造成點選混亂
+  // CIV／SOC 編碼優先：避免 CIV 被誤標社政後出現在右欄，勾了卻開表帶入民政
   const civilVisitors = useMemo(
     () =>
       filterVisitors(
-        allVisitors.filter(
-          (item) => item.workerGroup === "civil_affairs" || item.workerGroup === "unknown",
-        ),
+        allVisitors.filter((item) => deskVisitorColumnSide(item) === "civil"),
         civilQuery,
       ),
     [allVisitors, civilQuery],
@@ -403,7 +402,7 @@ export function CareFormDeskPanel({
   const socialVisitors = useMemo(
     () =>
       filterVisitors(
-        allVisitors.filter((item) => item.workerGroup === "social_affairs"),
+        allVisitors.filter((item) => deskVisitorColumnSide(item) === "social"),
         socialQuery,
       ),
     [allVisitors, socialQuery],
@@ -719,6 +718,12 @@ export function CareFormDeskPanel({
             companionNames: Object.fromEntries(
               companionVisitorIds.map((id) => [id, visitorNameById[id] || ""]),
             ),
+            // 開表帶入依勾選欄：勾社政→社政欄，不因名冊 CIV 改帶民政
+            primarySide: civilVisitorIds.includes(primaryVisitorId)
+              ? "civil"
+              : socialVisitorIds.includes(primaryVisitorId)
+                ? "social"
+                : undefined,
           }),
         });
       } finally {
@@ -731,7 +736,13 @@ export function CareFormDeskPanel({
             caseName: string;
             caseCode: string;
             assignmentId: string;
+            reused?: boolean;
+            reuseReason?: string;
+            alreadyKeyed?: boolean;
           }>;
+          reusedCount?: number;
+          createdCount?: number;
+          warning?: string;
         };
         error?: { message?: string };
       };
@@ -755,10 +766,12 @@ export function CareFormDeskPanel({
             caseName: item.caseName,
             caseCode: item.caseCode,
             assignmentId: item.assignmentId,
-            status: "ready" as const,
+            status: item.alreadyKeyed ? ("keyed" as const) : ("ready" as const),
             village: src?.village || villageFilter,
             villageSeq: src?.villageSeq ?? null,
             villageCode: src?.villageCode || "",
+            reused: Boolean(item.reused),
+            reuseReason: item.reuseReason || "",
           };
         }),
         updatedAt: new Date().toISOString(),
@@ -771,9 +784,28 @@ export function CareFormDeskPanel({
         visitStartTime: "09:00",
       });
       setCreating(false);
+      const reusedCount = Number(json.data.reusedCount ?? 0);
+      const createdCount = Number(json.data.createdCount ?? next.items.length);
+      const reuseHint =
+        reusedCount > 0
+          ? `其中 ${reusedCount} 案同訪員已有關懷表，已改為「再進表修正」既有筆（不會另開第二張、避免重複核銷）。`
+          : "";
+      const warn = String(json.data.warning ?? "").trim();
       setMessage(
-        `已準備 ${next.items.length} 筆派案。請填訪視日期與第 1 筆開始時間，再按「開始連續 KEY」。表內勾選 1／5／10 分後自動算結束；下一案起始＝上案結束＋${DESK_BATCH_TRAVEL_GAP_MINUTES} 分。`,
+        [
+          `已準備 ${next.items.length} 筆（新建 ${createdCount}／重用 ${reusedCount}）。`,
+          reuseHint || warn,
+          `請填訪視日期與第 1 筆開始時間，再按「開始連續 KEY」。表內勾選 1／5／10 分後自動算結束；下一案起始＝上案結束＋${DESK_BATCH_TRAVEL_GAP_MINUTES} 分。`,
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
+      if (reusedCount > 0) {
+        setConflictAlert(
+          warn ||
+            `提醒：有 ${reusedCount} 案已有關懷表。正確做法是「再進表／查看」修正第一筆，不要當成新案再 KEY 一次。`,
+        );
+      }
     } catch (error) {
       const aborted =
         (error instanceof DOMException && error.name === "AbortError") ||
@@ -1167,7 +1199,7 @@ export function CareFormDeskPanel({
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。關懷表會依勾選帶入對應欄位（兩邊可並存）。社政官方身分為社會局/處、社工、志工、其他；「電話問安」民政／社政皆可選（社政帶入時寫成其他／電話問安）。
+          民政或社政至少勾一邊（可兩邊都勾）；每一邊可勾兩位以上。再手動指定一位主填表人。開表帶入以「勾選欄」為準（勾社政→社政欄；勾民政→民政欄）。CIV 編碼只出現在民政欄、SOC 只在社政欄。社政官方身分為社會局/處、社工、志工、其他；「電話問安」民政／社政皆可選（社政帶入時寫成其他／電話問安）。
         </p>
 
         {creatingVisitor ? (
@@ -1520,6 +1552,7 @@ export function CareFormDeskPanel({
                         : item.status === "skipped"
                           ? " · 下次再 KEY"
                           : ""}
+                      {item.reused ? " · 重用既有（修正勿另開）" : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">

@@ -1,3 +1,27 @@
+## Lesson: Deceased note must not auto-append triple 未遇 stamps
+
+- **Trigger:** 場生備註已寫「社區管理員指…往生」，選查無此人／一鍵未遇後仍被接上 `10/25…訪視未遇；10/26…；10/27…`（用戶以為「又產生兩筆」）。
+- **Cause:** `submitVisit` 一紙未遇路徑在 priorNotes 無「訪視未遇」時一律 `${prior}；${三次戳}`；「兩筆」實為備註內 D-2／D-1 兩段戳，不是另開兩張表。
+- **Rule:** `notesIndicateDeceased`（往生／死亡等）→ 只保留人工說明寫入 `visit_notes`＋`living_address_other`，不產三次戳。備註改 textarea 可手編，且以 answers.visit_notes 為準勿被 submission.notes 蓋掉。清資料用 `ops.patchCareformAnswers`；搜尋用 `ops.scanCareformNotes`。
+- **Evidence:** `CF-337912ab` 陳省章／YH-115-A6419；`visit-dialogue-form.tsx`, `desk-care-batch.ts`, `OpsModule.gs`.
+- **Added on:** 2026-11-02
+
+## Lesson: Desk picker column decides careform worker side (not roster alone)
+
+- **Trigger:** 高廷峯勾在「社政」欄當主填，關懷表卻要求補「民政訪查人」身分／姓名／電話。
+- **Cause:** Badge／id 是 `CIV`，但註冊 profile 是 `workerGroup=social_affairs`（永和區公所志工／永和紳士協會）。整批「CIV→改回民政」誤把他改成 civil；開表又只看 CIV／workerGroup 不一致。
+- **Rule:** Encode `主填側:民政|社政` from the checkbox column. Seed primary into that side. `deskVisitorColumnSide`：**名冊 volunteer_group 優先**；僅 unknown 時才用 `-CIV-`／`-SOC-` 提示。勿只因 CIV 編碼就把人改民政。
+- **Evidence:** `desk-care-batch.ts`, `care-form-desk-panel.tsx`, `prepare/route.ts`, `visit-dialogue-form.tsx`；註冊 `imp-b5dc25e7c7598bdf93fc`。
+- **Added on:** 2026-11-02
+
+## Lesson: Same visitor + same case → one careform (second KEY = correction)
+
+- **Trigger:** Desk re-prepared 信義里 5 cases; each got 2 assignments + 2 careforms + 2 pending audits (fee risk).
+- **Cause:** `prepare` used `allow_multi_active: true` and always `dispatchBatch` append; submit only upserted **same assignment_id**, not same visitor+encoded_id.
+- **Rule:** Desk prepare passes `reuse_visitor_case`. If same visitor already has replaceable careform（已提交／待補件／草稿）or active assignment → **reuse** that ASG and UI shows「再進表修正」. Submit also cross-merges by visitor+encoded_id onto one `careform_id`（`AuditModule.enqueue` won’t open a second pending for same CF）. Audit queue flags `duplicate_case_pending` as warning. Payment preview already dedupes by `case_id`, but do not approve two pending rows for one case.
+- **Evidence:** `AssignmentModule.gs` `dispatchBatch`, `CareFormModule.gs` `submit`, `prepare/route.ts`, `care-form-desk-panel.tsx`, `AuditModule.gs`, `gas-audit.ts`.
+- **Added on:** 2026-11-01
+
 ## Lesson: Same visitor 未遇 stamps must be unique (no clone 09:00／14:00)
 
 - **Trigger:** Continuous KEY 未遇 produced identical `10/26 09:00`／`10/27 14:00` across cases; only late time differed.
