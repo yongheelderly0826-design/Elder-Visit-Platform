@@ -141,11 +141,19 @@
 - **Evidence:** `lib/domain/visits.ts`, `components/visitor/visit-dialogue-form.tsx`, `app/api/visits/submit/route.ts`.
 - **Added on:** 2026-10-29
 
+## Lesson: MOHW date filter must prune selection before export
+
+- **Trigger:** 沈煒庭：用 28 號篩選列表沒有 27 號，但匯出 xlsx 仍出現 27 號。
+- **Cause:** 日期／區里篩選只過濾 `filteredItems` 顯示；載入後 `selected` 預設全選可匯出，改篩選時未收斂勾選。`runExport` 送出整個 `selected`（含畫面外個案）。
+- **Rule:** 有篩選時 `useEffect` 把 `selected` 收斂到 `filteredItems`；`runExport` 再以篩選 ∩ 勾選防禦。勿假設「畫面上沒看到就不會匯出」。
+- **Evidence:** LINE 回報；`components/export/mohw-export-panel.tsx`。附檔 `生活關懷表1151027.xlsx` 檔名為民國 1151027（約產檔／標記日），內容 10 列訪查日皆 `115/10/25`（非 27／28 分布樣本）。
+- **Added on:** 2026-11-03
+
 ## Lesson: MOHW export bulk-select by visit date and village
 
 - **Trigger:** Managers need faster batch export by one day’s KEY papers or one village, or both.
 - **Cause:** Export UI only had select-all ready / errors; no date or 區里 filter.
-- **Rule:** Filter bar on `MohwExportPanel`: date + area dropdown (AND). Buttons「勾選符合條件・可匯出／全部」. Table shows filtered rows + 訪視日 column. Candidate payload includes `visit_date` from answers (fallback `submitted_at` for filter).
+- **Rule:** Filter bar on `MohwExportPanel`: date + area dropdown (AND). Buttons「勾選符合條件・可匯出／全部」. Table shows filtered rows + 訪視日 column. Candidate payload includes `visit_date` from answers (fallback `submitted_at` for filter). **篩選變更必須收斂 selected（見上則）**。
 - **Evidence:** `components/export/mohw-export-panel.tsx`, `lib/domain/mohw-export-candidates.ts`, `gas/src/modules/ExportModule.gs`.
 - **Added on:** 2026-10-28
 

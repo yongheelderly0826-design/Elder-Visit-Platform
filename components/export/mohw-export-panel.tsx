@@ -206,6 +206,24 @@ export function MohwExportPanel({
     });
   }, [items, filterDate, filterDateEnd, filterDateMode, filterArea]);
 
+  const hasActiveFilter = Boolean(filterDate || filterDateEnd || filterArea);
+
+  // 篩選只改列表時，若勾選集合仍含畫面外個案，匯出會「多出」其他日期／區里。
+  // 有篩選時強制把 selected 收斂到目前符合條件的列。
+  useEffect(() => {
+    if (!hasActiveFilter) return;
+    const allowed = new Set(filteredItems.map((item) => item.caseId));
+    setSelected((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of current) {
+        if (allowed.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [hasActiveFilter, filteredItems]);
+
   const readyCount = useMemo(
     () => items.filter((item) => item.exportReady).length,
     [items],
@@ -216,7 +234,6 @@ export function MohwExportPanel({
     [filteredItems],
   );
 
-  const hasActiveFilter = Boolean(filterDate || filterDateEnd || filterArea);
   const selectReadyCount = hasActiveFilter ? filteredReadyCount : readyCount;
   const selectErrorCount = useMemo(() => {
     const scope = hasActiveFilter ? filteredItems : items;
@@ -348,12 +365,23 @@ export function MohwExportPanel({
   }
 
   async function runExport() {
-    if (!selected.size) {
-      setMessage("請先勾選要匯出的個案");
+    const allowedIds = hasActiveFilter
+      ? new Set(filteredItems.map((item) => item.caseId))
+      : null;
+    const caseIds = allowedIds
+      ? Array.from(selected).filter((id) => allowedIds.has(id))
+      : Array.from(selected);
+
+    if (!caseIds.length) {
+      setMessage(
+        hasActiveFilter
+          ? "目前篩選範圍內沒有勾選個案。請先「勾選符合條件」或調整篩選後再匯出。"
+          : "請先勾選要匯出的個案",
+      );
       return;
     }
 
-    const caseCount = selected.size;
+    const caseCount = caseIds.length;
     exportStartedAtRef.current = Date.now();
     setExporting(true);
     setExportProgress(3);
@@ -376,7 +404,7 @@ export function MohwExportPanel({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           templateId: "export_central_system_excel_v1",
-          caseIds: Array.from(selected),
+          caseIds,
           onlyAudited,
           strict: true,
           purpose: "government_report",
@@ -412,7 +440,7 @@ export function MohwExportPanel({
         if (json.data?.downloadUrl) {
           downloadToComputer(json.data.downloadUrl, json.data.filename);
           setMessage(
-            `已產生 ${selected.size} 筆（${json.data.filename ?? "xlsx"}），正在下載至本機電腦。Drive 仍保留備份。`,
+            `已產生 ${caseCount} 筆（${json.data.filename ?? "xlsx"}），正在下載至本機電腦。Drive 仍保留備份。`,
           );
         } else if (json.data?.content) {
           const blob = new Blob([json.data.content], {
@@ -421,17 +449,17 @@ export function MohwExportPanel({
           const objectUrl = URL.createObjectURL(blob);
           downloadToComputer(objectUrl, json.data.filename ?? "生活關懷表_demo.tsv");
           window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
-          setMessage(`已將 ${selected.size} 筆示範資料下載至本機電腦。`);
+          setMessage(`已將 ${caseCount} 筆示範資料下載至本機電腦。`);
         } else {
           setMessage("檔案已產生，但無法取得本機下載連結；請改用下方 Google Drive 連結。");
         }
       } else {
-        setMessage(json.data?.message ?? `已匯出 ${selected.size} 筆至 Google Drive`);
+        setMessage(json.data?.message ?? `已匯出 ${caseCount} 筆至 Google Drive`);
       }
       const entry: ExportHistoryItem = {
         exportId: json.data?.exportId ?? "",
         exportType: "mohw_life_care",
-        caseCount: json.data?.caseCount ?? selected.size,
+        caseCount: json.data?.caseCount ?? caseCount,
         fileName: json.data?.filename ?? "",
         fileId: "",
         fileUrl: json.data?.fileUrl ?? "",
@@ -466,6 +494,7 @@ export function MohwExportPanel({
           <p className="mt-1">
             候選 {items.length} 筆 · 可匯出 {readyCount} 筆 · 驗證失敗 {errorCaseCount} 筆 · 已選{" "}
             {selected.size} 筆
+            {hasActiveFilter ? `（篩選內 ${filteredItems.length}）` : ""}
           </p>
         </div>
       </div>
@@ -551,9 +580,9 @@ export function MohwExportPanel({
         </Button>
         <p className="w-full text-xs text-muted-foreground">
           可填起迄（含兩端）、只填一天、單用區里，或一起用。日期只依所選「訪視日」或「登打日」（台北日）；剛
-          KEY 未稽核仍會列出，可匯出須稽核通過且驗證無錯。
+          KEY 未稽核仍會列出，可匯出須稽核通過且驗證無錯。套用篩選後會自動取消畫面外勾選，匯出只含目前條件內已勾選個案。
           {hasActiveFilter
-            ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}）。若筆數不如預期，可改切日期依據，或先「清除篩選」看全部。`
+            ? ` 候選共 ${items.length} 筆，目前條件符合 ${filteredItems.length} 筆（可匯出 ${filteredReadyCount}；已選 ${selected.size}）。若筆數不如預期，可改切日期依據，或先「清除篩選」看全部。`
             : ` 候選共 ${items.length} 筆。`}
         </p>
         {items.length > 0 && readyCount === 0 ? (
