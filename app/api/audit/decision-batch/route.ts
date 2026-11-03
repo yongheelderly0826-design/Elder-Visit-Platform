@@ -6,7 +6,10 @@ import { GasApiError, gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 import { getSystemStatus } from "@/lib/system/env";
 
-const MAX_BATCH = 80;
+export const maxDuration = 300;
+
+/** Align with frontend chunk; keep headroom under GAS 6-minute kill. */
+const MAX_BATCH = 20;
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as {

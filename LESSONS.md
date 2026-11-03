@@ -38,11 +38,19 @@
 - **Evidence:** `lib/domain/mohw-life-care-validation.ts` (`workerSideStarted`), `gas/src/utils/MohwLifeCareValidator.gs`, `lib/domain/mohw-desk-form-defaults.ts`.
 - **Added on:** 2026-10-31
 
+## Lesson: Batch audit approve hangs when chunk ≈ GAS 6-minute kill
+
+- **Trigger:** 稽核頁「正在批次核准 840／865」整晚 loading；畫面上待稽核仍顯示 865，但 live `audit.queue` 只剩個位數。
+- **Cause:** 進度字串在 `fetch` **之前**就寫成 `offset+chunk`（CHUNK=60）；每筆 `decideOne_` 全量 102 欄驗證約 5–7 秒，60 筆 ≈ GAS 6 分鐘硬殺。`gasFetch`／前端皆無 timeout，連線掛死就不進 `catch`、按鈕一直轉。Sheets 端可能已寫入部分「通過」，UI 計數未重整故看起來像整批卡住。
+- **Rule:** 前端每批 ≤15；顯示「第 a–b 筆（已成功 ok）」；`AbortController` 約 120s。Next `decision-batch` `maxDuration=300` + `gasFetch timeoutMs`。GAS `decideBatch` 以 ~270s budget 提前回 JSON（`BATCH_TIME_BUDGET`／`stopped_early`）供續跑。卡住時先 **重新整理** 看真實 pending，勿以為 840 表示只過了 840。
+- **Evidence:** `audit-queue-panel.tsx`, `AuditModule.gs` `decideBatch`, `lib/gas-client.ts`, live queue 2026-11-03（pending 4；批次核准 overnight 683 + morning 216）。
+- **Added on:** 2026-11-03
+
 ## Lesson: Audit queue must stay lite; batch decide once per index build
 
 - **Trigger:** 稽核頁／一鍵通過極慢（400+ 待審）。
 - **Cause:** `audit.queue` 對每筆跑 102 欄驗證；`decide` 每筆 `VisitRecordIndex.build()` 兩次並 `ReadCache.bump`；佇列 JSON 常 >90KB 導致 CacheService 放不進去。
-- **Rule:** Queue 預設 lite（用關懷表 `validation_ok`／`validation_error_lines` 快照，缺快照先當通過）；送出時寫入快照。`audit.decideBatch` 一次 build、多筆決定、結束才 bump／排程快照。前端每批 ≤60 筆呼叫 `/api/audit/decision-batch`。
+- **Rule:** Queue 預設 lite（用關懷表 `validation_ok`／`validation_error_lines` 快照，缺快照先當通過）；送出時寫入快照。`audit.decideBatch` 一次 build、多筆決定、結束才 bump／排程快照。前端每批宜小（≤15，勿再回到 60）。
 - **Evidence:** `gas/src/modules/AuditModule.gs`, `CareFormModule.gs`, `app/api/audit/decision-batch/route.ts`, `audit-queue-panel.tsx`.
 - **Added on:** 2026-11-01
 

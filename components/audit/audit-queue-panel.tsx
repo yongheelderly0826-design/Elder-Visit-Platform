@@ -124,7 +124,9 @@ export function AuditQueuePanel() {
 
   async function approveAuditIds(ids: string[]) {
     if (!ids.length || !canApproveAudit) return;
-    const CHUNK = 60;
+    // Keep well under GAS 6-minute hard limit (~5–7s/筆 full validate).
+    const CHUNK = 15;
+    const CHUNK_TIMEOUT_MS = 120_000;
     setBulkBusy(true);
     setMessage(`正在批次核准 0／${ids.length}…`);
     let ok = 0;
@@ -134,11 +136,17 @@ export function AuditQueuePanel() {
 
     for (let offset = 0; offset < ids.length; offset += CHUNK) {
       const chunk = ids.slice(offset, offset + CHUNK);
-      setMessage(`正在批次核准 ${Math.min(offset + chunk.length, ids.length)}／${ids.length}…`);
+      const rangeEnd = Math.min(offset + chunk.length, ids.length);
+      setMessage(
+        `正在批次核准第 ${offset + 1}–${rangeEnd} 筆（已成功 ${ok}／${ids.length}）…`,
+      );
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), CHUNK_TIMEOUT_MS);
       try {
         const response = await fetch("/api/audit/decision-batch", {
           method: "POST",
           headers: { "content-type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             auditIds: chunk,
             decision: "approve",
@@ -153,6 +161,7 @@ export function AuditQueuePanel() {
               ok?: boolean;
               auditId?: string;
               message?: string;
+              code?: string;
             }>;
           };
           error?: { message?: string };
@@ -164,7 +173,9 @@ export function AuditQueuePanel() {
           }
           continue;
         }
+        const seen = new Set<string>();
         for (const row of json.data.results ?? []) {
+          if (row.auditId) seen.add(row.auditId);
           if (row.ok && row.auditId) {
             ok += 1;
             approved.add(row.auditId);
@@ -173,9 +184,28 @@ export function AuditQueuePanel() {
             if (failSamples.length < 3 && row.message) failSamples.push(row.message);
           }
         }
-      } catch {
+        // Partial GAS budget stop: ids not in results still need retry.
+        for (const id of chunk) {
+          if (seen.has(id)) continue;
+          fail += 1;
+          if (failSamples.length < 3) {
+            failSamples.push("本批逾時未完成，請重新整理後對剩餘待稽核再跑一次");
+          }
+        }
+      } catch (error) {
         fail += chunk.length;
-        if (failSamples.length < 3) failSamples.push("連線失敗");
+        if (failSamples.length < 3) {
+          const timedOut =
+            (error instanceof DOMException && error.name === "AbortError") ||
+            (error instanceof Error && error.name === "AbortError");
+          failSamples.push(
+            timedOut
+              ? `第 ${offset + 1}–${rangeEnd} 筆逾時（>${CHUNK_TIMEOUT_MS / 1000}s），已略過並續跑下一批`
+              : "連線失敗",
+          );
+        }
+      } finally {
+        window.clearTimeout(timer);
       }
     }
 
@@ -191,15 +221,13 @@ export function AuditQueuePanel() {
     });
     setBulkBusy(false);
     setMessage(
-      `批次核准完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ""}${
+      `批次核准完成：成功 ${ok} 筆${fail ? `，失敗／未完成 ${fail} 筆` : ""}${
         failSamples.length ? `（${failSamples.join("；")}）` : ""
-      }。核准後可至匯出頁勾選。`,
+      }。請重新整理確認待稽核；未完成者可再按一次核准。`,
     );
-    if (ok > 0) {
-      window.setTimeout(() => {
-        void loadQueue();
-      }, 600);
-    }
+    window.setTimeout(() => {
+      void loadQueue();
+    }, 600);
   }
 
   return (

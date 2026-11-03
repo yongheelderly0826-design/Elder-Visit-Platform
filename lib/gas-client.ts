@@ -77,6 +77,8 @@ async function gasFetch<T>(
     body?: unknown;
     revalidateSeconds?: number;
     tags?: string[];
+    /** Abort hanging GAS calls (Apps Script can stall past the 6-minute kill). */
+    timeoutMs?: number;
   } = {},
   attempt = 0,
 ): Promise<T> {
@@ -126,7 +128,32 @@ async function gasFetch<T>(
     init.body = serialized;
   }
 
-  const res = await fetch(url.toString(), init);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  if (options.timeoutMs && options.timeoutMs > 0) {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), options.timeoutMs);
+    init.signal = controller.signal;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), init);
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    const aborted =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof DOMException !== "undefined" &&
+        error instanceof DOMException &&
+        error.name === "AbortError");
+    if (aborted) {
+      throw new GasApiError({
+        code: "GAS_TIMEOUT",
+        message: `GAS「${action}」逾時（>${Math.round((options.timeoutMs || 0) / 1000)}s）。請縮小批次後重試。`,
+      });
+    }
+    throw error;
+  }
+  if (timeoutId) clearTimeout(timeoutId);
   const raw = await res.text();
   const trimmed = raw.trim();
   if (!trimmed || trimmed.startsWith("<!") || trimmed.startsWith("<html") || trimmed.startsWith("<HTML")) {
@@ -689,8 +716,14 @@ export const gasClient = {
       gasFetch<{
         success_count: number;
         fail_count: number;
+        stopped_early?: boolean;
         results: Array<Record<string, unknown>>;
-      }>("audit.decideBatch", { method: "POST", body }),
+      }>("audit.decideBatch", {
+        method: "POST",
+        body,
+        // Under Apps Script 6-minute kill + Next maxDuration 300s.
+        timeoutMs: 280_000,
+      }),
   },
   attendance: {
     identify: (body: { id_number: string }) =>

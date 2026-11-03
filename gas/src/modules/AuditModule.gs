@@ -383,8 +383,24 @@ var AuditModule = (function () {
     var snapshotDates = {};
     var reviewer = data.reviewer || Session.getActiveUser().getEmail();
     var reason = data.reason || '';
+    // Apps Script hard-kills near 6 minutes; return JSON early so callers can resume.
+    var budgetMs = 270000;
+    var startedAt = new Date().getTime();
+    var stoppedEarly = false;
 
     for (var i = 0; i < ids.length; i++) {
+      if (i > 0 && new Date().getTime() - startedAt > budgetMs) {
+        stoppedEarly = true;
+        for (var j = i; j < ids.length; j++) {
+          results.push({
+            ok: false,
+            audit_id: ids[j],
+            code: 'BATCH_TIME_BUDGET',
+            message: '本批執行時間將逾 GAS 上限，已提前結束；請重試剩餘 audit_id',
+          });
+        }
+        break;
+      }
       var one = decideOne_(index, {
         audit_id: ids[i],
         decision: data.decision,
@@ -423,6 +439,7 @@ var AuditModule = (function () {
     return {
       success_count: successCount,
       fail_count: failCount,
+      stopped_early: stoppedEarly,
       results: results,
     };
   }
