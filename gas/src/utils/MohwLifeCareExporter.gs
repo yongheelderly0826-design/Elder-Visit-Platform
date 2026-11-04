@@ -32,7 +32,9 @@ var MohwLifeCareExporter = (function () {
     if (!/\.xlsx$/i.test(fileName)) {
       fileName = '生活關懷表_' + fileName + '.xlsx';
     }
-    return createNamedXlsxFile(rows, fileName, 'MOHW Export ' + fileName);
+    // 暫存試算表標題勿含 .xlsx／勿像成品檔名，避免逾時殘檔被誤開成「空白匯出」。
+    var tempTitle = '_TMP_MOHW_請勿開啟_' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+    return createNamedXlsxFile(rows, fileName, tempTitle);
   }
 
   /**
@@ -53,17 +55,19 @@ var MohwLifeCareExporter = (function () {
       return row.map(function (value) { return value == null ? '' : String(value); });
     });
     folderOpts = folderOpts || {};
-    var ss = SpreadsheetApp.create(tempTitle || fileName);
+    // 標題不要用成品檔名或 .xlsx，減少 Drive「最近」誤開暫存。
+    var safeTempTitle = String(tempTitle || '').replace(/\.xlsx$/i, '');
+    if (!safeTempTitle || /\.xlsx/i.test(safeTempTitle) || safeTempTitle.indexOf('生活關懷表_') === 0) {
+      safeTempTitle = '_TMP_MOHW_請勿開啟_' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+    }
+    var ss = SpreadsheetApp.create(safeTempTitle);
     var tempFile = DriveApp.getFileById(ss.getId());
     try {
       var sheet = ss.getSheets()[0];
       var range = sheet.getRange(1, 1, textRows.length, width);
+      // 先鎖定文字格式再 setValues（大批次比 setRichTextValues 快很多，仍靠回讀擋型態漂移）。
       range.setNumberFormat('@');
-      range.setRichTextValues(textRows.map(function (row) {
-        return row.map(function (text) {
-          return SpreadsheetApp.newRichTextValue().setText(text).build();
-        });
-      }));
+      range.setValues(textRows);
       SpreadsheetApp.flush();
 
       // 回讀實際值與公式；不只相信寫入前的陣列。
@@ -71,10 +75,18 @@ var MohwLifeCareExporter = (function () {
       var formulas = range.getFormulas();
       for (var r = 0; r < textRows.length; r++) {
         for (var c = 0; c < width; c++) {
-          if (formulas[r][c] || typeof saved[r][c] !== 'string' || saved[r][c] !== textRows[r][c]) {
+          var cell = saved[r][c];
+          var asText = cell == null ? '' : String(cell);
+          if (formulas[r][c] || asText !== textRows[r][c]) {
             throw new Error('儲存格式或內容改變：第 ' + (r + 1) + ' 列、第 ' + (c + 1) + ' 欄');
           }
         }
+      }
+
+      // 大批次寫入後稍候再 export，降低 Sheets 匯出服務讀到空複本的機率。
+      if (textRows.length > 200) {
+        Utilities.sleep(1500);
+        SpreadsheetApp.flush();
       }
 
       var response = UrlFetchApp.fetch(
@@ -89,6 +101,10 @@ var MohwLifeCareExporter = (function () {
       var bytes = blob.getBytes();
       if (bytes.length < 4 || bytes[0] !== 80 || bytes[1] !== 75 || bytes[2] !== 3 || bytes[3] !== 4) {
         throw new Error('匯出回應不是預期的 XLSX ZIP 檔');
+      }
+      // 空／近空 xlsx（僅 ZIP 骨架）視為失敗，避免寫出「成功但空白」的 Drive 檔。
+      if (bytes.length < 2000) {
+        throw new Error('xlsx 匯出異常過小（' + bytes.length + ' bytes），疑似空檔');
       }
       var folder = folderOpts.folderName
         ? getOrCreateNamedFolder_(folderOpts.propertyKey, folderOpts.folderName)

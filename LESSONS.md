@@ -1,3 +1,11 @@
+## Lesson: Blank MOHW xlsx in Sheets is often the temp workbook, not the export
+
+- **Trigger:** Drive／Sheets 開啟 `MOHW Export 生活關懷表_EXP_….xlsx` 整張空白；以為匯出沒資料。
+- **Cause:** `MohwLifeCareExporter` 產檔前用 `SpreadsheetApp.create('MOHW Export ' + fileName)` 建暫存試算表；成品在資料夾「MOHW生活關懷表匯出」、檔名無 `MOHW Export` 前綴。逾時／失敗時暫存可能殘留且尚未寫入（或未寫完），且 `匯出紀錄` 不會有該 `EXP_`。正式成功列才有 `case_count`／`file_id`。
+- **Rule:** 空白＋檔名含 `MOHW Export`／`_TMP_MOHW_` → 勿當成品；看匯出頁歷史或資料夾內 `生活關懷表_EXP_….xlsx`，用「下載」開 Excel／Numbers。暫存標題禁止成品檔名與 `.xlsx`；大批次用 `setValues`＋`@` 格式並擋過小 blob。
+- **Evidence:** `gas/src/utils/MohwLifeCareExporter.gs`；`export.history` 無 `EXP-20261104-091828`；截圖檔名恰為舊 tempTitle。
+- **Added on:** 2026-11-04
+
 ## Lesson: Deceased note must not auto-append triple 未遇 stamps
 
 - **Trigger:** 場生備註已寫「社區管理員指…往生」，選查無此人／一鍵未遇後仍被接上 `10/25…訪視未遇；10/26…；10/27…`（用戶以為「又產生兩筆」）。
