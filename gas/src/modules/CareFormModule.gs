@@ -10,8 +10,25 @@ var CareFormModule = (function () {
     return rows[rows.length - 1] || null;
   }
 
+  /**
+   * 無名側強制清空 date，避免 desk 兩邊預填後留下「有日無名」。
+   * 有 name 的側保留 date。擇一即可。
+   */
+  function clearOrphanWorkerDates_(answers) {
+    answers = answers && typeof answers === 'object' ? answers : {};
+    var next = Object.assign({}, answers);
+    if (!String(next.social_worker_name || '').trim()) {
+      next.social_worker_date = '';
+    }
+    if (!String(next.civil_worker_name || '').trim()) {
+      next.civil_worker_date = '';
+    }
+    return next;
+  }
+
   function saveDraft(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
+    var draftAnswers = clearOrphanWorkerDates_(data.answers || {});
     var record = {
       careform_id: data.careform_id || 'CF-' + Utilities.getUuid().slice(0, 8),
       assignment_id: data.assignment_id,
@@ -19,7 +36,7 @@ var CareFormModule = (function () {
       visitor_id: data.visitor_id,
       visit_result: data.visit_result || '',
       completion_pct: data.completion_pct || 0,
-      answers_json: JSON.stringify(data.answers || {}),
+      answers_json: JSON.stringify(draftAnswers),
       consent_signed: data.consent_signed || false,
       photo_urls: JSON.stringify(data.photos || []),
       status: '草稿',
@@ -272,7 +289,8 @@ var CareFormModule = (function () {
   function submit(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
     var isMissed = data.visit_result === '未遇';
-    var answers = data.answers || {};
+    var answers = clearOrphanWorkerDates_(data.answers || {});
+    data.answers = answers;
 
     if (isMissed) {
       if (MISSED_MIN_SLOTS > 0) {

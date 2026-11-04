@@ -56,6 +56,7 @@ import {
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "@/lib/domain/mohw-life-care-export";
+import { clearOrphanWorkerDates } from "@/lib/domain/mohw-worker-dates";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
@@ -683,7 +684,10 @@ export function VisitDialogueForm({
     if (answersPatch.living_address_type) {
       synced = { ...synced, living_address_type: answersPatch.living_address_type };
     }
-    const mohwAnswers = useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced;
+    // 送出前：無名側清空 date（UI 可預填兩邊日期；寫入關懷表不可有日無名）
+    const mohwAnswers = clearOrphanWorkerDates(
+      useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced,
+    );
     setCareFormAnswers(mohwAnswers);
     setSubmission(nextSubmission);
     if (options?.deskSlotsOverride || (isOnePaperMissed && deskPaperSlots.length === 0)) {

@@ -7,6 +7,7 @@ import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options
 import { calculateMohwCareFormCompletion } from "@/lib/domain/mohw-life-care-ui";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
 import { validateMohwLifeCareRow } from "@/lib/domain/mohw-life-care-validation";
+import { clearOrphanWorkerDates } from "@/lib/domain/mohw-worker-dates";
 import type { VisitSubmission } from "@/lib/domain/types";
 import { getVisitFormFlowItems } from "@/lib/domain/visit-form-flow";
 import {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
   }
 
   const careFormAnswers = body.careFormAnswers
-    ? normalizeMohwAnswersOptions(body.careFormAnswers)
+    ? clearOrphanWorkerDates(normalizeMohwAnswersOptions(body.careFormAnswers))
     : undefined;
 
   const careFormCompletion = careFormAnswers

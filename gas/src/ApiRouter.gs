@@ -141,6 +141,15 @@ var ApiRouter = (function () {
     'ops.scanCareformNotes': function (p, b) {
       return OpsModule.scanCareformNotes(b || p);
     },
+    'ops.scanDuplicateVisitKeys': function (p, b) {
+      return OpsModule.scanDuplicateVisitKeys(b || p);
+    },
+    'ops.scanMissingWorkerWithTime': function (p, b) {
+      return OpsModule.scanMissingWorkerWithTime(b || p);
+    },
+    'ops.clearOrphanWorkerDates': function (p, b) {
+      return OpsModule.clearOrphanWorkerDates(b || p);
+    },
     'ops.deleteCareformsByIds': function (p, b) {
       return OpsModule.deleteCareformsByIds(b || p);
     },

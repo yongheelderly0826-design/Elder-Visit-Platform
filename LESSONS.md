@@ -1,3 +1,11 @@
+## Lesson: Clear orphan worker dates on submit (name empty → date empty)
+
+- **Trigger:** Desk 兩邊預填 `*_worker_date`；擇一填姓名後，未用側留下「有日無名」，需 ops 清 1440 筆。
+- **Cause:** UI 為方便擇一預填兩邊日期；送出未正規化，把殘留 date 寫進 answers。
+- **Rule:** 送出／`saveDraft`／GAS `careform.submit` 前：`social_worker_name` 空 → `social_worker_date=""`；civil 同理。有名側保留日。UI 預填可留，寫入必須清。共用 `clearOrphanWorkerDates`（TS）／`clearOrphanWorkerDates_`（GAS）。
+- **Evidence:** `lib/domain/mohw-worker-dates.ts`, `visit-dialogue-form.tsx`, `app/api/visits/submit/route.ts`, `CareFormModule.gs`；對照 `ops.clearOrphanWorkerDates`。
+- **Added on:** 2026-11-04
+
 ## Lesson: Blank MOHW xlsx in Sheets is often the temp workbook, not the export
 
 - **Trigger:** Drive／Sheets 開啟 `MOHW Export 生活關懷表_EXP_….xlsx` 整張空白；以為匯出沒資料。

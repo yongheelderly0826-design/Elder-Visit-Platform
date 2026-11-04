@@ -23,6 +23,7 @@
     "node_modules",
     "scripts/compare-mohw-gold-export.ts",
     "scripts/write-mohw-gold-report.ts",
-    "scripts/desk-missed-stamp-smoke.ts"
+    "scripts/desk-missed-stamp-smoke.ts",
+    "scripts/orphan-worker-dates-smoke.ts"
   ]
 }
