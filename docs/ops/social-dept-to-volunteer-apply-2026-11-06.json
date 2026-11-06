@@ -1,0 +1,550 @@
+{
+  "visitor_ok": [
+    {
+      "visitor_id": "EV-115-YH-SOC-0002",
+      "name": "蕭雅方",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0004",
+      "name": "丁中怡",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所社團法人中華長照協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0006",
+      "name": "陳忠誠",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0159",
+      "name": "陳秀珠",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0158",
+      "name": "阮憲書",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0157",
+      "name": "譚雪珍",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0156",
+      "name": "邱金星",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0155",
+      "name": "吳品蓁",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0145",
+      "name": "林百齡",
+      "dept": "志工→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0154",
+      "name": "李富忠",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所新北市榮民服務處→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0141",
+      "name": "林均秀",
+      "dept": "社會人文課→社會人文課",
+      "svc": "永和區公所民政課→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0153",
+      "name": "郭庠君",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所社團法人中華長照協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0140",
+      "name": "王見明",
+      "dept": "志工→志工",
+      "svc": "永和區公所民政課→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0010",
+      "name": "劉定潔",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0009",
+      "name": "紀子涵",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0151",
+      "name": "莊明雪",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0152",
+      "name": "湯世香",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所民政課→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0148",
+      "name": "曾文桂",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0147",
+      "name": "黎宛毓",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0146",
+      "name": "呂淑慧",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0143",
+      "name": "游子嫻",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0138",
+      "name": "劉竑庭",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0136",
+      "name": "陳緯倫",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0135",
+      "name": "林慧芬",
+      "dept": "(empty)→社會人文課"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0014",
+      "name": "張秀碧",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0149",
+      "name": "郭品妊",
+      "dept": "志工→志工",
+      "svc": "永和區公所新北市永和紳士協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0162",
+      "name": "江瑞嬌",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所社團法人中華和煦社會福利協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0161",
+      "name": "林憶涵",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所社團法人中華和煦社會福利協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0160",
+      "name": "邱恆恩",
+      "dept": "(empty)→志工",
+      "svc": "永和區公所社團法人中華和煦社會福利協會→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-9B1E44",
+      "name": "陳宥儒",
+      "dept": "民政課→志工",
+      "svc": "永和區公所民政課→永和區公所志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-784483",
+      "name": "廖湘雲",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-772478",
+      "name": "陳俊宏",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-523545",
+      "name": "林家宏",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-313945",
+      "name": "林道然",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-432628",
+      "name": "賴貞諭",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-311073",
+      "name": "詹于萱",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-811463",
+      "name": "黃雅純",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-007123",
+      "name": "陳鈴",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-464399",
+      "name": "吳佩芝",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-549042",
+      "name": "符廣義",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-530572",
+      "name": "歐陽臻",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-070226",
+      "name": "高麗娟",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-951062",
+      "name": "胡錦相",
+      "dept": "其他→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-804459",
+      "name": "許順益",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-393537",
+      "name": "陳麗珠",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-863678",
+      "name": "許秀英",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-845937",
+      "name": "林玉惠",
+      "dept": "其他→志工"
+    },
+    {
+      "visitor_id": "V-YH-243333",
+      "name": "張均如",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "V-YH-586387",
+      "name": "許木坤",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-145443",
+      "name": "張皓評",
+      "dept": "(empty)→志工"
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-972410",
+      "name": "陳靜",
+      "dept": "(empty)→志工"
+    }
+  ],
+  "visitor_fail": [],
+  "reg_ok": [
+    {
+      "visitor_id": "EV-115-YH-SOC-145443",
+      "name": "張皓評",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-張皓評-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-972410",
+      "name": "陳靜",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-陳靜-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-845937",
+      "name": "林玉惠",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-林玉惠-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-863678",
+      "name": "許秀英",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-許秀英-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-951062",
+      "name": "胡錦相",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-胡錦相-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-804459",
+      "name": "許順益",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-許順益-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-393537",
+      "name": "陳麗珠",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-陳麗珠-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-070226",
+      "name": "高麗娟",
+      "before": "其他/欣欣天然氣公司",
+      "after": "志工",
+      "display_name": "永和區公所志工-高麗娟-查表員",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-486983",
+      "name": "鄭仁德",
+      "before": "其他/獨立倡導人",
+      "after": "志工",
+      "display_name": "永和區公所志工-鄭仁德-其他",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-007123",
+      "name": "陳鈴",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-陳鈴-社工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-637489",
+      "name": "周慧敏",
+      "before": "其他/鄰長",
+      "after": "志工",
+      "display_name": "永和區公所志工-周慧敏-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-311073",
+      "name": "詹于萱",
+      "before": "其他/社福",
+      "after": "志工",
+      "display_name": "永和區公所志工-詹于萱-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-784483",
+      "name": "廖湘雲",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-廖湘雲-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-772478",
+      "name": "陳俊宏",
+      "before": "其他/社政",
+      "after": "志工",
+      "display_name": "永和區公所志工-陳俊宏-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-523545",
+      "name": "林家宏",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所志工-林家宏-其他職稱",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-313945",
+      "name": "林道然",
+      "before": "其他/中華全齡關懷協會",
+      "after": "志工",
+      "display_name": "永和區公所志工-林道然-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0162",
+      "name": "李詹月梅",
+      "before": "其他/鄰長",
+      "after": "志工",
+      "display_name": "永和區公所永和區保平里辦公處志工-李詹月梅-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0167",
+      "name": "林專色",
+      "before": "其他/鄰長",
+      "after": "志工",
+      "display_name": "永和區公所民政課志工-林專色-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0169",
+      "name": "蔡雅華",
+      "before": "其他/鄰長",
+      "after": "志工",
+      "display_name": "永和區公所民政課志工-蔡雅華-鄰長",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0160",
+      "name": "邱恆恩",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所社團法人中華和煦社會福利協會志工-邱恆恩-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0161",
+      "name": "林憶涵",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所社團法人中華和煦社會福利協會志工-林憶涵-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0162",
+      "name": "江瑞嬌",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所社團法人中華和煦社會福利協會志工-江瑞嬌-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0014",
+      "name": "張秀碧",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-張秀碧-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0152",
+      "name": "湯世香",
+      "before": "民政課/-",
+      "after": "志工",
+      "display_name": "永和區公所民政課志工-湯世香-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0153",
+      "name": "郭庠君",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所社團法人中華長照協會志工-郭庠君-社工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0154",
+      "name": "李富忠",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所新北市榮民服務處志工-李富忠-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0145",
+      "name": "林百齡",
+      "before": "其他/永和紳士協會",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-林百齡-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0155",
+      "name": "吳品蓁",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-吳品蓁-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-CIV-0147",
+      "name": "黃正昌",
+      "before": "其他/永和紳士協會",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-黃正昌-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0156",
+      "name": "邱金星",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-邱金星-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0158",
+      "name": "阮憲書",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-阮憲書-副總幹事",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0006",
+      "name": "陳忠誠",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所永和紳士協會志工-陳忠誠-志工",
+      "registrations_updated": 1
+    },
+    {
+      "visitor_id": "EV-115-YH-SOC-0004",
+      "name": "丁中怡",
+      "before": "其他/-",
+      "after": "志工",
+      "display_name": "永和區公所社團法人中華長照協會志工-丁中怡-社工",
+      "registrations_updated": 1
+    }
+  ],
+  "reg_fail": [],
+  "skipped_no_visitor": [
+    {
+      "name": "黃淑美",
+      "effective": "其他"
+    }
+  ]
+}
