@@ -17,6 +17,9 @@ export const MOHW_VISITOR_ORDER_MESSAGE =
 export const MOHW_HELP_NONE_OTHER_BLANK_MESSAGE =
   "未勾選「其他」時，「求助對象無-其他說明」應留空";
 
+export const MOHW_HELP_HAS_WHEN_NONE_BLANK_MESSAGE =
+  "求助對象選「無」時，「求助對象-有的複選選項」應留空";
+
 const villagesByCityDistrict = template.villagesByCityDistrict as Record<string, string[]>;
 
 export function normalizeMohwAdminName(value: string): string {

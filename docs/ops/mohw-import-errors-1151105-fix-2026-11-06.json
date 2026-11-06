@@ -1,0 +1,231 @@
+{
+  "source": "/Users/apple/Downloads/生活關懷表1151105.xlsx",
+  "out": "/Users/apple/Downloads/生活關懷表1151105-僅錯誤已修正.xlsx",
+  "rows": [
+    {
+      "excelRow": 7,
+      "name": "段悅治",
+      "national_id": "P200996097",
+      "visit_date": "115/11/03",
+      "visit_start": "15:50",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 11,
+      "name": "劉振凱",
+      "national_id": "D101344738",
+      "visit_date": "115/07/20",
+      "visit_start": "16:01",
+      "kind": "duplicate",
+      "fixes": [
+        "duplicate bump +1m 16:00→16:01"
+      ],
+      "help_flag": "有",
+      "help_has": "朋友;鄰居",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 12,
+      "name": "曹卉芳",
+      "national_id": "N200204002",
+      "visit_date": "115/10/27",
+      "visit_start": "09:20",
+      "kind": "living_city_changhua",
+      "fixes": [
+        "living_city 彰化市→彰化縣/彰化市"
+      ],
+      "help_flag": "有",
+      "help_has": "家人",
+      "living_city": "彰化縣",
+      "living_district": "彰化市"
+    },
+    {
+      "excelRow": 18,
+      "name": "王梅子",
+      "national_id": "F200916501",
+      "visit_date": "115/08/19",
+      "visit_start": "08:51",
+      "kind": "duplicate",
+      "fixes": [
+        "duplicate bump +1m 08:50→08:51"
+      ],
+      "help_flag": "有",
+      "help_has": "鄰居",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 31,
+      "name": "程阿伯",
+      "national_id": "G200051060",
+      "visit_date": "115/10/29",
+      "visit_start": "18:20",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 32,
+      "name": "葉英英",
+      "national_id": "F202835072",
+      "visit_date": "115/10/29",
+      "visit_start": "18:35",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 33,
+      "name": "洪陳月琴",
+      "national_id": "F202483470",
+      "visit_date": "115/10/25",
+      "visit_start": "15:10",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 40,
+      "name": "匡鴻英",
+      "national_id": "F202119368",
+      "visit_date": "115/10/31",
+      "visit_start": "12:00",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 41,
+      "name": "黃清吉",
+      "national_id": "A100232389",
+      "visit_date": "115/10/28",
+      "visit_start": "09:00",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 53,
+      "name": "王簡秋麗",
+      "national_id": "F201506634",
+      "visit_date": "115/10/31",
+      "visit_start": "12:55",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 59,
+      "name": "楊松田",
+      "national_id": "F103850937",
+      "visit_date": "115/10/27",
+      "visit_start": "09:00",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 76,
+      "name": "張添進",
+      "national_id": "A101257291",
+      "visit_date": "115/10/29",
+      "visit_start": "19:50",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 80,
+      "name": "葉碧珠",
+      "national_id": "A200082872",
+      "visit_date": "115/10/27",
+      "visit_start": "10:00",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 81,
+      "name": "郭有",
+      "national_id": "F202519117",
+      "visit_date": "115/10/29",
+      "visit_start": "19:50",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    },
+    {
+      "excelRow": 97,
+      "name": "鍾陳麗華",
+      "national_id": "M200947243",
+      "visit_date": "115/10/29",
+      "visit_start": "19:50",
+      "kind": "help_none_has",
+      "fixes": [
+        "clear help_sources_has"
+      ],
+      "help_flag": "無",
+      "help_has": "",
+      "living_city": "新北市",
+      "living_district": "永和區"
+    }
+  ]
+}

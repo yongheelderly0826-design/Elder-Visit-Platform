@@ -16,7 +16,12 @@ export const QUESTIONNAIRE_SKIP_STATUSES = [
 
 export type MohwSubmitGuardIssue = {
   key: string;
-  code: "VISIT_TIME_WINDOW" | "VISIT_DURATION_MIN" | "STATUS_MISSED_CONFLICT";
+  code:
+    | "VISIT_TIME_WINDOW"
+    | "VISIT_DURATION_MIN"
+    | "STATUS_MISSED_CONFLICT"
+    | "HELP_SOURCES_HAS_WHEN_NONE"
+    | "INVALID_LIVING_CITY";
   message: string;
 };
 
@@ -91,8 +96,58 @@ function clearKeys(
   return next;
 }
 
+/** 縣市誤填成「XX市」時對應到縣＋鄉鎮區（中央：居住縣市無效）。 */
+export const LIVING_CITY_AS_DISTRICT_FIX: Record<
+  string,
+  { city: string; district: string }
+> = {
+  彰化市: { city: "彰化縣", district: "彰化市" },
+};
+
 /**
- * 品質正規化（不含無名清日）：跳過問卷清同住、住址不詳清居住明細。
+ * 求助對象互斥：選「無」則清空「有」複選／說明；選「有」則清空「無」複選／說明。
+ */
+export function normalizeMohwHelpSourcesExclusive(
+  answers: MohwLifeCareAnswers,
+): MohwLifeCareAnswers {
+  const flag = String(answers.help_sources_flag ?? "").trim();
+  if (flag === "無") {
+    return {
+      ...answers,
+      help_sources_has: "",
+      help_sources_has_other: "",
+    };
+  }
+  if (flag === "有") {
+    return {
+      ...answers,
+      help_sources_none: "",
+      help_sources_none_other: "",
+    };
+  }
+  return answers;
+}
+
+/** 居住縣市誤填（如彰化市）→ 縣市＋鄉鎮區 */
+export function normalizeMohwLivingCityDistrict(
+  answers: MohwLifeCareAnswers,
+): MohwLifeCareAnswers {
+  const city = String(answers.living_city ?? "").trim();
+  const fix = LIVING_CITY_AS_DISTRICT_FIX[city];
+  if (!fix) return answers;
+  const district = String(answers.living_district ?? "").trim();
+  const nextDistrict =
+    !district || district === "彰化" || district === city ? fix.district : district;
+  return {
+    ...answers,
+    living_city: fix.city,
+    living_district: nextDistrict,
+  };
+}
+
+/**
+ * 品質正規化（不含無名清日）：
+ * 跳過問卷清同住、住址不詳清居住明細、求助對象互斥、縣市誤填修正。
  */
 export function normalizeMohwQualityGuards(
   answers: MohwLifeCareAnswers,
@@ -111,6 +166,9 @@ export function normalizeMohwQualityGuards(
   if (visitStatus === "查無此人" && !hasVal(next.living_address_type)) {
     next = { ...next, living_address_type: "查無此人" };
   }
+
+  next = normalizeMohwHelpSourcesExclusive(next);
+  next = normalizeMohwLivingCityDistrict(next);
 
   return next;
 }
@@ -168,6 +226,24 @@ export function collectMohwSubmitGuardIssues(
           "訪視狀態為已完成，但備註含「訪視未遇」；請改為查無此人／住址不詳，或刪除未遇戳記",
       });
     }
+  }
+
+  const helpFlag = String(answers.help_sources_flag ?? "").trim();
+  if (helpFlag === "無" && hasVal(answers.help_sources_has)) {
+    issues.push({
+      key: "help_sources_has",
+      code: "HELP_SOURCES_HAS_WHEN_NONE",
+      message: "求助對象選「無」時，「求助對象-有的複選選項」應留空",
+    });
+  }
+
+  const livingCity = String(answers.living_city ?? "").trim();
+  if (livingCity && LIVING_CITY_AS_DISTRICT_FIX[livingCity]) {
+    issues.push({
+      key: "living_city",
+      code: "INVALID_LIVING_CITY",
+      message: `居住縣市無效：${livingCity}（應為${LIVING_CITY_AS_DISTRICT_FIX[livingCity].city}，鄉鎮區填${LIVING_CITY_AS_DISTRICT_FIX[livingCity].district}）`,
+    });
   }
 
   return issues;

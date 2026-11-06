@@ -138,6 +138,9 @@ var ApiRouter = (function () {
     'ops.peekCareformsByIds': function (p, b) {
       return OpsModule.peekCareformsByIds(b || p);
     },
+    'ops.findCareformsByNationalIds': function (p, b) {
+      return OpsModule.findCareformsByNationalIds(b || p);
+    },
     'ops.scanCareformNotes': function (p, b) {
       return OpsModule.scanCareformNotes(b || p);
     },

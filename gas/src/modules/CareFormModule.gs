@@ -53,7 +53,7 @@ var CareFormModule = (function () {
     return next;
   }
 
-  /** 第五類正規化：無名清日＋跳過問卷清同住＋住址不詳清居住明細 */
+  /** 第五類正規化：無名清日＋跳過問卷清同住＋住址不詳清居住明細＋求助互斥＋縣市誤填 */
   function applySubmitGuards_(answers) {
     var next = clearOrphanWorkerDates_(answers);
     var visitStatus = String(next.visit_status || '').trim();
@@ -74,6 +74,19 @@ var CareFormModule = (function () {
     }
     if (visitStatus === '查無此人' && !String(next.living_address_type || '').trim()) {
       next.living_address_type = '查無此人';
+    }
+    var helpFlag = String(next.help_sources_flag || '').trim();
+    if (helpFlag === '無') {
+      next.help_sources_has = '';
+      next.help_sources_has_other = '';
+    } else if (helpFlag === '有') {
+      next.help_sources_none = '';
+      next.help_sources_none_other = '';
+    }
+    if (String(next.living_city || '').trim() === '彰化市') {
+      var dist = String(next.living_district || '').trim();
+      next.living_city = '彰化縣';
+      if (!dist || dist === '彰化' || dist === '彰化市') next.living_district = '彰化市';
     }
     return next;
   }

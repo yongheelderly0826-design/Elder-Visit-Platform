@@ -1735,6 +1735,64 @@ var OpsModule = (function () {
    * 依 careform_id 讀取關懷表摘要（比對重複 KEY 用）。
    * data.careform_ids: string[]
    */
+  /**
+   * 依身分證字號（answers.national_id／id_number）找出關懷表。
+   * data.national_ids: string[]
+   */
+  function findCareformsByNationalIds(data) {
+    data = data || {};
+    var want = {};
+    (data.national_ids || []).forEach(function (id) {
+      var key = String(id || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '');
+      if (key) want[key] = true;
+    });
+    var ids = Object.keys(want);
+    if (!ids.length) {
+      var err = new Error('national_ids 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var out = [];
+    careforms.forEach(function (cf) {
+      var answers = parseAnswers_(cf.answers_json);
+      var nid = String(answers.national_id || answers.id_number || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '');
+      if (!want[nid]) return;
+      out.push({
+        careform_id: String(cf.careform_id || ''),
+        encoded_id: String(cf.encoded_id || ''),
+        status: String(cf.status || ''),
+        visit_result: String(cf.visit_result || ''),
+        national_id: nid,
+        name: String(answers.name || ''),
+        visit_date: String(answers.visit_date || ''),
+        visit_start_time: String(answers.visit_start_time || answers.visit_time_start || ''),
+        help_sources_flag: String(answers.help_sources_flag || ''),
+        help_sources_has: String(answers.help_sources_has || ''),
+        living_city: String(answers.living_city || ''),
+        living_district: String(answers.living_district || ''),
+      });
+    });
+    return { count: out.length, items: out };
+  }
+
   function peekCareformsByIds(data) {
     data = data || {};
     var wanted = {};
@@ -3482,6 +3540,7 @@ var OpsModule = (function () {
     auditAllWorkerIdentities: auditAllWorkerIdentities,
     patchWorkerPhoneByCareformIds: patchWorkerPhoneByCareformIds,
     importSocialVolunteers: importSocialVolunteers,
+    findCareformsByNationalIds: findCareformsByNationalIds,
     peekCareformsByIds: peekCareformsByIds,
     scanCareformNotes: scanCareformNotes,
     scanDuplicateVisitKeys: scanDuplicateVisitKeys,

@@ -238,6 +238,15 @@ var MohwLifeCareValidator = (function () {
         );
       }
     }
+    if (visitStatus !== '拒絕訪視' && visitStatus !== '查無此人' &&
+        visitStatus !== '無法溝通' && visitStatus !== '住址不詳') {
+      if (asString(answers.help_sources_flag) === '無' && hasValue(answers.help_sources_has)) {
+        pushErr(errors, 'help_sources_has', row, '求助對象選「無」時，「求助對象-有的複選選項」應留空');
+      }
+    }
+    if (asString(answers.living_city) === '彰化市') {
+      pushErr(errors, 'living_city', row, '居住縣市無效：彰化市（應為彰化縣，鄉鎮區填彰化市）');
+    }
   }
 
   function isHhMm(value) {
