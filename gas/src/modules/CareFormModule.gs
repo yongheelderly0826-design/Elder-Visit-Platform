@@ -10,6 +10,33 @@ var CareFormModule = (function () {
     return rows[rows.length - 1] || null;
   }
 
+  var SKIP_QUESTIONNAIRE_STATUSES_ = {
+    '拒絕訪視': true,
+    '查無此人': true,
+    '無法溝通': true,
+    '住址不詳': true
+  };
+  var COHABIT_CLEAR_KEYS_ = [
+    'living_status',
+    'cohabitation_status',
+    'cohabitant_relation',
+    'cohabitant_age',
+    'cohabitant_no_care_capacity_note'
+  ];
+  var LIVING_DETAIL_CLEAR_KEYS_ = [
+    'living_address',
+    'living_city',
+    'living_district',
+    'living_village',
+    'living_neighborhood',
+    'living_lane',
+    'living_alley',
+    'living_number',
+    'living_floor',
+    'living_address_note',
+    'living_address_type'
+  ];
+
   /**
    * 無名側強制清空 date，避免 desk 兩邊預填後留下「有日無名」。
    * 有 name 的側保留 date。擇一即可。
@@ -26,9 +53,34 @@ var CareFormModule = (function () {
     return next;
   }
 
+  /** 第五類正規化：無名清日＋跳過問卷清同住＋住址不詳清居住明細 */
+  function applySubmitGuards_(answers) {
+    var next = clearOrphanWorkerDates_(answers);
+    var visitStatus = String(next.visit_status || '').trim();
+    var i;
+    if (SKIP_QUESTIONNAIRE_STATUSES_[visitStatus]) {
+      for (i = 0; i < COHABIT_CLEAR_KEYS_.length; i++) {
+        if (String(next[COHABIT_CLEAR_KEYS_[i]] || '').trim()) {
+          next[COHABIT_CLEAR_KEYS_[i]] = '';
+        }
+      }
+    }
+    if (visitStatus === '住址不詳') {
+      for (i = 0; i < LIVING_DETAIL_CLEAR_KEYS_.length; i++) {
+        if (String(next[LIVING_DETAIL_CLEAR_KEYS_[i]] || '').trim()) {
+          next[LIVING_DETAIL_CLEAR_KEYS_[i]] = '';
+        }
+      }
+    }
+    if (visitStatus === '查無此人' && !String(next.living_address_type || '').trim()) {
+      next.living_address_type = '查無此人';
+    }
+    return next;
+  }
+
   function saveDraft(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
-    var draftAnswers = clearOrphanWorkerDates_(data.answers || {});
+    var draftAnswers = applySubmitGuards_(data.answers || {});
     var record = {
       careform_id: data.careform_id || 'CF-' + Utilities.getUuid().slice(0, 8),
       assignment_id: data.assignment_id,
@@ -289,7 +341,7 @@ var CareFormModule = (function () {
   function submit(data) {
     Validation.requireFields(data, ['assignment_id', 'visitor_id', 'encoded_id']);
     var isMissed = data.visit_result === '未遇';
-    var answers = clearOrphanWorkerDates_(data.answers || {});
+    var answers = applySubmitGuards_(data.answers || {});
     data.answers = answers;
 
     if (isMissed) {

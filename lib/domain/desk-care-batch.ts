@@ -48,7 +48,7 @@ export const DESK_PAPER_MISS_WINDOWS = {
     paperKey: "晚" as const,
     start: "19:00",
     end: "19:10",
-    softEnd: "23:50",
+    softEnd: "20:00",
     missedSlot: "夜間" as MissedVisitTimeSlot,
     attempt: 3,
     dayOffsetFromLate: 0,

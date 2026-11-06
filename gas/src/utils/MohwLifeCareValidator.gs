@@ -174,6 +174,72 @@ var MohwLifeCareValidator = (function () {
     return text.replace(/[OoＯｏ〇○]/g, '0');
   }
 
+  var VISIT_WINDOW_START_MIN = 8 * 60;
+  var VISIT_WINDOW_END_MIN = 20 * 60;
+  var MIN_SUCCESS_DURATION_MIN = 5;
+
+  function parseHhMmToMinutes_(value) {
+    var m = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    var h = Number(m[1]);
+    var min = Number(m[2]);
+    if (!(h >= 0 && h <= 23 && min >= 0 && min <= 59)) return null;
+    return h * 60 + min;
+  }
+
+  function isWithinVisitWindow_(hhmm) {
+    var mins = parseHhMmToMinutes_(hhmm);
+    if (mins == null) return true;
+    return mins >= VISIT_WINDOW_START_MIN && mins <= VISIT_WINDOW_END_MIN;
+  }
+
+  function visitDurationMinutes_(start, end) {
+    var s = parseHhMmToMinutes_(start);
+    var e = parseHhMmToMinutes_(end);
+    if (s == null || e == null) return null;
+    var d = e - s;
+    if (d < 0) d += 24 * 60;
+    return d;
+  }
+
+  /** 第五類：08–20、成功≥5 分、已完成↔未遇戳互斥 */
+  function appendSubmitGuards_(errors, answers, row) {
+    var visitStatus = asString(answers.visit_status);
+    var start = answers.visit_start_time || answers.visit_time_start;
+    var end = answers.visit_end_time || answers.visit_time_end;
+    if (hasValue(start) && !isWithinVisitWindow_(start)) {
+      pushErr(errors, 'visit_start_time', row, '訪查開始時間須在 08:00–20:00');
+    }
+    if (hasValue(end) && !isWithinVisitWindow_(end)) {
+      pushErr(errors, 'visit_end_time', row, '訪查結束時間須在 08:00–20:00');
+    }
+    if (visitStatus === '已完成') {
+      var dur = visitDurationMinutes_(start, end);
+      if (dur != null && dur < MIN_SUCCESS_DURATION_MIN) {
+        pushErr(
+          errors,
+          'visit_end_time',
+          row,
+          '訪視成功時長至少 ' + MIN_SUCCESS_DURATION_MIN + ' 分鐘（目前 ' + dur + ' 分）'
+        );
+      }
+      var blob =
+        String(answers.living_address_other || '') +
+        '|' +
+        String(answers.visit_notes || '') +
+        '|' +
+        String(answers.notes || '');
+      if (blob.indexOf('訪視未遇') !== -1) {
+        pushErr(
+          errors,
+          'visit_status',
+          row,
+          '訪視狀態為已完成，但備註含「訪視未遇」；請改為查無此人／住址不詳，或刪除未遇戳記'
+        );
+      }
+    }
+  }
+
   function isHhMm(value) {
     var m = lookalikeToZero(value).match(/^(\d{2}):(\d{2})$/);
     if (!m) return false;
@@ -425,6 +491,8 @@ var MohwLifeCareValidator = (function () {
         pushErr(errors, 'national_id', row, '無個案資料');
       }
     }
+
+    appendSubmitGuards_(errors, answers, row);
 
     return {
       ok: errors.length === 0,

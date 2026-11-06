@@ -56,7 +56,11 @@ import {
   normalizeVisitorRocDate,
   normalizeVisitorTime,
 } from "@/lib/domain/mohw-life-care-export";
-import { clearOrphanWorkerDates } from "@/lib/domain/mohw-worker-dates";
+import { applyMohwSubmitGuards } from "@/lib/domain/mohw-submit-guards";
+import {
+  deskSuccessDurationOptions,
+  MIN_SUCCESS_DURATION_MINUTES,
+} from "@/lib/domain/mohw-submit-guard-rules";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
@@ -684,8 +688,8 @@ export function VisitDialogueForm({
     if (answersPatch.living_address_type) {
       synced = { ...synced, living_address_type: answersPatch.living_address_type };
     }
-    // 送出前：無名側清空 date（UI 可預填兩邊日期；寫入關懷表不可有日無名）
-    const mohwAnswers = clearOrphanWorkerDates(
+    // 送出前：無名清日＋跳過問卷清同住＋住址不詳清居住明細
+    const mohwAnswers = applyMohwSubmitGuards(
       useDeskFormDefaults ? finalizeDeskContactPhones(synced) : synced,
     );
     setCareFormAnswers(mohwAnswers);
@@ -2684,10 +2688,10 @@ function CareFormInput({
         {deskEntry && isStartField && onPatchAnswers ? (
           <div className="mt-2 space-y-1.5">
             <p className="text-xs font-normal text-muted-foreground">
-              訪視時長（勾選後自動算出結束時間）
+              訪視時長（成功案至少 {MIN_SUCCESS_DURATION_MINUTES} 分；勾選後自動算出結束時間）
             </p>
             <div className="flex flex-wrap gap-2">
-              {DESK_VISIT_DURATION_OPTIONS.map((minutes) => {
+              {deskSuccessDurationOptions([...DESK_VISIT_DURATION_OPTIONS]).map((minutes) => {
                 const active = selectedDuration === minutes;
                 return (
                   <button
@@ -2699,7 +2703,7 @@ function CareFormInput({
                         : "bg-card hover:bg-secondary"
                     }`}
                     aria-pressed={active}
-                    onClick={() => applyDeskDuration(minutes)}
+                    onClick={() => applyDeskDuration(minutes as DeskVisitDurationMinutes)}
                   >
                     {minutes} 分
                   </button>
@@ -2710,7 +2714,8 @@ function CareFormInput({
         ) : null}
         {deskEntry && isEndField ? (
           <p className="text-xs font-normal leading-5 text-muted-foreground">
-            由時長 1／5／10 自動帶入，仍可手改。
+            由時長 {deskSuccessDurationOptions([...DESK_VISIT_DURATION_OPTIONS]).join("／")}{" "}
+            自動帶入，仍可手改（須 08:00–20:00）。
           </p>
         ) : null}
         {errorText}

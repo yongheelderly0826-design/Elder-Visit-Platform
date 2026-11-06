@@ -150,6 +150,15 @@ var ApiRouter = (function () {
     'ops.clearOrphanWorkerDates': function (p, b) {
       return OpsModule.clearOrphanWorkerDates(b || p);
     },
+    'ops.scanDataQualityIssues': function (p, b) {
+      return OpsModule.scanDataQualityIssues(b || p);
+    },
+    'ops.classifyCompletedWithMissingPersonType': function (p, b) {
+      return OpsModule.classifyCompletedWithMissingPersonType(b || p);
+    },
+    'ops.remediateDataQualityIssues': function (p, b) {
+      return OpsModule.remediateDataQualityIssues(b || p);
+    },
     'ops.deleteCareformsByIds': function (p, b) {
       return OpsModule.deleteCareformsByIds(b || p);
     },

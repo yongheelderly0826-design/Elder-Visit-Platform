@@ -2374,6 +2374,1105 @@ var OpsModule = (function () {
     };
   }
 
+  /**
+   * 資料品質掃描（分析用，不改資料）：
+   * 1) 未遇／查無此人卻勾與他人同住或同住者為子女／兒子
+   * 2) 訪視狀態「住址不詳」卻仍有居住地址欄
+   * 3) 訪視成功但時長 < 5 分（另計 =1 分）
+   * 4) 訪視起迄或未遇戳記時間不在 08:00–20:00
+   * 5) 同個案 ≥3 張關懷表
+   */
+  function scanDataQualityIssues(data) {
+    data = data || {};
+    var statusFilter = {};
+    var statusList = data.statuses && data.statuses.length
+      ? data.statuses
+      : ['已提交', '已稽核'];
+    statusList.forEach(function (s) {
+      statusFilter[String(s)] = true;
+    });
+    var sampleLimit = Number(data.sample_limit);
+    if (!Number.isFinite(sampleLimit) || sampleLimit <= 0) sampleLimit = 8;
+    if (sampleLimit > 20) sampleLimit = 20;
+    var windowStart = 8 * 60;
+    var windowEnd = 20 * 60;
+
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function normTime_(v) {
+      var t = String(v || '').trim();
+      if (!t) return '';
+      var m = t.match(/(\d{1,2}):(\d{2})/);
+      if (!m) return '';
+      return ('0' + m[1]).slice(-2) + ':' + m[2];
+    }
+
+    function timeToMinutes_(hhmm) {
+      var t = normTime_(hhmm);
+      if (!t) return null;
+      var parts = t.split(':');
+      var h = Number(parts[0]);
+      var m = Number(parts[1]);
+      if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+      return h * 60 + m;
+    }
+
+    function outsideWindow_(hhmm) {
+      var mins = timeToMinutes_(hhmm);
+      if (mins == null) return false;
+      return mins < windowStart || mins > windowEnd;
+    }
+
+    function durationMinutes_(start, end) {
+      var a = timeToMinutes_(start);
+      var b = timeToMinutes_(end);
+      if (a == null || b == null) return null;
+      var d = b - a;
+      if (d < 0) d += 24 * 60;
+      return d;
+    }
+
+    function isMissed_(answers, visitStatus) {
+      var status = String(visitStatus || '').trim();
+      if (status === '查無此人' || status === '住址不詳') return true;
+      if (String(answers.living_address_type || '').trim() === '查無此人') return true;
+      var blob =
+        String(answers.living_address_other || '') +
+        '|' +
+        String(answers.visit_notes || '') +
+        '|' +
+        String(answers.notes || '');
+      if (blob.indexOf('訪視未遇') !== -1) return true;
+      return false;
+    }
+
+    function hasSonOrCohabit_(answers) {
+      var livingStatus = String(answers.living_status || '').trim();
+      var relation = String(answers.cohabitant_relation || '').trim();
+      var withOthers = livingStatus === '與他人同住';
+      var sonLike =
+        relation.indexOf('子') !== -1 ||
+        relation.indexOf('兒') !== -1 ||
+        relation.indexOf('女') !== -1;
+      return {
+        with_others: withOthers,
+        son_like_relation: Boolean(relation) && sonLike,
+        relation: relation,
+        living_status: livingStatus,
+        hit: withOthers || (Boolean(relation) && sonLike),
+      };
+    }
+
+    function hasLivingAddressFilled_(answers) {
+      var fields = [
+        answers.living_address,
+        answers.living_city,
+        answers.living_district,
+        answers.living_village,
+        answers.living_neighborhood,
+        answers.living_lane,
+        answers.living_alley,
+        answers.living_number,
+        answers.living_floor,
+      ];
+      for (var i = 0; i < fields.length; i++) {
+        if (hasVal_(fields[i])) return true;
+      }
+      var note = String(answers.living_address_note || '').trim();
+      if (note && note !== '同戶籍' && note.indexOf('同戶籍') === -1) {
+        if (note.length >= 4) return true;
+      }
+      return false;
+    }
+
+    function extractMissedStampTimes_(answers) {
+      var blob =
+        String(answers.living_address_other || '') +
+        '；' +
+        String(answers.visit_notes || '') +
+        '；' +
+        String(answers.notes || '');
+      var out = [];
+      var re = /(\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})訪視未遇/g;
+      var m;
+      while ((m = re.exec(blob))) {
+        out.push(normTime_(m[2]));
+      }
+      return out;
+    }
+
+    function pushSample_(arr, row) {
+      if (arr.length < sampleLimit) arr.push(row);
+    }
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var assignments = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.ASSIGNMENTS)
+    );
+    var asgById = {};
+    assignments.forEach(function (row) {
+      asgById[String(row.assignment_id || '').trim()] = row;
+    });
+
+    var scopedTotal = 0;
+    var statusCountsScoped = {};
+    var missedWithCohabit = [];
+    var missedStatusWithCohabit = 0;
+    var livingTypeMissedWithCohabit = 0;
+    var noteMissedWithCohabit = 0;
+    var addressUnknownWithAddress = [];
+    var successShortDuration = [];
+    var successOneMinute = [];
+    var outsideHoursVisit = [];
+    var outsideHoursMissedStamp = [];
+    var byCase = {};
+    var exactlyThreeCases = 0;
+    var moreThanThreeCases = 0;
+
+    careforms.forEach(function (cf) {
+      var st = String(cf.status || '').trim() || '(空白)';
+      if (!statusFilter[st]) return;
+      statusCountsScoped[st] = (statusCountsScoped[st] || 0) + 1;
+      scopedTotal += 1;
+
+      var answers = parseAnswers_(cf.answers_json);
+      var visitStatus = String(answers.visit_status || '').trim();
+      var start = normTime_(answers.visit_start_time || answers.visit_time_start);
+      var end = normTime_(answers.visit_end_time || answers.visit_time_end);
+      var nationalId = String(
+        answers.national_id || answers.id_number || answers.elder_national_id || ''
+      )
+        .trim()
+        .toUpperCase();
+      var encodedId = String(cf.encoded_id || '').trim();
+      var asg = asgById[String(cf.assignment_id || '').trim()] || {};
+      var caseKey = nationalId || encodedId || String(asg.case_id || '').trim();
+      var name = String(answers.name || cf.name || '').trim();
+      var base = {
+        careform_id: String(cf.careform_id || ''),
+        status: st,
+        name: name,
+        encoded_id: encodedId,
+        visit_status: visitStatus,
+        visit_date: String(answers.visit_date || '').trim(),
+        visit_start_time: start,
+        visit_end_time: end,
+      };
+
+      if (caseKey) {
+        if (!byCase[caseKey]) byCase[caseKey] = [];
+        byCase[caseKey].push({
+          careform_id: base.careform_id,
+          name: name,
+          encoded_id: encodedId,
+          status: st,
+          visit_status: visitStatus,
+          visit_date: base.visit_date,
+          visit_start_time: start,
+        });
+      }
+
+      var missed = isMissed_(answers, visitStatus);
+      var cohabit = hasSonOrCohabit_(answers);
+      if (missed && cohabit.hit) {
+        var livingType = String(answers.living_address_type || '').trim();
+        var statusMissed =
+          visitStatus === '查無此人' || visitStatus === '住址不詳';
+        var typeMissed = livingType === '查無此人';
+        var noteMissed =
+          (
+            String(answers.living_address_other || '') +
+            String(answers.visit_notes || '') +
+            String(answers.notes || '')
+          ).indexOf('訪視未遇') !== -1;
+        if (statusMissed) missedStatusWithCohabit += 1;
+        else if (typeMissed) livingTypeMissedWithCohabit += 1;
+        else if (noteMissed) noteMissedWithCohabit += 1;
+        var row1 = Object.assign({}, base, {
+          living_status: cohabit.living_status,
+          cohabitant_relation: cohabit.relation,
+          living_address_type: livingType,
+          with_others: cohabit.with_others,
+          son_like_relation: cohabit.son_like_relation,
+          missed_via_status: statusMissed,
+          missed_via_living_type: typeMissed && !statusMissed,
+        });
+        missedWithCohabit.push(row1);
+      }
+
+      if (visitStatus === '住址不詳' && hasLivingAddressFilled_(answers)) {
+        addressUnknownWithAddress.push(
+          Object.assign({}, base, {
+            living_address_type: String(answers.living_address_type || '').trim(),
+            living_address: String(answers.living_address || '').slice(0, 80),
+            living_city: String(answers.living_city || '').trim(),
+            living_district: String(answers.living_district || '').trim(),
+            living_village: String(answers.living_village || '').trim(),
+          })
+        );
+      }
+
+      if (visitStatus === '已完成') {
+        var dur = durationMinutes_(start, end);
+        if (dur != null && dur < 5) {
+          var shortRow = Object.assign({}, base, { duration_minutes: dur });
+          successShortDuration.push(shortRow);
+          if (dur === 1) successOneMinute.push(shortRow);
+        }
+      }
+
+      var outTimes = [];
+      if (outsideWindow_(start)) outTimes.push({ field: 'start', time: start });
+      if (outsideWindow_(end)) outTimes.push({ field: 'end', time: end });
+      if (outTimes.length) {
+        outsideHoursVisit.push(
+          Object.assign({}, base, { outside: outTimes })
+        );
+      }
+
+      var stampTimes = extractMissedStampTimes_(answers);
+      var badStamps = [];
+      stampTimes.forEach(function (t) {
+        if (outsideWindow_(t)) badStamps.push(t);
+      });
+      if (badStamps.length) {
+        outsideHoursMissedStamp.push(
+          Object.assign({}, base, {
+            bad_stamp_times: badStamps,
+            all_stamp_times: stampTimes,
+          })
+        );
+      }
+    });
+
+    var tripleOrMoreCases = [];
+    var tripleOrMoreCareforms = 0;
+    Object.keys(byCase).forEach(function (key) {
+      var list = byCase[key];
+      if (list.length >= 3) {
+        tripleOrMoreCases.push({
+          case_key: key,
+          count: list.length,
+          name: list[0].name,
+          encoded_id: list[0].encoded_id,
+          careforms: list,
+        });
+        tripleOrMoreCareforms += list.length;
+        if (list.length === 3) exactlyThreeCases += 1;
+        else moreThanThreeCases += 1;
+      }
+    });
+    tripleOrMoreCases.sort(function (a, b) {
+      return b.count - a.count;
+    });
+
+    var missedWithOthers = 0;
+    var missedWithSonRelation = 0;
+    missedWithCohabit.forEach(function (row) {
+      if (row.with_others) missedWithOthers += 1;
+      if (row.son_like_relation) missedWithSonRelation += 1;
+    });
+
+    return {
+      scoped_total: scopedTotal,
+      status_counts: statusCountsScoped,
+      definitions: {
+        missed:
+          'visit_status∈{查無此人,住址不詳} 或 living_address_type=查無此人 或 備註含「訪視未遇」',
+        cohabit_or_son: 'living_status=與他人同住 或 cohabitant_relation 含 子/兒/女',
+        address_unknown_with_address:
+          'visit_status=住址不詳 且 living_address／縣市區里等居住欄有值',
+        short_success: 'visit_status=已完成 且 結束-開始 < 5 分鐘',
+        outside_hours: '訪視起或迄 或 未遇戳記時間 不在 08:00–20:00（含界）',
+        triple: '同個案鍵（national_id 優先否則 encoded_id）≥3 張關懷表',
+      },
+      issue1_missed_with_cohabit: {
+        count: missedWithCohabit.length,
+        with_others_count: missedWithOthers,
+        son_like_relation_count: missedWithSonRelation,
+        via_visit_status_count: missedStatusWithCohabit,
+        via_living_type_only_count: livingTypeMissedWithCohabit,
+        via_note_only_count: noteMissedWithCohabit,
+        sample: missedWithCohabit.slice(0, sampleLimit),
+        all: data.include_all ? missedWithCohabit : undefined,
+      },
+      issue2_address_unknown_with_address: {
+        count: addressUnknownWithAddress.length,
+        sample: addressUnknownWithAddress.slice(0, sampleLimit),
+      },
+      issue3_success_short_duration: {
+        under_5_min_count: successShortDuration.length,
+        exactly_1_min_count: successOneMinute.length,
+        sample_under_5: successShortDuration.slice(0, sampleLimit),
+        sample_1_min: successOneMinute.slice(0, sampleLimit),
+        all: data.include_all ? successShortDuration : undefined,
+      },
+      issue4_outside_hours: {
+        visit_start_or_end_count: outsideHoursVisit.length,
+        missed_stamp_count: outsideHoursMissedStamp.length,
+        union_careform_ids: (function () {
+          var map = {};
+          outsideHoursVisit.forEach(function (r) {
+            map[r.careform_id] = true;
+          });
+          outsideHoursMissedStamp.forEach(function (r) {
+            map[r.careform_id] = true;
+          });
+          return Object.keys(map).length;
+        })(),
+        sample_visit: outsideHoursVisit.slice(0, sampleLimit),
+        sample_missed_stamp: outsideHoursMissedStamp.slice(0, sampleLimit),
+        all_visit: data.include_all ? outsideHoursVisit : undefined,
+        all_missed_stamp: data.include_all ? outsideHoursMissedStamp : undefined,
+      },
+      issue5_triple_or_more_careforms: {
+        case_count: tripleOrMoreCases.length,
+        exactly_3_case_count: exactlyThreeCases,
+        more_than_3_case_count: moreThanThreeCases,
+        careform_count: tripleOrMoreCareforms,
+        sample: tripleOrMoreCases.slice(0, sampleLimit),
+        all_cases: data.include_all ? tripleOrMoreCases : undefined,
+      },
+    };
+  }
+
+  function pad2Ops_(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function minutesToHhmm_(total) {
+    if (!isFinite(total)) return '';
+    var t = ((Math.floor(total) % (24 * 60)) + 24 * 60) % (24 * 60);
+    return pad2Ops_(Math.floor(t / 60)) + ':' + pad2Ops_(t % 60);
+  }
+
+  function hhmmToMinutes_(hhmm) {
+    var m = String(hhmm || '')
+      .trim()
+      .match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  function clampVisitWindow_(start, end, minDuration, windowStart, windowEnd) {
+    var s = hhmmToMinutes_(start);
+    var e = hhmmToMinutes_(end);
+    if (s == null) s = windowStart;
+    if (e == null) e = s + (minDuration || 5);
+    if (e < s) e += 24 * 60;
+    var dur = e - s;
+    if (minDuration && dur < minDuration) {
+      dur = minDuration;
+      e = s + dur;
+    }
+    if (dur > windowEnd - windowStart) {
+      dur = windowEnd - windowStart;
+    }
+    if (s < windowStart) s = windowStart;
+    if (s > windowEnd - dur) s = windowEnd - dur;
+    if (s < windowStart) s = windowStart;
+    e = s + dur;
+    if (e > windowEnd) {
+      e = windowEnd;
+      s = e - dur;
+      if (s < windowStart) s = windowStart;
+    }
+    return {
+      start: minutesToHhmm_(s),
+      end: minutesToHhmm_(e),
+      duration: e - s,
+    };
+  }
+
+  function scoreCareformKeep_(cf) {
+    var vs = String(cf.visit_status || '');
+    var s = 0;
+    if (vs === '已完成') s += 100;
+    else if (vs === '無法溝通') s += 40;
+    else if (vs === '拒絕訪視') s += 30;
+    else if (vs === '查無此人' || vs === '住址不詳') s += 20;
+    if (String(cf.status || '') === '已稽核') s += 10;
+    else if (String(cf.status || '') === '已提交') s += 5;
+    var d = String(cf.visit_date || '').replace(/\D/g, '');
+    var t = String(cf.visit_start_time || '').replace(/\D/g, '');
+    s += (Number(d) || 0) / 1e6;
+    s += (Number(t) || 0) / 1e10;
+    // stable tie-break
+    s += String(cf.careform_id || '').length * 1e-12;
+    return s;
+  }
+
+  /**
+   * 分析「已完成 + living_address_type=查無此人」特例：問卷填寫深度 → 建議 A/B/C。
+   */
+  function classifyCompletedWithMissingPersonType(data) {
+    data = data || {};
+    var statusFilter = {};
+    var statusList = data.statuses && data.statuses.length
+      ? data.statuses
+      : ['已提交', '已稽核'];
+    statusList.forEach(function (s) {
+      statusFilter[String(s)] = true;
+    });
+    var sampleLimit = Number(data.sample_limit);
+    if (!Number.isFinite(sampleLimit) || sampleLimit <= 0) sampleLimit = 8;
+    if (sampleLimit > 20) sampleLimit = 20;
+
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+
+    var questionnaireKeys = [
+      'housing_type',
+      'economic_status',
+      'self_care_ability',
+      'health_status',
+      'medical_care',
+      'social_participation',
+      'meal_status',
+      'emergency_contact_name',
+      'emergency_contact_phone',
+      'worries',
+      'service_needs',
+      'observer_appearance',
+      'observer_environment',
+    ];
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var rows = [];
+    careforms.forEach(function (cf) {
+      var st = String(cf.status || '').trim();
+      if (!statusFilter[st]) return;
+      var answers = parseAnswers_(cf.answers_json);
+      var visitStatus = String(answers.visit_status || '').trim();
+      var livingType = String(answers.living_address_type || '').trim();
+      if (visitStatus !== '已完成') return;
+      if (livingType !== '查無此人') return;
+
+      var filledQ = 0;
+      var filledList = [];
+      questionnaireKeys.forEach(function (k) {
+        if (hasVal_(answers[k])) {
+          filledQ += 1;
+          filledList.push(k);
+        }
+      });
+      var blob =
+        String(answers.living_address_other || '') +
+        '|' +
+        String(answers.visit_notes || '') +
+        '|' +
+        String(answers.notes || '');
+      var hasMissedStamp = blob.indexOf('訪視未遇') !== -1;
+      var livingStatus = String(answers.living_status || '').trim();
+      var relation = String(answers.cohabitant_relation || '').trim();
+      var otherNote = String(answers.living_address_other || '').trim();
+      // 其他說明若幾乎只有未遇戳／往生，不算「有實訪問卷」
+      var otherNoteMeaningful =
+        otherNote &&
+        otherNote.replace(/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}訪視未遇[；;。.\s]*/g, '').trim()
+          .length >= 4;
+
+      var suggest = 'C';
+      // A: 問卷有一定填寫 → 像真的訪到，地址類型誤標
+      // B: 幾乎無問卷 + 有未遇戳／其他說明像未遇 → 應改查無此人
+      // C: 中間地帶
+      if (filledQ >= 3 && !hasMissedStamp) suggest = 'A';
+      else if (filledQ >= 5) suggest = 'A';
+      else if (filledQ <= 1 && hasMissedStamp) suggest = 'B';
+      else if (filledQ === 0 && (hasMissedStamp || otherNoteMeaningful)) suggest = 'B';
+      else if (filledQ === 0 && !hasMissedStamp) suggest = 'C';
+      else suggest = 'C';
+
+      rows.push({
+        careform_id: String(cf.careform_id || ''),
+        status: st,
+        name: String(answers.name || ''),
+        encoded_id: String(cf.encoded_id || ''),
+        visit_date: String(answers.visit_date || ''),
+        visit_start_time: String(answers.visit_start_time || answers.visit_time_start || ''),
+        living_status: livingStatus,
+        cohabitant_relation: relation,
+        living_address_other: otherNote.slice(0, 120),
+        has_missed_stamp: hasMissedStamp,
+        questionnaire_filled_count: filledQ,
+        questionnaire_filled_keys: filledList,
+        other_note_meaningful: Boolean(otherNoteMeaningful),
+        suggest: suggest,
+      });
+    });
+
+    var bySuggest = { A: 0, B: 0, C: 0 };
+    rows.forEach(function (r) {
+      bySuggest[r.suggest] = (bySuggest[r.suggest] || 0) + 1;
+    });
+    var withQ = rows.filter(function (r) {
+      return r.questionnaire_filled_count > 0;
+    }).length;
+    var withStamp = rows.filter(function (r) {
+      return r.has_missed_stamp;
+    }).length;
+    var qHist = {};
+    rows.forEach(function (r) {
+      var k = String(r.questionnaire_filled_count);
+      qHist[k] = (qHist[k] || 0) + 1;
+    });
+
+    return {
+      total: rows.length,
+      with_any_questionnaire: withQ,
+      with_missed_stamp: withStamp,
+      suggest_counts: bySuggest,
+      questionnaire_fill_histogram: qHist,
+      sample_A: rows
+        .filter(function (r) {
+          return r.suggest === 'A';
+        })
+        .slice(0, sampleLimit),
+      sample_B: rows
+        .filter(function (r) {
+          return r.suggest === 'B';
+        })
+        .slice(0, sampleLimit),
+      sample_C: rows
+        .filter(function (r) {
+          return r.suggest === 'C';
+        })
+        .slice(0, sampleLimit),
+      all: data.include_all ? rows : undefined,
+      rule:
+        'A=問卷≥3且無未遇戳（或問卷≥5）；B=問卷≤1且有未遇戳／說明；其餘C。問卷鍵含居住經濟健康社交緊急聯絡觀察等。',
+    };
+  }
+
+  /**
+   * 第 3／4 類修正；第 5 類 plan／void；第 1／2 類 plan12／fix12。
+   * modes: fix3 | fix4 | plan5 | void5 | plan12 | fix12
+   */
+  function remediateDataQualityIssues(data) {
+    data = data || {};
+    var mode = String(data.mode || '').trim();
+    var apply = data.apply === true || data.apply === 'true';
+    var windowStart = 8 * 60;
+    var windowEnd = 20 * 60;
+
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function normTime_(v) {
+      var t = String(v || '').trim();
+      var m = t.match(/(\d{1,2}):(\d{2})/);
+      if (!m) return '';
+      return pad2Ops_(Number(m[1])) + ':' + m[2];
+    }
+
+    function hasLivingAddressFilledPlan_(answers) {
+      var fields = [
+        answers.living_address,
+        answers.living_city,
+        answers.living_district,
+        answers.living_village,
+        answers.living_neighborhood,
+        answers.living_lane,
+        answers.living_alley,
+        answers.living_number,
+        answers.living_floor,
+      ];
+      for (var i = 0; i < fields.length; i++) {
+        if (hasVal_(fields[i])) return true;
+      }
+      var note = String(answers.living_address_note || '').trim();
+      if (note && note.indexOf('同戶籍') === -1 && note.length >= 4) return true;
+      return false;
+    }
+
+    function buildIssue12Plans_() {
+      var statusFilter = { 已提交: true, 已稽核: true };
+      var cohabitKeys = [
+        'living_status',
+        'cohabitation_status',
+        'cohabitant_relation',
+        'cohabitant_age',
+        'cohabitant_no_care_capacity_note',
+      ];
+      var livingDetailKeys = [
+        'living_address',
+        'living_city',
+        'living_district',
+        'living_village',
+        'living_neighborhood',
+        'living_lane',
+        'living_alley',
+        'living_number',
+        'living_floor',
+        'living_address_note',
+        'living_address_type',
+      ];
+      var careforms = SheetHelper.rowsToObjects(
+        SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+      );
+      var issue1Main = [];
+      var issue1SpecialB = [];
+      var issue2 = [];
+      var byId = {};
+
+      function ensurePlan_(cf, answers, bucket, reason) {
+        var id = String(cf.careform_id || '').trim();
+        if (!id) return null;
+        if (!byId[id]) {
+          byId[id] = {
+            careform_id: id,
+            status: String(cf.status || ''),
+            name: String(answers.name || ''),
+            encoded_id: String(cf.encoded_id || ''),
+            national_id: String(
+              answers.national_id || answers.id_number || ''
+            ).trim(),
+            visit_date: String(answers.visit_date || ''),
+            visit_start_time: String(
+              answers.visit_start_time || answers.visit_time_start || ''
+            ),
+            visit_status_before: String(answers.visit_status || ''),
+            living_address_type_before: String(answers.living_address_type || ''),
+            living_status_before: String(answers.living_status || ''),
+            cohabitant_relation_before: String(answers.cohabitant_relation || ''),
+            living_address_before: String(answers.living_address || '').slice(0, 80),
+            living_address_other_before: String(answers.living_address_other || '').slice(
+              0,
+              100
+            ),
+            reasons: [],
+            answers_patch: {},
+          };
+        }
+        var plan = byId[id];
+        if (plan.reasons.indexOf(reason) === -1) plan.reasons.push(reason);
+        bucket.push(plan);
+        return plan;
+      }
+
+      careforms.forEach(function (cf) {
+        var st = String(cf.status || '').trim();
+        if (!statusFilter[st]) return;
+        var answers = parseAnswers_(cf.answers_json);
+        var visitStatus = String(answers.visit_status || '').trim();
+        var livingType = String(answers.living_address_type || '').trim();
+
+        // 第1類特例 B：已完成 + 地址類型查無此人
+        if (visitStatus === '已完成' && livingType === '查無此人') {
+          var pB = ensurePlan_(cf, answers, issue1SpecialB, 'issue1_special_B');
+          pB.answers_patch.visit_status = '查無此人';
+          cohabitKeys.forEach(function (k) {
+            if (hasVal_(answers[k])) pB.answers_patch[k] = '';
+          });
+        }
+
+        // 第1類主軸：查無此人／住址不詳 → 清同住問卷
+        if (visitStatus === '查無此人' || visitStatus === '住址不詳') {
+          var hasCohabit = false;
+          cohabitKeys.forEach(function (k) {
+            if (hasVal_(answers[k])) hasCohabit = true;
+          });
+          if (hasCohabit) {
+            var p1 = ensurePlan_(cf, answers, issue1Main, 'issue1_main_clear_cohabit');
+            cohabitKeys.forEach(function (k) {
+              if (hasVal_(answers[k])) p1.answers_patch[k] = '';
+            });
+          }
+        }
+
+        // 第2類：住址不詳 + 有居住明細 → 清居住明細（保留戶籍、保留 living_address_other）
+        if (visitStatus === '住址不詳' && hasLivingAddressFilledPlan_(answers)) {
+          var p2 = ensurePlan_(cf, answers, issue2, 'issue2_clear_living_details');
+          livingDetailKeys.forEach(function (k) {
+            if (hasVal_(answers[k])) p2.answers_patch[k] = '';
+          });
+        }
+      });
+
+      // unique lists (ensurePlan may push same plan ref multiple times)
+      function uniqPlans_(arr) {
+        var seen = {};
+        var out = [];
+        arr.forEach(function (p) {
+          if (seen[p.careform_id]) return;
+          seen[p.careform_id] = true;
+          out.push(p);
+        });
+        return out;
+      }
+
+      var allPlans = [];
+      Object.keys(byId).forEach(function (id) {
+        allPlans.push(byId[id]);
+      });
+
+      return {
+        issue1_main: uniqPlans_(issue1Main),
+        issue1_special_B: uniqPlans_(issue1SpecialB),
+        issue2: uniqPlans_(issue2),
+        all_unique: allPlans,
+      };
+    }
+
+    if (mode === 'plan12' || mode === 'fix12') {
+      var packed = buildIssue12Plans_();
+      var patches = packed.all_unique.map(function (p) {
+        return {
+          careform_id: p.careform_id,
+          answers: p.answers_patch,
+          visit_result:
+            p.answers_patch.visit_status === '查無此人' ? '未遇' : undefined,
+        };
+      });
+      if (mode === 'plan12') {
+        return {
+          mode: 'plan12',
+          apply: false,
+          counts: {
+            issue1_main: packed.issue1_main.length,
+            issue1_special_B: packed.issue1_special_B.length,
+            issue2: packed.issue2.length,
+            unique_careforms: packed.all_unique.length,
+          },
+          issue1_main: packed.issue1_main,
+          issue1_special_B: packed.issue1_special_B,
+          issue2: packed.issue2,
+          rules: {
+            issue1_main: 'visit_status∈{查無此人,住址不詳} → 清空同住問卷欄',
+            issue1_special_B:
+              '已完成+living_address_type=查無此人 → visit_status改查無此人 + 清同住',
+            issue2: '住址不詳且有居住明細 → 清空居住地址明細／類型（戶籍與 living_address_other 保留）',
+          },
+        };
+      }
+      if (!apply) {
+        return {
+          mode: 'fix12',
+          apply: false,
+          patch_count: patches.length,
+          counts: {
+            issue1_main: packed.issue1_main.length,
+            issue1_special_B: packed.issue1_special_B.length,
+            issue2: packed.issue2.length,
+            unique_careforms: packed.all_unique.length,
+          },
+          sample: packed.all_unique.slice(0, 10),
+        };
+      }
+      var applied12 = patchCareformAnswers({ apply: true, patches: patches });
+      return {
+        mode: 'fix12',
+        apply: true,
+        patch_count: patches.length,
+        counts: {
+          issue1_main: packed.issue1_main.length,
+          issue1_special_B: packed.issue1_special_B.length,
+          issue2: packed.issue2.length,
+          unique_careforms: packed.all_unique.length,
+        },
+        applied: applied12,
+      };
+    }
+
+    if (mode === 'plan5' || mode === 'void5') {
+      var scan = scanDataQualityIssues({
+        statuses: data.statuses || ['已提交', '已稽核'],
+        include_all: true,
+        sample_limit: 5,
+      });
+      var cases = (scan.issue5_triple_or_more_careforms &&
+        scan.issue5_triple_or_more_careforms.all_cases) ||
+        [];
+      var plans = cases.map(function (c) {
+        var list = (c.careforms || []).slice().sort(function (a, b) {
+          return scoreCareformKeep_(b) - scoreCareformKeep_(a);
+        });
+        var keep = list[0];
+        var voidList = list.slice(1);
+        return {
+          case_key: c.case_key,
+          name: c.name,
+          encoded_id: c.encoded_id,
+          count: c.count,
+          keep_careform_id: keep ? keep.careform_id : '',
+          keep: keep,
+          void_careform_ids: voidList.map(function (x) {
+            return x.careform_id;
+          }),
+          void_rows: voidList,
+        };
+      });
+      if (mode === 'plan5') {
+        return {
+          mode: 'plan5',
+          case_count: plans.length,
+          void_count: plans.reduce(function (n, p) {
+            return n + p.void_careform_ids.length;
+          }, 0),
+          plans: plans,
+        };
+      }
+
+      var voidIds = [];
+      if (data.careform_ids && data.careform_ids.length) {
+        voidIds = data.careform_ids.map(String);
+      } else {
+        plans.forEach(function (p) {
+          p.void_careform_ids.forEach(function (id) {
+            voidIds.push(id);
+          });
+        });
+      }
+      var sheet = SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS);
+      var values = sheet.getDataRange().getValues();
+      var headers = values[0].map(String);
+      var idIdx = headers.indexOf('careform_id');
+      var statusIdx = headers.indexOf('status');
+      var updatedIdx = headers.indexOf('updated_at');
+      if (idIdx < 0 || statusIdx < 0) {
+        throw new Error('careforms 缺少 careform_id／status');
+      }
+      var want = {};
+      voidIds.forEach(function (id) {
+        want[String(id).trim()] = true;
+      });
+      var changed = [];
+      var now = new Date().toISOString();
+      for (var r = 1; r < values.length; r++) {
+        var id = String(values[r][idIdx] || '').trim();
+        if (!want[id]) continue;
+        var before = String(values[r][statusIdx] || '');
+        if (before === '作廢') {
+          changed.push({ careform_id: id, before: before, after: '作廢', skipped: true });
+          continue;
+        }
+        if (apply) {
+          sheet.getRange(r + 1, statusIdx + 1).setValue('作廢');
+          if (updatedIdx >= 0) sheet.getRange(r + 1, updatedIdx + 1).setValue(now);
+        }
+        changed.push({ careform_id: id, before: before, after: '作廢', skipped: false });
+      }
+      try {
+        ReadCache.bump();
+      } catch (e1) {}
+      return {
+        mode: 'void5',
+        apply: apply,
+        planned_void: voidIds.length,
+        changed_count: changed.filter(function (x) {
+          return !x.skipped;
+        }).length,
+        changed: changed.slice(0, 50),
+        note: 'status→作廢 後不在 VisitRecordIndex.ELIGIBLE，匯出不會帶出',
+      };
+    }
+
+    if (mode !== 'fix3' && mode !== 'fix4') {
+      throw new Error('mode 需為 fix3｜fix4｜plan5｜void5｜plan12｜fix12');
+    }
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var statusFilter = { 已提交: true, 已稽核: true };
+    var patches = [];
+
+    careforms.forEach(function (cf) {
+      var st = String(cf.status || '').trim();
+      if (!statusFilter[st]) return;
+      var answers = parseAnswers_(cf.answers_json);
+      var visitStatus = String(answers.visit_status || '').trim();
+      var startKey = answers.visit_start_time != null ? 'visit_start_time' : 'visit_time_start';
+      var endKey = answers.visit_end_time != null ? 'visit_end_time' : 'visit_time_end';
+      if (answers.visit_start_time == null && answers.visit_time_start == null) {
+        startKey = 'visit_start_time';
+      }
+      if (answers.visit_end_time == null && answers.visit_time_end == null) {
+        endKey = 'visit_end_time';
+      }
+      var start = normTime_(answers.visit_start_time || answers.visit_time_start);
+      var end = normTime_(answers.visit_end_time || answers.visit_time_end);
+      var nextAnswers = {};
+      var touched = false;
+
+      if (mode === 'fix3' || mode === 'fix4') {
+        var sMin = hhmmToMinutes_(start);
+        var eMin = hhmmToMinutes_(end);
+        var dur = null;
+        if (sMin != null && eMin != null) {
+          dur = eMin - sMin;
+          if (dur < 0) dur += 24 * 60;
+        }
+
+        if (mode === 'fix3') {
+          if (visitStatus !== '已完成') return;
+          if (dur == null || dur >= 5) return;
+          var fixed3 = clampVisitWindow_(start, end, 5, windowStart, windowEnd);
+          // 第 3 類：優先 start 不變，end=start+5；若會跨日再交給 clamp
+          var preferEnd = minutesToHhmm_((sMin != null ? sMin : windowStart) + 5);
+          if (sMin != null && sMin + 5 <= windowEnd && sMin >= windowStart) {
+            nextAnswers[endKey] = preferEnd;
+            if (answers[startKey] !== undefined || true) nextAnswers[startKey] = start;
+          } else {
+            nextAnswers[startKey] = fixed3.start;
+            nextAnswers[endKey] = fixed3.end;
+          }
+          touched = true;
+        }
+
+        if (mode === 'fix4') {
+          var needVisit =
+            (start && (sMin < windowStart || sMin > windowEnd)) ||
+            (end && (eMin < windowStart || (eMin > windowEnd && !(dur != null && dur >= 0 && eMin < sMin))));
+          // simpler outside check
+          var startOut = start && (sMin < windowStart || sMin > windowEnd);
+          var endOut = end && (eMin < windowStart || eMin > windowEnd);
+          var blob =
+            String(answers.living_address_other || '') +
+            '｜' +
+            String(answers.visit_notes || '') +
+            '｜' +
+            String(answers.notes || '');
+          var stamps = MissedVisitStampHelper.parseStamps(blob);
+          var badStamps = stamps.filter(function (stmp) {
+            var tm = hhmmToMinutes_(stmp.time);
+            return tm != null && (tm < windowStart || tm > windowEnd);
+          });
+          if (!startOut && !endOut && !badStamps.length) return;
+
+          var minDur = visitStatus === '已完成' ? 5 : Math.max(dur || 5, 1);
+          if (startOut || endOut || !start || !end) {
+            var fixed4 = clampVisitWindow_(
+              start || '08:00',
+              end || start || '08:05',
+              visitStatus === '已完成' ? Math.max(minDur, 5) : Math.max(dur || 5, 1),
+              windowStart,
+              windowEnd
+            );
+            nextAnswers[startKey] = fixed4.start;
+            nextAnswers[endKey] = fixed4.end;
+            touched = true;
+          }
+
+          if (badStamps.length) {
+            var occupied = {};
+            stamps.forEach(function (stmp) {
+              var tm = hhmmToMinutes_(stmp.time);
+              var t2 = stmp.time;
+              if (tm != null && (tm < windowStart || tm > windowEnd)) {
+                if (tm < windowStart) t2 = '08:00';
+                else t2 = '20:00';
+              }
+              // uniquify within note
+              var base = hhmmToMinutes_(t2);
+              var guard = 0;
+              while (occupied[stmp.monthDay + ' ' + t2] && guard < 40) {
+                base = Math.min(windowEnd, (base == null ? windowStart : base) + 10);
+                if (base > windowEnd) base = windowStart;
+                t2 = minutesToHhmm_(base);
+                guard++;
+              }
+              occupied[stmp.monthDay + ' ' + t2] = true;
+              stmp._next = t2;
+            });
+            function rewriteNote_(text) {
+              var raw = String(text || '');
+              if (raw.indexOf('訪視未遇') === -1) return raw;
+              return raw.replace(
+                /(\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})訪視未遇/g,
+                function (full, md, tm) {
+                  for (var i = 0; i < stamps.length; i++) {
+                    if (
+                      stamps[i].monthDay === String(md).trim() &&
+                      stamps[i].time === normTime_(tm) &&
+                      stamps[i]._next
+                    ) {
+                      var nextT = stamps[i]._next;
+                      stamps[i]._next = ''; // consume once
+                      return String(md).trim() + ' ' + nextT + '訪視未遇';
+                    }
+                  }
+                  return full;
+                }
+              );
+            }
+            var living = rewriteNote_(answers.living_address_other);
+            var notes = rewriteNote_(answers.visit_notes);
+            var notes2 = rewriteNote_(answers.notes);
+            if (living !== String(answers.living_address_other || '')) {
+              nextAnswers.living_address_other = living;
+              touched = true;
+            }
+            if (notes !== String(answers.visit_notes || '')) {
+              nextAnswers.visit_notes = notes;
+              touched = true;
+            }
+            if (answers.notes != null && notes2 !== String(answers.notes || '')) {
+              nextAnswers.notes = notes2;
+              touched = true;
+            }
+          }
+        }
+      }
+
+      if (!touched) return;
+      patches.push({
+        careform_id: String(cf.careform_id || ''),
+        name: String(answers.name || ''),
+        encoded_id: String(cf.encoded_id || ''),
+        before: {
+          visit_status: visitStatus,
+          start: start,
+          end: end,
+        },
+        answers: nextAnswers,
+      });
+    });
+
+    var result = {
+      mode: mode,
+      apply: apply,
+      patch_count: patches.length,
+      sample: patches.slice(0, 15),
+    };
+    if (!apply) return result;
+
+    var applied = patchCareformAnswers({
+      apply: true,
+      patches: patches.map(function (p) {
+        return { careform_id: p.careform_id, answers: p.answers };
+      }),
+    });
+    result.applied = applied;
+    return result;
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
@@ -2388,6 +3487,9 @@ var OpsModule = (function () {
     scanDuplicateVisitKeys: scanDuplicateVisitKeys,
     scanMissingWorkerWithTime: scanMissingWorkerWithTime,
     clearOrphanWorkerDates: clearOrphanWorkerDates,
+    scanDataQualityIssues: scanDataQualityIssues,
+    classifyCompletedWithMissingPersonType: classifyCompletedWithMissingPersonType,
+    remediateDataQualityIssues: remediateDataQualityIssues,
     deleteCareformsByIds: deleteCareformsByIds,
     patchCareformAnswers: patchCareformAnswers,
   };

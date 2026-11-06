@@ -27,6 +27,7 @@ import {
   normalizeMohwAdminName,
 } from "@/lib/domain/mohw-life-care-template";
 import { isMohwAutofixDistrict } from "@/lib/domain/mohw-village-resolve";
+import { collectMohwSubmitGuardIssues } from "@/lib/domain/mohw-submit-guard-rules";
 
 export type MohwValidationError = {
   /** Excel-style cell, e.g. `I3` */
@@ -52,7 +53,10 @@ export type MohwValidationError = {
     | "CASE_NOT_FOUND"
     | "VILLAGE_NOT_FOUND"
     | "MUST_BE_BLANK"
-    | "TEMPLATE_MISMATCH";
+    | "TEMPLATE_MISMATCH"
+    | "VISIT_TIME_WINDOW"
+    | "VISIT_DURATION_MIN"
+    | "STATUS_MISSED_CONFLICT";
   message: string;
   /** Manager / export message with Excel cell: `I3 身分證號碼格式不正確` */
   display: string;
@@ -727,6 +731,16 @@ export function validateMohwLifeCareRow(
       row,
       code: "TEMPLATE_MISMATCH",
       message: MOHW_VISITOR_ORDER_MESSAGE,
+    });
+  }
+
+  // 第五類正式防呆：08–20 時段、成功≥5 分、已完成↔未遇戳互斥
+  for (const issue of collectMohwSubmitGuardIssues(answers)) {
+    pushError(errors, {
+      key: issue.key,
+      row,
+      code: issue.code,
+      message: issue.message,
     });
   }
 

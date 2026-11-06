@@ -1,3 +1,11 @@
+## Lesson: Category-5 quality gaps are formal submit guards
+
+- **Trigger:** 資料品質清完後，短訪（1 分）、08–20 外時段、未遇／拒訪仍殘同住欄、住址不詳仍殘居住地址、已完成卻含「訪視未遇」戳仍可能再寫入。
+- **Cause:** 先前只靠人工清冊與 ops 腳本；送出路徑未正規化互斥欄，也未擋時長／時段／狀態矛盾。
+- **Rule:** `applyMohwSubmitGuards`（無名清日＋跳過問卷清同住＋住址不詳清居住明細）接在 desk／API／GAS `careform.submit`；`collectMohwSubmitGuardIssues` 接進 `validateMohwLifeCareRow` 與 GAS `MohwLifeCareValidator`（成功≥5 分、08:00–20:00、已完成↔未遇戳互斥）。場生時長 UI 只提供 ≥5 分；未遇晚班 softEnd 上限 20:00。
+- **Evidence:** `lib/domain/mohw-submit-guard-rules.ts`, `mohw-submit-guards.ts`, `mohw-life-care-validation.ts`, `visit-dialogue-form.tsx`, `app/api/visits/submit/route.ts`, `CareFormModule.gs`, `MohwLifeCareValidator.gs`, `scripts/mohw-submit-guards-smoke.ts`.
+- **Added on:** 2026-11-06
+
 ## Lesson: Clear orphan worker dates on submit (name empty → date empty)
 
 - **Trigger:** Desk 兩邊預填 `*_worker_date`；擇一填姓名後，未用側留下「有日無名」，需 ops 清 1440 筆。
