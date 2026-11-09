@@ -183,6 +183,10 @@ var ApiRouter = (function () {
     'deskClerks.logKey': function (p, b) { return DeskClerkModule.logKey(b || p); },
     'deskClerks.listLogs': function (p) { return DeskClerkModule.listLogs(p); },
     'deskClerks.stats': function (p) { return DeskClerkModule.stats(p); },
+
+    'mohwProgress.submit': function (p, b) { return MohwProgressModule.submit(b || p); },
+    'mohwProgress.list': function (p) { return MohwProgressModule.list(p); },
+    'mohwProgress.summary': function (p) { return MohwProgressModule.summary(p); },
   };
 
   function dispatch(action, params, body) {

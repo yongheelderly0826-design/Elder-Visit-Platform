@@ -59,6 +59,8 @@ var Config = (function () {
       CONSENTS: '電子同意書',
       DESK_CLERKS: '臨時登打帳號',
       DESK_KEY_LOGS: '紙本登打紀錄',
+      MOHW_PROGRESS_REPORTS: 'MOHW進度回報',
+      MOHW_PROGRESS_MARKS: 'MOHW進度個案標記',
       LOG: '_操作日誌',
     },
   };

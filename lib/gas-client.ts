@@ -841,6 +841,27 @@ export const gasClient = {
         warnings?: string[];
       }>("payments.createVisitBatch", { method: "POST", body: {} }),
   },
+  mohwProgress: {
+    submit: (body: Record<string, unknown>) =>
+      gasFetch<{
+        report: Record<string, unknown>;
+        marks_written: number;
+        warnings: string[];
+        over_roster: boolean;
+        roster_total: number;
+      }>("mohwProgress.submit", { method: "POST", body }),
+    list: (params?: { village_name?: string; active_only?: string }) =>
+      gasFetch<Array<Record<string, unknown>>>("mohwProgress.list", {
+        params: params as Record<string, string> | undefined,
+      }),
+    summary: (params?: { village_name?: string }) =>
+      gasFetch<{
+        villages: Array<Record<string, unknown>>;
+        totals: Record<string, number>;
+      }>("mohwProgress.summary", {
+        params: params as Record<string, string> | undefined,
+      }),
+  },
 };
 
 export function isGasConfigured(): boolean {

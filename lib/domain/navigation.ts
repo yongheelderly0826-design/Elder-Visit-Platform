@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import {
   BarChart3,
   CalendarCheck2,
+  ClipboardCheck,
   ClipboardList,
   ClipboardPen,
   ContactRound,
@@ -40,6 +41,7 @@ export type NavKey =
   | "cases"
   | "assignments"
   | "careForms"
+  | "mohwProgress"
   | "villageAdmins"
   | "dailyVisits"
   | "audit"
@@ -186,6 +188,15 @@ export const navItems: NavItem[] = [
     icon: FileText,
     requiredCapabilities: ["visits.submit"],
     allowedRoles: ["workspace_owner", "workspace_manager", "desk_clerk"],
+    group: "operations",
+  },
+  {
+    key: "mohwProgress",
+    label: "衛福部進度回報",
+    href: "/desk/mohw-progress",
+    icon: ClipboardCheck,
+    requiredCapabilities: ["visits.submit"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",
   },
   {
