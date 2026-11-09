@@ -337,12 +337,12 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">1. 里別、訪查員、建檔與稽核</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            第一橫列：里別／民政／社政。第二橫列：建檔人員／稽核督導。選好後展開個案。
+            同一橫列：里別／民政／社政／建檔人員／稽核督導。選好後展開個案。
           </p>
         </div>
-        <div className="space-y-3 overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
-          <div className="flex min-w-[36rem] flex-row flex-wrap items-end gap-3 lg:flex-nowrap">
-            <div className="min-w-[9rem] flex-1">
+        <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
+          <div className="flex min-w-[52rem] flex-nowrap items-end gap-3">
+            <div className="min-w-[8.5rem] flex-1">
               <label className="text-xs font-medium text-muted-foreground">里別</label>
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -366,7 +366,7 @@ export function MohwProgressPanel() {
                 ))}
               </select>
             </div>
-            <div className="min-w-[9rem] flex-1">
+            <div className="min-w-[8.5rem] flex-1">
               <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -382,7 +382,7 @@ export function MohwProgressPanel() {
                 ))}
               </select>
             </div>
-            <div className="min-w-[9rem] flex-1">
+            <div className="min-w-[8.5rem] flex-1">
               <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -398,11 +398,8 @@ export function MohwProgressPanel() {
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="flex min-w-[36rem] flex-row flex-wrap items-end gap-3 lg:flex-nowrap">
-            <div className="min-w-[9rem] flex-1">
-              <label className="text-xs font-medium text-muted-foreground">2. 建檔人員</label>
+            <div className="min-w-[8.5rem] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">建檔人員</label>
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={keyedById}
@@ -417,16 +414,16 @@ export function MohwProgressPanel() {
                 ))}
               </select>
             </div>
-            <div className="min-w-[14rem] flex-[1.2]">
-              <label className="text-xs font-medium text-muted-foreground">3. 稽核督導</label>
-              <div className="mt-1 flex flex-wrap gap-2">
+            <div className="min-w-[11rem] shrink-0">
+              <label className="text-xs font-medium text-muted-foreground">稽核督導</label>
+              <div className="mt-1 flex flex-nowrap gap-2">
                 {MOHW_PROGRESS_AUDIT_SUPERVISORS.map((name) => {
                   const checked = auditSupervisors.includes(name);
                   return (
                     <button
                       key={name}
                       type="button"
-                      className={`rounded-md border px-3 py-2 text-sm ${
+                      className={`whitespace-nowrap rounded-md border px-3 py-2 text-sm ${
                         checked
                           ? "border-primary bg-primary/10 text-primary"
                           : "bg-background text-foreground"
@@ -442,14 +439,14 @@ export function MohwProgressPanel() {
             </div>
           </div>
           {options?.scope?.label && (
-            <p className="text-xs text-muted-foreground">範圍：{options.scope.label}</p>
+            <p className="mt-2 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
           )}
         </div>
       </section>
 
       <section className="rounded-lg border bg-card p-4 space-y-4">
         <div>
-          <h2 className="font-semibold">4. 個案狀態</h2>
+          <h2 className="font-semibold">2. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             依紙本「里編號」排序；姓名前顯示 #里編號，與關懷表 KEY 單相同。
           </p>
