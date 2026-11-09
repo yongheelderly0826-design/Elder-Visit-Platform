@@ -11,14 +11,22 @@ export type MohwProgressCaseRow = {
   village_seq: number | null;
   name: string;
   outcome: MohwProgressOutcome | "";
-  /** 民政訪查人員 */
+  /** 民政訪查人員（派案備註／訪查員；未建檔列通常只有這邊有值） */
   civil_worker_name: string;
   /** 社政訪查人員 */
   social_worker_name: string;
-  /** 建檔／紙本登打人員 */
+  /** 建檔／紙本登打人員（未建檔列多為空） */
   keyed_by_name: string;
-  /** 稽核督導（通過或已決策的 reviewer） */
+  /** 稽核督導（未建檔列多為空） */
   audit_supervisors: string[];
+};
+
+/** GAS mohwProgress.listCaseContext 回傳（僅未建檔個案） */
+export type MohwProgressCaseContextPayload = {
+  village_name?: string;
+  roster_total?: number;
+  excluded_with_careform?: number;
+  items: Array<Record<string, unknown>>;
 };
 
 export function emptyMohwProgressCaseMeta(): Pick<

@@ -1,3 +1,11 @@
+## Lesson: MOHW progress desk lists only unkeyed cases
+
+- **Trigger:** `/desk/mohw-progress` 被當成全里名單；使用者要 KEY 的是「本平台尚未建關懷表」的個案，已建檔者不必出現。訪查／建檔／稽核若用 11px muted 文字，容易以為欄位沒上線。
+- **Cause:** 初版直接 `cases.list` 全列；人員欄太淡；`listCaseContext` 失敗時 `.catch` 成空 meta 仍顯示全名單。
+- **Rule:** GAS `mohwProgress.listCaseContext` 以 `VisitRecordIndex.latestEligibleCareformForCase` 排除 `已提交`／`已稽核`；options API 只合併 context 回傳的 case_id；失敗時顯示警告且不回傳假名單。列上固定顯示「訪查／建檔／稽核」標籤列（無值為 —）。
+- **Evidence:** `MohwProgressModule.gs`, `app/api/desk/mohw-progress/options/route.ts`, `components/manage/mohw-progress-panel.tsx`.
+- **Added on:** 2026-11-09
+
 ## Lesson: help_sources 有／無 must clear opposite side on flag change
 
 - **Trigger:** 關懷表「求助對象」選無時，右側只應出現無側複選；若先前選過有側，殘值仍可能留在 answers 並進匯出／衛福部檢核。

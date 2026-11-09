@@ -95,7 +95,9 @@ export async function GET(request: NextRequest) {
         : sortYongheVillagesByCode(allVillages.filter((name) => allowed.includes(name)));
 
     let rosterTotal: number | null = null;
+    let excludedWithCareform: number | null = null;
     let cases: MohwProgressCaseRow[] = [];
+    let contextWarning: string | null = null;
 
     if (villageParam) {
       if (allowed && !allowed.includes(villageParam)) {
@@ -104,7 +106,7 @@ export async function GET(request: NextRequest) {
           { status: 403 },
         );
       }
-      const [rawCaseRows, marks, contextPayload] = await Promise.all([
+      const [rawCaseRows, marks, contextResult] = await Promise.all([
         gasClient.cases.list({
           district: "永和區",
           visit_village: villageParam,
@@ -114,42 +116,67 @@ export async function GET(request: NextRequest) {
           .catch(() => [] as Record<string, unknown>[]),
         gasClient.mohwProgress
           .listCaseContext({ village_name: villageParam })
-          .catch(() => ({ items: [] as Record<string, unknown>[] })),
+          .then((payload) => ({ ok: true as const, payload }))
+          .catch((error: unknown) => ({
+            ok: false as const,
+            message: error instanceof Error ? error.message : "讀取未建檔個案失敗",
+          })),
       ]);
       const caseRows = sortCases(rawCaseRows);
       rosterTotal = caseRows.length;
 
-      const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
-      for (const mark of marks) {
-        const outcome = String(mark.outcome || "");
-        if (!isMohwProgressOutcome(outcome)) continue;
-        const caseId = String(mark.case_id || "");
-        if (caseId) outcomeByCaseId.set(caseId, outcome);
-      }
+      if (!contextResult.ok) {
+        contextWarning = `無法篩選未建檔個案（${contextResult.message}）。請稍後再試或通知系統管理員部署 GAS。`;
+        excludedWithCareform = null;
+        cases = [];
+      } else {
+        const contextPayload = contextResult.payload;
+        if (typeof contextPayload.roster_total === "number") {
+          rosterTotal = contextPayload.roster_total;
+        }
+        if (typeof contextPayload.excluded_with_careform === "number") {
+          excludedWithCareform = contextPayload.excluded_with_careform;
+        }
 
-      const contextByCaseId = new Map<
-        string,
-        ReturnType<typeof mapMohwProgressCaseContext>
-      >();
-      for (const item of contextPayload.items ?? []) {
-        const caseId = String(item.case_id || "").trim();
-        if (!caseId) continue;
-        contextByCaseId.set(caseId, mapMohwProgressCaseContext(item));
-      }
+        const contextByCaseId = new Map<
+          string,
+          ReturnType<typeof mapMohwProgressCaseContext>
+        >();
+        for (const item of contextPayload.items ?? []) {
+          const caseId = String(item.case_id || "").trim();
+          if (!caseId) continue;
+          contextByCaseId.set(caseId, mapMohwProgressCaseContext(item));
+        }
 
-      cases = caseRows.map((row) => {
-        const caseId = String(row.case_id || "");
-        const seqRaw = Number(row.village_seq);
-        const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
-        return {
-          case_id: caseId,
-          encoded_id: String(row.encoded_id || ""),
-          village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
-          name: String(row.name || row.elder_name || ""),
-          outcome: outcomeByCaseId.get(caseId) || "",
-          ...meta,
-        };
-      });
+        // 只列 GAS 回傳的未建檔個案（無 已提交／已稽核 eligible 關懷表）
+        if (excludedWithCareform == null) {
+          excludedWithCareform = Math.max(caseRows.length - contextByCaseId.size, 0);
+        }
+
+        const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
+        for (const mark of marks) {
+          const outcome = String(mark.outcome || "");
+          if (!isMohwProgressOutcome(outcome)) continue;
+          const caseId = String(mark.case_id || "");
+          if (caseId) outcomeByCaseId.set(caseId, outcome);
+        }
+
+        cases = caseRows
+          .filter((row) => contextByCaseId.has(String(row.case_id || "")))
+          .map((row) => {
+            const caseId = String(row.case_id || "");
+            const seqRaw = Number(row.village_seq);
+            const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
+            return {
+              case_id: caseId,
+              encoded_id: String(row.encoded_id || ""),
+              village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
+              name: String(row.name || row.elder_name || ""),
+              outcome: outcomeByCaseId.get(caseId) || "",
+              ...meta,
+            };
+          });
+      }
     }
 
     return NextResponse.json({
@@ -158,6 +185,8 @@ export async function GET(request: NextRequest) {
         villages,
         villageCodeByName,
         rosterTotal,
+        excludedWithCareform,
+        contextWarning,
         cases,
         reporter: { name, email },
       },

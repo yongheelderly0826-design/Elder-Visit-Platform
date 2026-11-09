@@ -20,11 +20,24 @@ type OptionsPayload = {
   villages: string[];
   villageCodeByName?: Record<string, string>;
   rosterTotal?: number | null;
+  excludedWithCareform?: number | null;
+  contextWarning?: string | null;
   cases?: MohwProgressCaseRow[];
   reporter?: { name: string; email: string };
 };
 
 type FilterKey = "all" | "unset" | MohwProgressOutcome;
+
+function StaffMetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2 text-xs leading-snug">
+      <span className="mt-0.5 shrink-0 rounded border border-border bg-muted/70 px-1.5 py-0.5 font-semibold text-foreground">
+        {label}
+      </span>
+      <span className="min-w-0 break-words text-foreground/90">{value || "—"}</span>
+    </div>
+  );
+}
 
 export function MohwProgressPanel() {
   const [options, setOptions] = useState<OptionsPayload | null>(null);
@@ -39,6 +52,9 @@ export function MohwProgressPanel() {
   const [loadingCases, setLoadingCases] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [contextWarning, setContextWarning] = useState<string | null>(null);
+  const [rosterTotal, setRosterTotal] = useState<number | null>(null);
+  const [excludedWithCareform, setExcludedWithCareform] = useState<number | null>(null);
 
   async function loadOptions(selectedVillage?: string) {
     if (selectedVillage) setLoadingCases(true);
@@ -59,6 +75,15 @@ export function MohwProgressPanel() {
       if (selectedVillage) {
         const nextCases = json.data?.cases ?? [];
         setCases(nextCases);
+        setRosterTotal(
+          typeof json.data?.rosterTotal === "number" ? json.data.rosterTotal : nextCases.length,
+        );
+        setExcludedWithCareform(
+          typeof json.data?.excludedWithCareform === "number"
+            ? json.data.excludedWithCareform
+            : null,
+        );
+        setContextWarning(json.data?.contextWarning || null);
         const nextOutcomes: Record<string, MohwProgressOutcome | ""> = {};
         for (const row of nextCases) {
           nextOutcomes[row.case_id] = row.outcome || "";
@@ -81,6 +106,9 @@ export function MohwProgressPanel() {
     if (!village) {
       setCases([]);
       setOutcomes({});
+      setRosterTotal(null);
+      setExcludedWithCareform(null);
+      setContextWarning(null);
       return;
     }
     void loadOptions(village);
@@ -124,7 +152,6 @@ export function MohwProgressPanel() {
       if (current && current !== original) n += 1;
       else if (current && !original) n += 1;
     }
-    // include newly set or changed; also allow re-save of already set if user wants — count all with a status when submitting selected with changes OR all checked
     return n;
   }, [cases, outcomes]);
 
@@ -134,8 +161,6 @@ export function MohwProgressPanel() {
         const outcome = outcomes[row.case_id] || "";
         if (!outcome) return null;
         const original = row.outcome || "";
-        // send all currently checked rows (latest overwrite); include unchanged so batch confirm works
-        if (!outcome) return null;
         return {
           case_id: row.case_id,
           encoded_id: row.encoded_id,
@@ -219,16 +244,16 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="選里後在列表勾選每筆個案狀態（已完成／未遇／查無此人）。此頁只統計進度，不會建立關懷表。"
+        description="僅列出尚未在本平台建立關懷表的個案。選里後勾選每筆狀態（已完成／未遇／查無此人）。此頁只統計進度，不會建立關懷表。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
         <div className="flex gap-2">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">不建立關懷表</p>
+            <p className="font-medium">未建檔名單才在這裡 KEY</p>
             <p className="mt-1 text-amber-900/90">
-              寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。同一個案再次勾選會以最新狀態覆寫。
+              已有本平台關懷表（已提交／已稽核）的個案不會出現。寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。同一個案再次勾選會以最新狀態覆寫。
             </p>
           </div>
         </div>
@@ -263,7 +288,11 @@ export function MohwProgressPanel() {
         {village && (
           <>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>名冊 {cases.length}</span>
+              <span>未建檔 {cases.length}</span>
+              {typeof rosterTotal === "number" && <span>名冊 {rosterTotal}</span>}
+              {typeof excludedWithCareform === "number" && (
+                <span>已建檔排除 {excludedWithCareform}</span>
+              )}
               <span>已完成 {summary.done}</span>
               <span>未遇 {summary.missed}</span>
               <span>查無此人 {summary.notFound}</span>
@@ -271,10 +300,16 @@ export function MohwProgressPanel() {
               {dirtyCount > 0 && <span className="text-amber-800">本次變更 {dirtyCount}</span>}
             </div>
 
+            {contextWarning && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                {contextWarning}
+              </p>
+            )}
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:max-w-xs"
-                placeholder="搜尋序號／姓名／編碼"
+                placeholder="搜尋序號／姓名／編碼／訪查人"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -319,7 +354,7 @@ export function MohwProgressPanel() {
 
             <div className="overflow-hidden rounded-md border">
               <div className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                <div>個案</div>
+                <div>個案（訪查／建檔／稽核）</div>
                 {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
                   <div key={outcome} className="text-center">
                     {outcome}
@@ -330,7 +365,11 @@ export function MohwProgressPanel() {
                 {loadingCases ? (
                   <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
                 ) : filteredCases.length === 0 ? (
-                  <p className="px-3 py-6 text-sm text-muted-foreground">此條件沒有個案。</p>
+                  <p className="px-3 py-6 text-sm text-muted-foreground">
+                    {contextWarning
+                      ? "無法載入未建檔名單。"
+                      : "此條件沒有未建檔個案（本平台已有關懷表者已排除）。"}
+                  </p>
                 ) : (
                   filteredCases.map((row) => {
                     const current = outcomes[row.case_id] || "";
@@ -349,9 +388,9 @@ export function MohwProgressPanel() {
                     return (
                       <div
                         key={row.case_id}
-                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-start gap-0 border-b px-3 py-2 text-sm last:border-b-0"
+                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-start gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
                       >
-                        <div className="min-w-0 pr-2">
+                        <div className="min-w-0 space-y-1.5 pr-2">
                           <p className="truncate font-medium">
                             {row.village_seq != null ? `#${row.village_seq} ` : ""}
                             {row.name || "（未填姓名）"}
@@ -359,14 +398,14 @@ export function MohwProgressPanel() {
                           <p className="truncate text-xs text-muted-foreground">
                             {row.encoded_id || row.case_id}
                           </p>
-                          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                            訪查 {visitorLine || "—"}
-                          </p>
-                          <p className="text-[11px] leading-snug text-muted-foreground">
-                            建檔 {keyedBy || "—"}
-                            <span className="mx-1 text-muted-foreground/60">·</span>
-                            稽核 {auditors.length ? auditors.join("、") : "—"}
-                          </p>
+                          <div className="space-y-1 rounded-md border border-dashed border-border/80 bg-muted/30 px-2 py-1.5">
+                            <StaffMetaRow label="訪查" value={visitorLine} />
+                            <StaffMetaRow label="建檔" value={keyedBy} />
+                            <StaffMetaRow
+                              label="稽核"
+                              value={auditors.length ? auditors.join("、") : ""}
+                            />
+                          </div>
                         </div>
                         {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
                           const checked = current === outcome;
@@ -382,7 +421,6 @@ export function MohwProgressPanel() {
                                 checked={checked}
                                 onChange={() => setOutcome(row.case_id, outcome)}
                                 onClick={() => {
-                                  // allow toggle off by clicking same radio
                                   if (checked) setOutcome(row.case_id, "");
                                 }}
                               />

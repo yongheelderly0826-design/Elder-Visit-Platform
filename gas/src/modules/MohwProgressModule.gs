@@ -453,17 +453,6 @@ var MohwProgressModule = (function () {
     return rows;
   }
 
-  function parseAnswers_(careform) {
-    if (!careform || !careform.answers_json) return {};
-    try {
-      return typeof careform.answers_json === 'string'
-        ? JSON.parse(careform.answers_json)
-        : careform.answers_json;
-    } catch (e) {
-      return {};
-    }
-  }
-
   function noteLabel_(segment) {
     var text = String(segment || '').trim();
     if (!text) return { id: '', name: '' };
@@ -562,29 +551,6 @@ var MohwProgressModule = (function () {
     return { civil: nextCivil, social: nextSocial };
   }
 
-  function collectAuditSupervisors_(index, careformId) {
-    var rows = (index.auditsByCareform && index.auditsByCareform[String(careformId || '').trim()]) || [];
-    if (!rows.length) return [];
-    var approved = [];
-    var decided = [];
-    rows.forEach(function (row) {
-      var reviewer = String(row.reviewer || '').trim();
-      if (!reviewer) return;
-      var decision = String(row.decision || '').trim();
-      if (decision === '通過') approved.push(reviewer);
-      else if (decision) decided.push(reviewer);
-    });
-    var source = approved.length ? approved : decided;
-    var seen = {};
-    var out = [];
-    source.forEach(function (name) {
-      if (seen[name]) return;
-      seen[name] = true;
-      out.push(name);
-    });
-    return out;
-  }
-
   function latestKeyedBy_(logsByCase, caseId) {
     var rows = logsByCase[String(caseId || '').trim()] || [];
     if (!rows.length) return '';
@@ -598,8 +564,9 @@ var MohwProgressModule = (function () {
   }
 
   /**
-   * 里別個案補充欄：訪查人員（民政／社政）、建檔人員、稽核督導。
-   * MOHW 直 KEY 無本地關懷表時回空白。
+   * 里別「尚未本平台建檔」個案：訪查人員（民政／社政）、建檔人員、稽核督導。
+   * 已有 VisitRecordIndex.ELIGIBLE（已提交／已稽核）關懷表的個案一律排除。
+   * 草稿／作廢／待補件不算已建檔，仍會列出（建檔／稽核多半為 —）。
    */
   function listCaseContext(params) {
     params = params || {};
@@ -617,38 +584,42 @@ var MohwProgressModule = (function () {
     });
 
     var items = [];
+    var rosterTotal = 0;
+    var excludedWithCareform = 0;
     index.cases.forEach(function (caseRow) {
       if (String(caseRow.visit_village || '').trim() !== village) return;
       var caseId = String(caseRow.case_id || '').trim();
       if (!caseId) return;
+      rosterTotal += 1;
+
+      // 本頁只服務 MOHW 直 KEY：已有本平台 eligible 關懷表者不列
+      if (VisitRecordIndex.latestEligibleCareformForCase(index, caseId)) {
+        excludedWithCareform += 1;
+        return;
+      }
 
       var civil = '';
       var social = '';
-      var auditSupervisors = [];
-      var careform = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
-      if (careform) {
-        var answers = parseAnswers_(careform);
-        civil = String(answers.civil_worker_name || '').trim();
-        social = String(answers.social_worker_name || '').trim();
-        auditSupervisors = collectAuditSupervisors_(index, careform.careform_id);
-      }
-
-      if (!civil || !social) {
-        var fallback = applyAssignmentFallback_(index, caseId, civil, social);
-        civil = fallback.civil;
-        social = fallback.social;
-      }
+      var fallback = applyAssignmentFallback_(index, caseId, civil, social);
+      civil = fallback.civil;
+      social = fallback.social;
 
       items.push({
         case_id: caseId,
         civil_worker_name: civil,
         social_worker_name: social,
+        // 未建檔列通常無登打／稽核；仍回欄位供 UI 固定顯示「—」
         keyed_by_name: latestKeyedBy_(logsByCase, caseId),
-        audit_supervisors: auditSupervisors,
+        audit_supervisors: [],
       });
     });
 
-    return { village_name: village, items: items };
+    return {
+      village_name: village,
+      roster_total: rosterTotal,
+      excluded_with_careform: excludedWithCareform,
+      items: items,
+    };
   }
 
   function summary(params) {
