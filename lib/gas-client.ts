@@ -862,8 +862,12 @@ export const gasClient = {
       gasFetch<{
         village_name?: string;
         roster_total?: number;
+        keyed_count?: number;
+        direct_count?: number;
         excluded_with_careform?: number;
-        items: Array<Record<string, unknown>>;
+        items_keyed?: Array<Record<string, unknown>>;
+        items_direct?: Array<Record<string, unknown>>;
+        items?: Array<Record<string, unknown>>;
       }>("mohwProgress.listCaseContext", {
         params: params as Record<string, string>,
       }),

@@ -6,11 +6,19 @@
 - **Evidence:** `mohw-progress-panel.tsx`, `app/api/desk/mohw-progress/*`, `MohwProgressModule.gs`.
 - **Added on:** 2026-11-09
 
+## Lesson: MOHW progress splits roster into keyed + direct tabs for village dashboard
+
+- **Trigger:** 直 KEY 勾選是要餵各里進度儀表板；本平台已 KEY 關懷表也要算「已完成進度」，兩組合計＝全里名冊。
+- **Cause:** 初版只列未建檔＋radio；`summary` 未含 platform_keyed；儀表板 Phase 2 未做。
+- **Rule:** `listCaseContext` 回 `items_keyed`／`items_direct`；desk 兩頁籤（預設直 KEY）；`summary` 去重計算 reported＝keyed ∪ marks；`/manager/mohw-progress` 讀 summary。已 KEY 列唯讀、不進直 KEY 標記計數。
+- **Evidence:** `MohwProgressModule.gs`, `mohw-progress-panel.tsx`, `mohw-progress-dashboard.tsx`, `app/api/manager/mohw-progress/summary`.
+- **Added on:** 2026-11-09
+
 ## Lesson: MOHW progress desk lists only unkeyed cases
 
 - **Trigger:** `/desk/mohw-progress` 被當成全里名單；使用者要 KEY 的是「本平台尚未建關懷表」的個案，已建檔者不必出現。訪查／建檔／稽核若用 11px muted 文字，容易以為欄位沒上線。
 - **Cause:** 初版直接 `cases.list` 全列；人員欄太淡；`listCaseContext` 失敗時 `.catch` 成空 meta 仍顯示全名單。
-- **Rule:** GAS `mohwProgress.listCaseContext` 以 `VisitRecordIndex.latestEligibleCareformForCase` 排除 `已提交`／`已稽核`；options API 只合併 context 回傳的 case_id；失敗時顯示警告且不回傳假名單。列上固定顯示「訪查／建檔／稽核」標籤列（無值為 —）。
+- **Rule:**（已演進）改為兩頁籤皆回傳；直 KEY 頁仍僅未建檔；失敗時顯示警告且不回傳假名單。
 - **Evidence:** `MohwProgressModule.gs`, `app/api/desk/mohw-progress/options/route.ts`, `components/manage/mohw-progress-panel.tsx`.
 - **Added on:** 2026-11-09
 

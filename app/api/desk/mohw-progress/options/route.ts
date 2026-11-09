@@ -45,6 +45,32 @@ function sortCasesLikeDeskKey(rows: Record<string, unknown>[]) {
   });
 }
 
+function mapCaseRows(
+  caseRows: Record<string, unknown>[],
+  contextByCaseId: Map<string, ReturnType<typeof mapMohwProgressCaseContext>>,
+  outcomeByCaseId: Map<string, MohwProgressOutcome>,
+  markStaffByCaseId: Map<string, { civil_worker_name: string; social_worker_name: string }>,
+): MohwProgressCaseRow[] {
+  return caseRows
+    .filter((row) => contextByCaseId.has(String(row.case_id || "")))
+    .map((row) => {
+      const caseId = String(row.case_id || "");
+      const seqRaw = Number(row.village_seq);
+      const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
+      const markStaff = markStaffByCaseId.get(caseId);
+      return {
+        case_id: caseId,
+        encoded_id: String(row.encoded_id || ""),
+        village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
+        name: String(row.name || row.elder_name || ""),
+        outcome: outcomeByCaseId.get(caseId) || "",
+        ...meta,
+        civil_worker_name: markStaff?.civil_worker_name || meta.civil_worker_name,
+        social_worker_name: markStaff?.social_worker_name || meta.social_worker_name,
+      };
+    });
+}
+
 export async function GET(request: NextRequest) {
   const forbidden = requireManagerCapability(request, "visits.submit");
   if (forbidden) return forbidden;
@@ -108,8 +134,10 @@ export async function GET(request: NextRequest) {
         : sortYongheVillagesByCode(allVillages.filter((name) => allowed.includes(name)));
 
     let rosterTotal: number | null = null;
-    let excludedWithCareform: number | null = null;
-    let cases: MohwProgressCaseRow[] = [];
+    let keyedCount: number | null = null;
+    let directCount: number | null = null;
+    let casesKeyed: MohwProgressCaseRow[] = [];
+    let casesDirectMohw: MohwProgressCaseRow[] = [];
     let contextWarning: string | null = null;
 
     const visitors = await cachedRead(
@@ -148,39 +176,69 @@ export async function GET(request: NextRequest) {
           .then((payload) => ({ ok: true as const, payload }))
           .catch((error: unknown) => ({
             ok: false as const,
-            message: error instanceof Error ? error.message : "讀取未建檔個案失敗",
+            message: error instanceof Error ? error.message : "讀取個案分組失敗",
           })),
       ]);
       const caseRows = sortCasesLikeDeskKey(rawCaseRows);
       rosterTotal = caseRows.length;
 
       if (!contextResult.ok) {
-        contextWarning = `無法篩選未建檔個案（${contextResult.message}）。請稍後再試或通知系統管理員部署 GAS。`;
-        excludedWithCareform = null;
-        cases = [];
+        contextWarning = `無法分組個案（${contextResult.message}）。請稍後再試或通知系統管理員部署 GAS。`;
+        keyedCount = null;
+        directCount = null;
+        casesKeyed = [];
+        casesDirectMohw = [];
       } else {
         const contextPayload = contextResult.payload;
         if (typeof contextPayload.roster_total === "number") {
           rosterTotal = contextPayload.roster_total;
         }
-        if (typeof contextPayload.excluded_with_careform === "number") {
-          excludedWithCareform = contextPayload.excluded_with_careform;
-        }
 
-        const contextByCaseId = new Map<
-          string,
-          ReturnType<typeof mapMohwProgressCaseContext>
-        >();
-        for (const item of contextPayload.items ?? []) {
+        const keyedItems =
+          contextPayload.items_keyed ??
+          (typeof contextPayload.keyed_count === "number" ? [] : []);
+        const directItems =
+          contextPayload.items_direct ??
+          contextPayload.items ??
+          [];
+
+        const keyedByCaseId = new Map<string, ReturnType<typeof mapMohwProgressCaseContext>>();
+        for (const item of keyedItems) {
           const caseId = String(item.case_id || "").trim();
           if (!caseId) continue;
-          contextByCaseId.set(caseId, mapMohwProgressCaseContext(item));
+          keyedByCaseId.set(caseId, mapMohwProgressCaseContext(item));
         }
 
-        // 只列 GAS 回傳的未建檔個案（無 已提交／已稽核 eligible 關懷表）
-        if (excludedWithCareform == null) {
-          excludedWithCareform = Math.max(caseRows.length - contextByCaseId.size, 0);
+        const directByCaseId = new Map<string, ReturnType<typeof mapMohwProgressCaseContext>>();
+        for (const item of directItems) {
+          const caseId = String(item.case_id || "").trim();
+          if (!caseId) continue;
+          directByCaseId.set(caseId, mapMohwProgressCaseContext(item));
         }
+
+        // 舊 GAS 只回 items（未建檔）時：其餘名冊視為已 KEY
+        if (
+          !contextPayload.items_keyed &&
+          !contextPayload.items_direct &&
+          Array.isArray(contextPayload.items)
+        ) {
+          for (const row of caseRows) {
+            const caseId = String(row.case_id || "").trim();
+            if (!caseId || directByCaseId.has(caseId)) continue;
+            keyedByCaseId.set(caseId, emptyMohwProgressCaseMeta());
+          }
+        }
+
+        keyedCount =
+          typeof contextPayload.keyed_count === "number"
+            ? contextPayload.keyed_count
+            : typeof contextPayload.excluded_with_careform === "number"
+              ? contextPayload.excluded_with_careform
+              : keyedByCaseId.size;
+        directCount =
+          typeof contextPayload.direct_count === "number"
+            ? contextPayload.direct_count
+            : directByCaseId.size;
 
         const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
         const markStaffByCaseId = new Map<
@@ -192,6 +250,8 @@ export async function GET(request: NextRequest) {
           if (!isMohwProgressOutcome(outcome)) continue;
           const caseId = String(mark.case_id || "");
           if (!caseId) continue;
+          // 直 KEY 標記只套在直 KEY 分組
+          if (!directByCaseId.has(caseId)) continue;
           outcomeByCaseId.set(caseId, outcome);
           const civil = String(mark.civil_worker_name || "").trim();
           const social = String(mark.social_worker_name || "").trim();
@@ -203,25 +263,13 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        cases = caseRows
-          .filter((row) => contextByCaseId.has(String(row.case_id || "")))
-          .map((row) => {
-            const caseId = String(row.case_id || "");
-            const seqRaw = Number(row.village_seq);
-            const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
-            const markStaff = markStaffByCaseId.get(caseId);
-            return {
-              case_id: caseId,
-              encoded_id: String(row.encoded_id || ""),
-              village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
-              name: String(row.name || row.elder_name || ""),
-              outcome: outcomeByCaseId.get(caseId) || "",
-              ...meta,
-              // 已直 KEY 標記上的民政／社政優先於派案推估
-              civil_worker_name: markStaff?.civil_worker_name || meta.civil_worker_name,
-              social_worker_name: markStaff?.social_worker_name || meta.social_worker_name,
-            };
-          });
+        casesKeyed = mapCaseRows(caseRows, keyedByCaseId, new Map(), new Map());
+        casesDirectMohw = mapCaseRows(
+          caseRows,
+          directByCaseId,
+          outcomeByCaseId,
+          markStaffByCaseId,
+        );
       }
     }
 
@@ -232,9 +280,15 @@ export async function GET(request: NextRequest) {
         villageCodeByName,
         visitors,
         rosterTotal,
-        excludedWithCareform,
+        keyedCount,
+        directCount,
+        /** @deprecated 同 keyedCount */
+        excludedWithCareform: keyedCount,
         contextWarning,
-        cases,
+        casesKeyed,
+        casesDirectMohw,
+        /** @deprecated 同 casesDirectMohw */
+        cases: casesDirectMohw,
         reporter: { name, email },
       },
     });

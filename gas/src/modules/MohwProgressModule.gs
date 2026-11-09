@@ -631,10 +631,32 @@ var MohwProgressModule = (function () {
     return String(best.display_name || best.clerk_id || '').trim();
   }
 
+  function auditSupervisorsForCareform_(index, careform) {
+    if (!careform) return [];
+    var audit = VisitRecordIndex.latestAudit(index, careform.careform_id);
+    var reviewer = String((audit && audit.reviewer) || '').trim();
+    return reviewer ? [reviewer] : [];
+  }
+
+  function buildCaseMeta_(index, logsByCase, caseId, careform) {
+    var fallback = applyAssignmentFallback_(index, caseId, '', '');
+    return {
+      case_id: caseId,
+      civil_worker_name: fallback.civil,
+      social_worker_name: fallback.social,
+      keyed_by_name: latestKeyedBy_(logsByCase, caseId),
+      audit_supervisors: auditSupervisorsForCareform_(index, careform),
+      careform_status: careform ? String(careform.status || '').trim() : '',
+      careform_id: careform ? String(careform.careform_id || '').trim() : '',
+    };
+  }
+
   /**
-   * 里別「尚未本平台建檔」個案：訪查人員（民政／社政）、建檔人員、稽核督導。
-   * 已有 VisitRecordIndex.ELIGIBLE（已提交／已稽核）關懷表的個案一律排除。
-   * 草稿／作廢／待補件不算已建檔，仍會列出（建檔／稽核多半為 —）。
+   * 里別名冊分兩組（合計＝全里）：
+   * - items_keyed：本平台已有 eligible 關懷表（已提交／已稽核）→ 儀表板算「本系統已KEY／已完成進度」
+   * - items_direct：其餘 → 需直 KEY 衛福部狀態（已完成／未遇／查無此人）
+   * 草稿／作廢／待補件不算已建檔，仍進 items_direct。
+   * 相容：items ＝ items_direct；excluded_with_careform ＝ keyed_count。
    */
   function listCaseContext(params) {
     params = params || {};
@@ -651,80 +673,111 @@ var MohwProgressModule = (function () {
       logsByCase[caseId].push(row);
     });
 
-    var items = [];
+    var itemsKeyed = [];
+    var itemsDirect = [];
     var rosterTotal = 0;
-    var excludedWithCareform = 0;
     index.cases.forEach(function (caseRow) {
       if (String(caseRow.visit_village || '').trim() !== village) return;
       var caseId = String(caseRow.case_id || '').trim();
       if (!caseId) return;
       rosterTotal += 1;
 
-      // 本頁只服務 MOHW 直 KEY：已有本平台 eligible 關懷表者不列
-      if (VisitRecordIndex.latestEligibleCareformForCase(index, caseId)) {
-        excludedWithCareform += 1;
-        return;
+      var careform = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
+      var meta = buildCaseMeta_(index, logsByCase, caseId, careform);
+      if (careform) {
+        itemsKeyed.push(meta);
+      } else {
+        itemsDirect.push(meta);
       }
-
-      var civil = '';
-      var social = '';
-      var fallback = applyAssignmentFallback_(index, caseId, civil, social);
-      civil = fallback.civil;
-      social = fallback.social;
-
-      items.push({
-        case_id: caseId,
-        civil_worker_name: civil,
-        social_worker_name: social,
-        // 未建檔列通常無登打／稽核；仍回欄位供 UI 固定顯示「—」
-        keyed_by_name: latestKeyedBy_(logsByCase, caseId),
-        audit_supervisors: [],
-      });
     });
 
     return {
       village_name: village,
       roster_total: rosterTotal,
-      excluded_with_careform: excludedWithCareform,
-      items: items,
+      keyed_count: itemsKeyed.length,
+      direct_count: itemsDirect.length,
+      excluded_with_careform: itemsKeyed.length,
+      items_keyed: itemsKeyed,
+      items_direct: itemsDirect,
+      items: itemsDirect,
     };
   }
 
+  /**
+   * 儀表板用里別進度：
+   * - platform_keyed＝本系統 eligible 關懷表（算已完成進度）
+   * - direct_*＝直 KEY 衛福部標記（僅非 platform_keyed 個案）
+   * - reported＝platform_keyed ∪ 有直 KEY 狀態的個案（去重）
+   * - remaining／completion_rate 供儀表板
+   */
   function summary(params) {
     params = params || {};
     ensureSchema_();
-    var village = String(params.village_name || '').trim();
-    var reports = list({ village_name: village, active_only: 'true' });
+    var villageFilter = String(params.village_name || '').trim();
+    var reports = list({ village_name: villageFilter, active_only: 'true' });
     var marks = SheetHelper.rowsToObjects(SheetHelper.getSheet(MARKS)).filter(function (row) {
       if (String(row.status || 'active') !== 'active') return false;
-      if (village && String(row.village_name || '') !== village) return false;
+      if (villageFilter && String(row.village_name || '') !== villageFilter) return false;
       return true;
     });
 
+    var index = VisitRecordIndex.build();
     var byVillage = {};
     function ensureVillage(name) {
       if (!byVillage[name]) {
         byVillage[name] = {
           village_name: name,
-          roster_total: rosterTotal_(name),
+          roster_total: 0,
+          platform_keyed: 0,
+          keyed_case_ids: {},
+          case_ids: {},
           count_done: 0,
           count_missed: 0,
           count_not_found: 0,
           marked_done: 0,
           marked_missed: 0,
           marked_not_found: 0,
+          marked_case_ids: {},
           latest_report_at: '',
         };
       }
       return byVillage[name];
     }
 
+    index.cases.forEach(function (caseRow) {
+      var name = String(caseRow.visit_village || '').trim();
+      if (!name) return;
+      if (villageFilter && name !== villageFilter) return;
+      var caseId = String(caseRow.case_id || '').trim();
+      if (!caseId) return;
+      var bucket = ensureVillage(name);
+      bucket.roster_total += 1;
+      bucket.case_ids[caseId] = true;
+      if (VisitRecordIndex.latestEligibleCareformForCase(index, caseId)) {
+        bucket.platform_keyed += 1;
+        bucket.keyed_case_ids[caseId] = true;
+      }
+    });
+
+    // Ensure villages that only have reports/marks still appear
+    reports.forEach(function (row) {
+      var name = String(row.village_name || '');
+      if (!name) return;
+      if (villageFilter && name !== villageFilter) return;
+      ensureVillage(name);
+    });
+    marks.forEach(function (row) {
+      var name = String(row.village_name || '');
+      if (!name) return;
+      if (villageFilter && name !== villageFilter) return;
+      ensureVillage(name);
+    });
+
     reports.forEach(function (row) {
       var name = String(row.village_name || '');
       if (!name) return;
       var bucket = ensureVillage(name);
       if (String(row.mode) === 'count') {
-        // latest-wins already superseded older count rows
         bucket.count_done = toInt_(row.count_done);
         bucket.count_missed = toInt_(row.count_missed);
         bucket.count_not_found = toInt_(row.count_not_found);
@@ -738,7 +791,18 @@ var MohwProgressModule = (function () {
       var name = String(row.village_name || '');
       if (!name) return;
       var bucket = ensureVillage(name);
+      var caseId = String(row.case_id || '').trim();
+      // 已 KEY 關懷表個案不計入直 KEY 分項，避免與 platform_keyed 重複
+      if (caseId && bucket.keyed_case_ids[caseId]) return;
       var outcome = String(row.outcome || '');
+      if (
+        outcome !== OUTCOMES.done &&
+        outcome !== OUTCOMES.missed &&
+        outcome !== OUTCOMES.notFound
+      ) {
+        return;
+      }
+      if (caseId) bucket.marked_case_ids[caseId] = outcome;
       if (outcome === OUTCOMES.done) bucket.marked_done += 1;
       if (outcome === OUTCOMES.missed) bucket.marked_missed += 1;
       if (outcome === OUTCOMES.notFound) bucket.marked_not_found += 1;
@@ -747,45 +811,98 @@ var MohwProgressModule = (function () {
       }
     });
 
-    var villages = Object.keys(byVillage).map(function (key) {
-      var item = byVillage[key];
-      var reported =
-        Math.max(item.count_done, item.marked_done) +
-        Math.max(item.count_missed, item.marked_missed) +
-        Math.max(item.count_not_found, item.marked_not_found);
-      // Prefer case marks when present; otherwise count snapshot.
-      var hasMarks =
-        item.marked_done + item.marked_missed + item.marked_not_found > 0;
-      var done = hasMarks ? item.marked_done : item.count_done;
-      var missed = hasMarks ? item.marked_missed : item.count_missed;
-      var notFound = hasMarks ? item.marked_not_found : item.count_not_found;
-      var totalReported = done + missed + notFound;
-      return {
-        village_name: item.village_name,
-        roster_total: item.roster_total,
-        done: done,
-        missed: missed,
-        not_found: notFound,
-        reported: totalReported,
-        remaining: Math.max(item.roster_total - totalReported, 0),
-        latest_report_at: item.latest_report_at,
-      };
-    });
+    var villages = Object.keys(byVillage)
+      .sort(function (a, b) {
+        return a.localeCompare(b, 'zh-Hant');
+      })
+      .map(function (key) {
+        var item = byVillage[key];
+        var hasMarks =
+          item.marked_done + item.marked_missed + item.marked_not_found > 0;
+        // Prefer case marks；無標記時退回人數 snapshot（舊 count 模式）
+        var directDone = hasMarks ? item.marked_done : item.count_done;
+        var directMissed = hasMarks ? item.marked_missed : item.count_missed;
+        var directNotFound = hasMarks ? item.marked_not_found : item.count_not_found;
+        var directMarked = directDone + directMissed + directNotFound;
+        var directPool = Math.max(item.roster_total - item.platform_keyed, 0);
+        var directUnset = Math.max(directPool - directMarked, 0);
+
+        // 去重：本系統已 KEY ∪ 直 KEY 有狀態
+        var progressedIds = {};
+        Object.keys(item.keyed_case_ids).forEach(function (id) {
+          progressedIds[id] = true;
+        });
+        Object.keys(item.marked_case_ids).forEach(function (id) {
+          progressedIds[id] = true;
+        });
+        var reported = Object.keys(progressedIds).length;
+        // count 模式無 case_id 時，用人數加總（與 platform_keyed 相加，可能略高估）
+        if (!hasMarks && directMarked > 0) {
+          reported = Math.min(item.roster_total, item.platform_keyed + directMarked);
+        }
+        var remaining = Math.max(item.roster_total - reported, 0);
+        var completionRate =
+          item.roster_total > 0
+            ? Math.round((reported / item.roster_total) * 1000) / 10
+            : 0;
+
+        return {
+          village_name: item.village_name,
+          roster_total: item.roster_total,
+          platform_keyed: item.platform_keyed,
+          direct_done: directDone,
+          direct_missed: directMissed,
+          direct_not_found: directNotFound,
+          direct_unset: directUnset,
+          // 相容舊欄位：done／missed／not_found＝直 KEY；reported＝整體已完成進度
+          done: directDone,
+          missed: directMissed,
+          not_found: directNotFound,
+          reported: reported,
+          remaining: remaining,
+          completion_rate: completionRate,
+          latest_report_at: item.latest_report_at,
+        };
+      });
+
+    var totals = villages.reduce(
+      function (acc, row) {
+        acc.roster_total += row.roster_total;
+        acc.platform_keyed += row.platform_keyed;
+        acc.direct_done += row.direct_done;
+        acc.direct_missed += row.direct_missed;
+        acc.direct_not_found += row.direct_not_found;
+        acc.direct_unset += row.direct_unset;
+        acc.done += row.done;
+        acc.missed += row.missed;
+        acc.not_found += row.not_found;
+        acc.reported += row.reported;
+        acc.remaining += row.remaining;
+        return acc;
+      },
+      {
+        roster_total: 0,
+        platform_keyed: 0,
+        direct_done: 0,
+        direct_missed: 0,
+        direct_not_found: 0,
+        direct_unset: 0,
+        done: 0,
+        missed: 0,
+        not_found: 0,
+        reported: 0,
+        remaining: 0,
+        completion_rate: 0,
+      }
+    );
+    totals.completion_rate =
+      totals.roster_total > 0
+        ? Math.round((totals.reported / totals.roster_total) * 1000) / 10
+        : 0;
 
     return {
       villages: villages,
-      totals: villages.reduce(
-        function (acc, row) {
-          acc.roster_total += row.roster_total;
-          acc.done += row.done;
-          acc.missed += row.missed;
-          acc.not_found += row.not_found;
-          acc.reported += row.reported;
-          acc.remaining += row.remaining;
-          return acc;
-        },
-        { roster_total: 0, done: 0, missed: 0, not_found: 0, reported: 0, remaining: 0 }
-      ),
+      totals: totals,
     };
   }
 

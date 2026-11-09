@@ -17,6 +17,7 @@ import {
   summarizeCaseOutcomes,
   type MohwProgressAuditSupervisor,
   type MohwProgressCaseRow,
+  type MohwProgressCaseTab,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
 
@@ -26,8 +27,12 @@ type OptionsPayload = {
   villageCodeByName?: Record<string, string>;
   visitors?: DeskVisitorOption[];
   rosterTotal?: number | null;
+  keyedCount?: number | null;
+  directCount?: number | null;
   excludedWithCareform?: number | null;
   contextWarning?: string | null;
+  casesKeyed?: MohwProgressCaseRow[];
+  casesDirectMohw?: MohwProgressCaseRow[];
   cases?: MohwProgressCaseRow[];
   reporter?: { name: string; email: string };
 };
@@ -39,11 +44,38 @@ function visitorLabel(visitor: DeskVisitorOption) {
   return title ? `${visitor.name}（${title}）` : visitor.name;
 }
 
+function sortByPaperSeq(rows: MohwProgressCaseRow[]) {
+  return [...rows].sort((a, b) => {
+    const aSeq = a.village_seq ?? Number.POSITIVE_INFINITY;
+    const bSeq = b.village_seq ?? Number.POSITIVE_INFINITY;
+    if (aSeq !== bSeq) return aSeq - bSeq;
+    return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+  });
+}
+
+function staffLine(row: MohwProgressCaseRow) {
+  const civil = row.civil_worker_name?.trim() || "";
+  const social = row.social_worker_name?.trim() || "";
+  return [civil ? `民政 ${civil}` : "", social ? `社政 ${social}` : ""].filter(Boolean);
+}
+
+function metaLine(row: MohwProgressCaseRow) {
+  const keyed = row.keyed_by_name?.trim() || "—";
+  const audit =
+    (row.audit_supervisors ?? []).map((item) => item.trim()).filter(Boolean).join("、") || "—";
+  const status = row.careform_status?.trim();
+  return `訪查 ${staffLine(row).join("／") || "—"} · 建檔 ${keyed} · 稽核 ${audit}${
+    status ? ` · ${status}` : ""
+  }`;
+}
+
 export function MohwProgressPanel() {
   const [options, setOptions] = useState<OptionsPayload | null>(null);
   const [village, setVillage] = useState("");
-  const [cases, setCases] = useState<MohwProgressCaseRow[]>([]);
+  const [casesKeyed, setCasesKeyed] = useState<MohwProgressCaseRow[]>([]);
+  const [casesDirect, setCasesDirect] = useState<MohwProgressCaseRow[]>([]);
   const [outcomes, setOutcomes] = useState<Record<string, MohwProgressOutcome | "">>({});
+  const [caseTab, setCaseTab] = useState<MohwProgressCaseTab>("direct");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
@@ -60,7 +92,8 @@ export function MohwProgressPanel() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [contextWarning, setContextWarning] = useState<string | null>(null);
   const [rosterTotal, setRosterTotal] = useState<number | null>(null);
-  const [excludedWithCareform, setExcludedWithCareform] = useState<number | null>(null);
+  const [keyedCount, setKeyedCount] = useState<number | null>(null);
+  const [directCount, setDirectCount] = useState<number | null>(null);
 
   async function loadOptions(selectedVillage?: string) {
     if (selectedVillage) setLoadingCases(true);
@@ -79,19 +112,28 @@ export function MohwProgressPanel() {
       }
       setOptions(json.data ?? null);
       if (selectedVillage) {
-        const nextCases = json.data?.cases ?? [];
-        setCases(nextCases);
+        const nextKeyed = json.data?.casesKeyed ?? [];
+        const nextDirect = json.data?.casesDirectMohw ?? json.data?.cases ?? [];
+        setCasesKeyed(nextKeyed);
+        setCasesDirect(nextDirect);
         setRosterTotal(
-          typeof json.data?.rosterTotal === "number" ? json.data.rosterTotal : nextCases.length,
+          typeof json.data?.rosterTotal === "number"
+            ? json.data.rosterTotal
+            : nextKeyed.length + nextDirect.length,
         );
-        setExcludedWithCareform(
-          typeof json.data?.excludedWithCareform === "number"
-            ? json.data.excludedWithCareform
-            : null,
+        setKeyedCount(
+          typeof json.data?.keyedCount === "number"
+            ? json.data.keyedCount
+            : typeof json.data?.excludedWithCareform === "number"
+              ? json.data.excludedWithCareform
+              : nextKeyed.length,
+        );
+        setDirectCount(
+          typeof json.data?.directCount === "number" ? json.data.directCount : nextDirect.length,
         );
         setContextWarning(json.data?.contextWarning || null);
         const nextOutcomes: Record<string, MohwProgressOutcome | ""> = {};
-        for (const row of nextCases) {
+        for (const row of nextDirect) {
           nextOutcomes[row.case_id] = row.outcome || "";
         }
         setOutcomes(nextOutcomes);
@@ -110,10 +152,12 @@ export function MohwProgressPanel() {
 
   useEffect(() => {
     if (!village) {
-      setCases([]);
+      setCasesKeyed([]);
+      setCasesDirect([]);
       setOutcomes({});
       setRosterTotal(null);
-      setExcludedWithCareform(null);
+      setKeyedCount(null);
+      setDirectCount(null);
       setContextWarning(null);
       return;
     }
@@ -145,7 +189,6 @@ export function MohwProgressPanel() {
     );
   }
 
-  // 登入者姓名若在名冊，預選對應側（僅在尚未手動選時）
   useEffect(() => {
     const reporterName = options?.reporter?.name?.trim();
     if (!reporterName || !allVisitors.length) return;
@@ -161,19 +204,32 @@ export function MohwProgressPanel() {
     [outcomes],
   );
 
-  /** 與 KEY 單 compareDeskCasesByVillageSeq 相同：紙本里編號 → 姓名 */
-  const sortedCases = useMemo(() => {
-    return [...cases].sort((a, b) => {
-      const aSeq = a.village_seq ?? Number.POSITIVE_INFINITY;
-      const bSeq = b.village_seq ?? Number.POSITIVE_INFINITY;
-      if (aSeq !== bSeq) return aSeq - bSeq;
-      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
-    });
-  }, [cases]);
+  const sortedKeyed = useMemo(() => sortByPaperSeq(casesKeyed), [casesKeyed]);
+  const sortedDirect = useMemo(() => sortByPaperSeq(casesDirect), [casesDirect]);
 
-  const filteredCases = useMemo(() => {
+  const filteredKeyed = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sortedCases.filter((row) => {
+    if (!q) return sortedKeyed;
+    return sortedKeyed.filter((row) => {
+      const hay = [
+        row.village_seq ?? "",
+        row.name,
+        row.encoded_id,
+        row.civil_worker_name,
+        row.social_worker_name,
+        row.keyed_by_name,
+        row.careform_status,
+        ...(row.audit_supervisors ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [sortedKeyed, query]);
+
+  const filteredDirect = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return sortedDirect.filter((row) => {
       const current = outcomes[row.case_id] || "";
       if (filter === "unset" && current) return false;
       if (filter !== "all" && filter !== "unset" && current !== filter) return false;
@@ -191,21 +247,21 @@ export function MohwProgressPanel() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [sortedCases, outcomes, filter, query]);
+  }, [sortedDirect, outcomes, filter, query]);
 
   const dirtyCount = useMemo(() => {
     let n = 0;
-    for (const row of cases) {
+    for (const row of casesDirect) {
       const current = outcomes[row.case_id] || "";
       const original = row.outcome || "";
       if (current && current !== original) n += 1;
       else if (current && !original) n += 1;
     }
     return n;
-  }, [cases, outcomes]);
+  }, [casesDirect, outcomes]);
 
   const selectedForSubmit = useMemo(() => {
-    return cases
+    return casesDirect
       .map((row) => {
         const outcome = outcomes[row.case_id] || "";
         if (!outcome) return null;
@@ -223,7 +279,7 @@ export function MohwProgressPanel() {
       outcome: MohwProgressOutcome;
       changed: boolean;
     }>;
-  }, [cases, outcomes]);
+  }, [casesDirect, outcomes]);
 
   function setOutcome(caseId: string, value: MohwProgressOutcome | "") {
     setOutcomes((prev) => ({ ...prev, [caseId]: value }));
@@ -232,7 +288,7 @@ export function MohwProgressPanel() {
   function applyFilterBulk(outcome: MohwProgressOutcome) {
     setOutcomes((prev) => {
       const next = { ...prev };
-      for (const row of filteredCases) {
+      for (const row of filteredDirect) {
         next[row.case_id] = outcome;
       }
       return next;
@@ -293,7 +349,7 @@ export function MohwProgressPanel() {
       setWarnings(json.data?.warnings ?? []);
       const reportId = json.data?.report?.report_id || "";
       setMessage(
-        `已確認 ${json.data?.marks_written ?? items.length} 筆（${reportId}）。同個案以最新狀態為準。`,
+        `已確認 ${json.data?.marks_written ?? items.length} 筆（${reportId}），將匯入里別進度儀表板。同個案以最新狀態為準。`,
       );
       setNotes("");
       await loadOptions(village);
@@ -312,22 +368,28 @@ export function MohwProgressPanel() {
     Boolean(selectedKeyedBy) &&
     auditSupervisors.length > 0;
 
+  const displayKeyedCount = keyedCount ?? casesKeyed.length;
+  const displayDirectCount = directCount ?? casesDirect.length;
+  const displayRoster =
+    typeof rosterTotal === "number" ? rosterTotal : displayKeyedCount + displayDirectCount;
+
   return (
     <div className="space-y-4">
       <PageIntro
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="里別與民政／社政訪查員同一橫列選好後，再勾個案狀態（依紙本里編號排序）。僅未建檔個案。"
+        description="里別與民政／社政訪查員選好後，分「已KEY關懷表／已直KEY衛福部」兩頁籤確認；勾選狀態會匯總到各里進度儀表板。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
         <div className="flex gap-2">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">未建檔名單才在這裡 KEY</p>
+            <p className="font-medium">勾選是為了里別進度儀表板匯總</p>
             <p className="mt-1 text-amber-900/90">
-              上方橫列先選里別與民政／社政訪查員，再勾個案狀態。已有本平台關懷表（已提交／已稽核）不會出現。
+              「已KEY關懷表」已算本系統完成進度（唯讀）。「已直KEY衛福部」請勾已完成／未遇／查無此人並送出，與前者合計＝該里名冊，供
+              `/manager/mohw-progress` 儀表板使用。
             </p>
           </div>
         </div>
@@ -353,6 +415,7 @@ export function MohwProgressPanel() {
                   setCivilVisitorId("");
                   setSocialVisitorId("");
                   setKeyedById("");
+                  setCaseTab("direct");
                   setFilter("all");
                   setQuery("");
                   setMessage(null);
@@ -448,7 +511,7 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">2. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            依紙本「里編號」排序；姓名前顯示 #里編號，與關懷表 KEY 單相同。
+            依紙本「里編號」排序；兩頁籤合計＝該里名冊。勾選結果供儀表板匯總。
           </p>
         </div>
 
@@ -459,16 +522,20 @@ export function MohwProgressPanel() {
         ) : (
           <>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>未建檔 {cases.length}</span>
-              {typeof rosterTotal === "number" && <span>名冊 {rosterTotal}</span>}
-              {typeof excludedWithCareform === "number" && (
-                <span>已建檔排除 {excludedWithCareform}</span>
+              <span>本系統已KEY {displayKeyedCount}</span>
+              <span>直KEY待回報 {displayDirectCount}</span>
+              <span>名冊 {displayRoster}</span>
+              {caseTab === "direct" && (
+                <>
+                  <span>已完成 {summary.done}</span>
+                  <span>未遇 {summary.missed}</span>
+                  <span>查無此人 {summary.notFound}</span>
+                  <span>尚未勾選 {summary.unset}</span>
+                  {dirtyCount > 0 && (
+                    <span className="text-amber-800">本次變更 {dirtyCount}</span>
+                  )}
+                </>
               )}
-              <span>已完成 {summary.done}</span>
-              <span>未遇 {summary.missed}</span>
-              <span>查無此人 {summary.notFound}</span>
-              <span>尚未勾選 {summary.unset}</span>
-              {dirtyCount > 0 && <span className="text-amber-800">本次變更 {dirtyCount}</span>}
             </div>
 
             {contextWarning && (
@@ -477,6 +544,32 @@ export function MohwProgressPanel() {
               </p>
             )}
 
+            <div className="flex flex-wrap gap-1 border-b pb-2">
+              {(
+                [
+                  ["direct", `已直KEY衛福部（${displayDirectCount}）`],
+                  ["keyed", `已KEY關懷表（${displayKeyedCount}）`],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`rounded-md border px-3 py-1.5 text-sm ${
+                    caseTab === key
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "bg-background text-foreground"
+                  }`}
+                  onClick={() => {
+                    setCaseTab(key);
+                    setFilter("all");
+                    setQuery("");
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:max-w-xs"
@@ -484,140 +577,186 @@ export function MohwProgressPanel() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
-              <div className="flex flex-wrap gap-1">
-                {(
-                  [
-                    ["all", "全部"],
-                    ["unset", "尚未勾選"],
-                    ["已完成", "已完成"],
-                    ["未遇", "未遇"],
-                    ["查無此人", "查無此人"],
-                  ] as const
-                ).map(([key, label]) => (
+              {caseTab === "direct" && (
+                <div className="flex flex-wrap gap-1">
+                  {(
+                    [
+                      ["all", "全部"],
+                      ["unset", "尚未勾選"],
+                      ["已完成", "已完成"],
+                      ["未遇", "未遇"],
+                      ["查無此人", "查無此人"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`rounded-md border px-2 py-1 text-xs ${
+                        filter === key
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "bg-background"
+                      }`}
+                      onClick={() => setFilter(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {caseTab === "direct" && (
+              <div className="flex flex-wrap gap-2">
+                <span className="self-center text-xs text-muted-foreground">將目前列表設為：</span>
+                {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
                   <button
-                    key={key}
+                    key={outcome}
                     type="button"
-                    className={`rounded-md border px-2 py-1 text-xs ${
-                      filter === key ? "border-primary bg-primary/10 text-primary" : "bg-background"
-                    }`}
-                    onClick={() => setFilter(key)}
+                    className="rounded-md border bg-background px-2 py-1 text-xs"
+                    onClick={() => applyFilterBulk(outcome)}
+                    disabled={!filteredDirect.length || busy}
                   >
-                    {label}
+                    {outcome}
                   </button>
                 ))}
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-wrap gap-2">
-              <span className="self-center text-xs text-muted-foreground">將目前列表設為：</span>
-              {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
-                <button
-                  key={outcome}
-                  type="button"
-                  className="rounded-md border bg-background px-2 py-1 text-xs"
-                  onClick={() => applyFilterBulk(outcome)}
-                  disabled={!filteredCases.length || busy}
-                >
-                  {outcome}
-                </button>
-              ))}
-            </div>
-
-            <div className="overflow-x-auto rounded-md border">
-              <div className="min-w-[36rem]">
-                <div className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                  <div>個案</div>
-                  {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
-                    <div key={outcome} className="text-center">
-                      {outcome}
-                    </div>
-                  ))}
-                </div>
-                <div className="max-h-[55vh] overflow-y-auto">
-                  {loadingCases ? (
-                    <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
-                  ) : filteredCases.length === 0 ? (
-                    <p className="px-3 py-6 text-sm text-muted-foreground">
-                      {contextWarning
-                        ? "無法載入未建檔名單。"
-                        : "此條件沒有未建檔個案（本平台已有關懷表者已排除）。"}
-                    </p>
-                  ) : (
-                    filteredCases.map((row) => {
-                      const current = outcomes[row.case_id] || "";
-                      const paper = formatDeskCasePaperLabel({
-                        villageCode: villageCodeByName[village],
-                        village,
-                        villageSeq: row.village_seq,
-                        name: row.name,
-                        caseCode: row.encoded_id,
-                      });
-                      const civil = row.civil_worker_name?.trim() || "";
-                      const social = row.social_worker_name?.trim() || "";
-                      const staffBits = [
-                        civil ? `民政 ${civil}` : "",
-                        social ? `社政 ${social}` : "",
-                      ].filter(Boolean);
-                      return (
-                        <div
-                          key={row.case_id}
-                          className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
-                        >
-                          <div className="min-w-0 pr-2">
+            {caseTab === "keyed" ? (
+              <div className="overflow-x-auto rounded-md border">
+                <div className="min-w-[28rem]">
+                  <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                    本平台已有關懷表（已提交／已稽核）— 唯讀，儀表板計入已完成進度
+                  </div>
+                  <div className="max-h-[55vh] overflow-y-auto">
+                    {loadingCases ? (
+                      <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
+                    ) : filteredKeyed.length === 0 ? (
+                      <p className="px-3 py-6 text-sm text-muted-foreground">
+                        {contextWarning ? "無法載入已KEY名單。" : "此里尚無本平台已KEY關懷表。"}
+                      </p>
+                    ) : (
+                      filteredKeyed.map((row) => {
+                        const paper = formatDeskCasePaperLabel({
+                          villageCode: villageCodeByName[village],
+                          village,
+                          villageSeq: row.village_seq,
+                          name: row.name,
+                          caseCode: row.encoded_id,
+                        });
+                        return (
+                          <div
+                            key={row.case_id}
+                            className="border-b px-3 py-2.5 text-sm last:border-b-0"
+                          >
                             <p className="truncate font-medium">{paper.primary}</p>
                             <p className="truncate text-xs text-muted-foreground">
                               {paper.secondary || row.encoded_id || row.case_id}
                             </p>
-                            {staffBits.length > 0 && (
-                              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                {staffBits.join(" · ")}
-                              </p>
-                            )}
+                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                              {metaLine(row)}
+                            </p>
                           </div>
-                          {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
-                            const checked = current === outcome;
-                            return (
-                              <label
-                                key={outcome}
-                                className="flex cursor-pointer items-center justify-center py-1"
-                              >
-                                <input
-                                  type="radio"
-                                  className="h-4 w-4 accent-[hsl(var(--primary))]"
-                                  name={`outcome-${row.case_id}`}
-                                  checked={checked}
-                                  onChange={() => setOutcome(row.case_id, outcome)}
-                                  onClick={() => {
-                                    if (checked) setOutcome(row.case_id, "");
-                                  }}
-                                />
-                                <span className="sr-only">{outcome}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      );
-                    })
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-md border">
+                  <div className="min-w-[36rem]">
+                    <div className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                      <div>個案（直KEY衛福部）</div>
+                      {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
+                        <div key={outcome} className="text-center">
+                          {outcome}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="max-h-[55vh] overflow-y-auto">
+                      {loadingCases ? (
+                        <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
+                      ) : filteredDirect.length === 0 ? (
+                        <p className="px-3 py-6 text-sm text-muted-foreground">
+                          {contextWarning
+                            ? "無法載入直KEY名單。"
+                            : "此條件沒有需直KEY的個案（本平台已KEY者見另一頁籤）。"}
+                        </p>
+                      ) : (
+                        filteredDirect.map((row) => {
+                          const current = outcomes[row.case_id] || "";
+                          const paper = formatDeskCasePaperLabel({
+                            villageCode: villageCodeByName[village],
+                            village,
+                            villageSeq: row.village_seq,
+                            name: row.name,
+                            caseCode: row.encoded_id,
+                          });
+                          const bits = staffLine(row);
+                          return (
+                            <div
+                              key={row.case_id}
+                              className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <p className="truncate font-medium">{paper.primary}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {paper.secondary || row.encoded_id || row.case_id}
+                                </p>
+                                {bits.length > 0 && (
+                                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                    {bits.join(" · ")}
+                                  </p>
+                                )}
+                              </div>
+                              {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
+                                const checked = current === outcome;
+                                return (
+                                  <label
+                                    key={outcome}
+                                    className="flex cursor-pointer items-center justify-center py-1"
+                                  >
+                                    <input
+                                      type="radio"
+                                      className="h-4 w-4 accent-[hsl(var(--primary))]"
+                                      name={`outcome-${row.case_id}`}
+                                      checked={checked}
+                                      onChange={() => setOutcome(row.case_id, outcome)}
+                                      onClick={() => {
+                                        if (checked) setOutcome(row.case_id, "");
+                                      }}
+                                    />
+                                    <span className="sr-only">{outcome}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-            <div>
-              <label className="text-sm font-medium">備註（選填）</label>
-              <input
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="例如：已於衛福部平台完成 KEY"
-              />
-            </div>
+                <div>
+                  <label className="text-sm font-medium">備註（選填）</label>
+                  <input
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="例如：已於衛福部平台完成 KEY"
+                  />
+                </div>
 
-            <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
-              {busy
-                ? "送出中…"
-                : `確認送出（${selectedForSubmit.length} 筆已勾選）`}
-            </Button>
+                <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
+                  {busy
+                    ? "送出中…"
+                    : `確認送出至儀表板（${selectedForSubmit.length} 筆已勾選）`}
+                </Button>
+              </>
+            )}
           </>
         )}
 
