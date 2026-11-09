@@ -109,11 +109,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const civilWorkerId = String(body.civilWorkerId || body.civil_worker_id || "").trim();
+    const civilWorkerName = String(body.civilWorkerName || body.civil_worker_name || "").trim();
+    const socialWorkerId = String(body.socialWorkerId || body.social_worker_id || "").trim();
+    const socialWorkerName = String(
+      body.socialWorkerName || body.social_worker_name || "",
+    ).trim();
+    if (!civilWorkerName && !socialWorkerName) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "請至少選擇民政或社政訪查員。",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     const result = await gasClient.mohwProgress.submit({
       village_name: villageName,
       village_code: villageCode,
       mode: "case_list",
       items,
+      civil_worker_id: civilWorkerId,
+      civil_worker_name: civilWorkerName,
+      social_worker_id: socialWorkerId,
+      social_worker_name: socialWorkerName,
       reported_by: name,
       reported_by_email: email,
       notes: String(body.notes || "").trim(),

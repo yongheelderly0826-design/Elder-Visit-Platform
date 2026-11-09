@@ -10,6 +10,7 @@ import {
   type MohwProgressCaseRow,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
+import { mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
 import {
   formatYongheVillageCode,
   mapVillageAdminRow,
@@ -20,6 +21,11 @@ import {
   sortYongheVillagesByCode,
 } from "@/lib/domain/village-admins";
 import { gasClient } from "@/lib/gas-client";
+import {
+  cachedRead,
+  GAS_READ_CACHE_SECONDS_DESK,
+  GAS_READ_TAGS,
+} from "@/lib/gas-read-cache";
 
 const UNASSIGNED_VILLAGES = ["中溪里", "中興里", "光明里", "協和里", "忠義里", "前溪里", "勵行里"];
 
@@ -99,6 +105,22 @@ export async function GET(request: NextRequest) {
     let cases: MohwProgressCaseRow[] = [];
     let contextWarning: string | null = null;
 
+    const visitors = await cachedRead(
+      ["desk-mohw-progress-visitors-slim-v1"],
+      [GAS_READ_TAGS.deskCareFormOptions],
+      async () => {
+        const visitorRows = (await gasClient.visitors.list({ slim: true })) as Record<
+          string,
+          unknown
+        >[];
+        return visitorRows
+          .map(mapDeskVisitor)
+          .filter((item) => item.id)
+          .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
+      },
+      GAS_READ_CACHE_SECONDS_DESK,
+    ).catch(() => []);
+
     if (villageParam) {
       if (allowed && !allowed.includes(villageParam)) {
         return NextResponse.json(
@@ -154,11 +176,24 @@ export async function GET(request: NextRequest) {
         }
 
         const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
+        const markStaffByCaseId = new Map<
+          string,
+          { civil_worker_name: string; social_worker_name: string }
+        >();
         for (const mark of marks) {
           const outcome = String(mark.outcome || "");
           if (!isMohwProgressOutcome(outcome)) continue;
           const caseId = String(mark.case_id || "");
-          if (caseId) outcomeByCaseId.set(caseId, outcome);
+          if (!caseId) continue;
+          outcomeByCaseId.set(caseId, outcome);
+          const civil = String(mark.civil_worker_name || "").trim();
+          const social = String(mark.social_worker_name || "").trim();
+          if (civil || social) {
+            markStaffByCaseId.set(caseId, {
+              civil_worker_name: civil,
+              social_worker_name: social,
+            });
+          }
         }
 
         cases = caseRows
@@ -167,6 +202,7 @@ export async function GET(request: NextRequest) {
             const caseId = String(row.case_id || "");
             const seqRaw = Number(row.village_seq);
             const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
+            const markStaff = markStaffByCaseId.get(caseId);
             return {
               case_id: caseId,
               encoded_id: String(row.encoded_id || ""),
@@ -174,6 +210,9 @@ export async function GET(request: NextRequest) {
               name: String(row.name || row.elder_name || ""),
               outcome: outcomeByCaseId.get(caseId) || "",
               ...meta,
+              // 已直 KEY 標記上的民政／社政優先於派案推估
+              civil_worker_name: markStaff?.civil_worker_name || meta.civil_worker_name,
+              social_worker_name: markStaff?.social_worker_name || meta.social_worker_name,
             };
           });
       }
@@ -184,6 +223,7 @@ export async function GET(request: NextRequest) {
         scope,
         villages,
         villageCodeByName,
+        visitors,
         rosterTotal,
         excludedWithCareform,
         contextWarning,

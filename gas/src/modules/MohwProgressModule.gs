@@ -22,6 +22,10 @@ var MohwProgressModule = (function () {
     'range_text',
     'case_codes_json',
     'source',
+    'civil_worker_id',
+    'civil_worker_name',
+    'social_worker_id',
+    'social_worker_name',
     'reported_by',
     'reported_by_email',
     'reported_at',
@@ -38,6 +42,10 @@ var MohwProgressModule = (function () {
     'village_name',
     'outcome',
     'source',
+    'civil_worker_id',
+    'civil_worker_name',
+    'social_worker_id',
+    'social_worker_name',
     'reported_by',
     'reported_by_email',
     'reported_at',
@@ -128,6 +136,10 @@ var MohwProgressModule = (function () {
         village_name: mark.village_name || existing.village_name,
         outcome: mark.outcome,
         source: SOURCE,
+        civil_worker_id: mark.civil_worker_id || '',
+        civil_worker_name: mark.civil_worker_name || '',
+        social_worker_id: mark.social_worker_id || '',
+        social_worker_name: mark.social_worker_name || '',
         reported_by: mark.reported_by,
         reported_by_email: mark.reported_by_email,
         reported_at: mark.reported_at,
@@ -215,6 +227,10 @@ var MohwProgressModule = (function () {
       var reportedByEmail = String(data.reported_by_email || '').trim();
       var villageCode = String(data.village_code || '').trim();
       var notes = String(data.notes || '').trim();
+      var civilWorkerId = String(data.civil_worker_id || '').trim();
+      var civilWorkerName = String(data.civil_worker_name || '').trim();
+      var socialWorkerId = String(data.social_worker_id || '').trim();
+      var socialWorkerName = String(data.social_worker_name || '').trim();
       var rosterTotal = rosterTotal_(villageName);
       var reportId = 'MPR-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
       var warnings = [];
@@ -272,6 +288,10 @@ var MohwProgressModule = (function () {
             village_name: villageName,
             outcome: outcome,
             source: SOURCE,
+            civil_worker_id: civilWorkerId,
+            civil_worker_name: civilWorkerName,
+            social_worker_id: socialWorkerId,
+            social_worker_name: socialWorkerName,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -322,6 +342,10 @@ var MohwProgressModule = (function () {
             village_name: villageName,
             outcome: outcome,
             source: SOURCE,
+            civil_worker_id: civilWorkerId,
+            civil_worker_name: civilWorkerName,
+            social_worker_id: socialWorkerId,
+            social_worker_name: socialWorkerName,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -359,6 +383,10 @@ var MohwProgressModule = (function () {
             village_name: villageName,
             outcome: rangeOutcome,
             source: SOURCE,
+            civil_worker_id: civilWorkerId,
+            civil_worker_name: civilWorkerName,
+            social_worker_id: socialWorkerId,
+            social_worker_name: socialWorkerName,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -392,6 +420,10 @@ var MohwProgressModule = (function () {
         range_text: rangeText,
         case_codes_json: caseCodesJson,
         source: SOURCE,
+        civil_worker_id: civilWorkerId,
+        civil_worker_name: civilWorkerName,
+        social_worker_id: socialWorkerId,
+        social_worker_name: socialWorkerName,
         reported_by: reportedBy,
         reported_by_email: reportedByEmail,
         reported_at: reportedAt,

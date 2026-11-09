@@ -33,8 +33,8 @@
 | `車馬費核銷` | `payment_id` | 費用 |
 | `匯出紀錄` | `export_id` | 衛福部匯出 log |
 | `報表快照` | `snapshot_id` | KPI 與每日訪視 JSON 快照 |
-| `MOHW進度回報` | `report_id` | 已直 KEY 衛福部之里別進度（人數／區間批次；不寫關懷表） |
-| `MOHW進度個案標記` | `mark_id` | 個案層進度標記（編碼／區間模式；latest wins） |
+| `MOHW進度回報` | `report_id` | 已直 KEY 衛福部之里別進度（人數／區間批次；不寫關懷表；含 civil/social_worker_*） |
+| `MOHW進度個案標記` | `mark_id` | 個案層進度標記（編碼／區間模式；latest wins；含 civil/social_worker_*） |
 | `_操作日誌` | `log_id` | 系統 log |
 
 ---

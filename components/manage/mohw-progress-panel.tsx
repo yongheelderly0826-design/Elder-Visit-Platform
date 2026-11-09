@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Info } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
+import { deskVisitorColumnSide } from "@/lib/domain/desk-care-batch";
+import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
 import {
   formatYongheVillageSelectLabel,
   type DeskScope,
@@ -19,6 +21,7 @@ type OptionsPayload = {
   scope?: DeskScope;
   villages: string[];
   villageCodeByName?: Record<string, string>;
+  visitors?: DeskVisitorOption[];
   rosterTotal?: number | null;
   excludedWithCareform?: number | null;
   contextWarning?: string | null;
@@ -28,15 +31,9 @@ type OptionsPayload = {
 
 type FilterKey = "all" | "unset" | MohwProgressOutcome;
 
-function StaffMetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2 text-xs leading-snug">
-      <span className="mt-0.5 shrink-0 rounded border border-border bg-muted/70 px-1.5 py-0.5 font-semibold text-foreground">
-        {label}
-      </span>
-      <span className="min-w-0 break-words text-foreground/90">{value || "—"}</span>
-    </div>
-  );
+function visitorLabel(visitor: DeskVisitorOption) {
+  const title = visitor.jobTitle?.trim();
+  return title ? `${visitor.name}（${title}）` : visitor.name;
 }
 
 export function MohwProgressPanel() {
@@ -47,6 +44,8 @@ export function MohwProgressPanel() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
+  const [civilVisitorId, setCivilVisitorId] = useState("");
+  const [socialVisitorId, setSocialVisitorId] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingCases, setLoadingCases] = useState(false);
@@ -116,6 +115,30 @@ export function MohwProgressPanel() {
 
   const villages = options?.villages ?? [];
   const villageCodeByName = options?.villageCodeByName ?? {};
+  const allVisitors = useMemo(() => options?.visitors ?? [], [options?.visitors]);
+
+  const civilVisitors = useMemo(
+    () => allVisitors.filter((item) => deskVisitorColumnSide(item) === "civil"),
+    [allVisitors],
+  );
+  const socialVisitors = useMemo(
+    () => allVisitors.filter((item) => deskVisitorColumnSide(item) === "social"),
+    [allVisitors],
+  );
+
+  const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
+  const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
+
+  // 登入者姓名若在名冊，預選對應側（僅在尚未手動選時）
+  useEffect(() => {
+    const reporterName = options?.reporter?.name?.trim();
+    if (!reporterName || !allVisitors.length) return;
+    if (civilVisitorId || socialVisitorId) return;
+    const match = allVisitors.find((item) => item.name.trim() === reporterName);
+    if (!match) return;
+    if (deskVisitorColumnSide(match) === "social") setSocialVisitorId(match.id);
+    else setCivilVisitorId(match.id);
+  }, [options?.reporter?.name, allVisitors, civilVisitorId, socialVisitorId]);
 
   const summary = useMemo(
     () => summarizeCaseOutcomes(Object.values(outcomes)),
@@ -200,6 +223,10 @@ export function MohwProgressPanel() {
       setMessage("請先勾選至少一筆個案狀態。");
       return;
     }
+    if (!selectedCivil && !selectedSocial) {
+      setMessage("請先從上方下拉選擇民政或社政訪查員。");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     setWarnings([]);
@@ -212,6 +239,10 @@ export function MohwProgressPanel() {
           villageCode: villageCodeByName[village] || "",
           items,
           notes,
+          civilWorkerId: selectedCivil?.id || "",
+          civilWorkerName: selectedCivil?.name || "",
+          socialWorkerId: selectedSocial?.id || "",
+          socialWorkerName: selectedSocial?.name || "",
         }),
       });
       const json = (await response.json()) as {
@@ -236,7 +267,11 @@ export function MohwProgressPanel() {
     }
   }
 
-  const canSubmit = Boolean(village) && !busy && selectedForSubmit.length > 0;
+  const canSubmit =
+    Boolean(village) &&
+    !busy &&
+    selectedForSubmit.length > 0 &&
+    Boolean(selectedCivil || selectedSocial);
 
   return (
     <div className="space-y-4">
@@ -244,7 +279,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="僅列出尚未在本平台建立關懷表的個案。選里後勾選每筆狀態（已完成／未遇／查無此人）。此頁只統計進度，不會建立關懷表。"
+        description="僅列出尚未在本平台建立關懷表的個案。訪查員先選民政／社政，再以橫列勾選每筆狀態。此頁只統計進度，不會建立關懷表。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -253,7 +288,7 @@ export function MohwProgressPanel() {
           <div>
             <p className="font-medium">未建檔名單才在這裡 KEY</p>
             <p className="mt-1 text-amber-900/90">
-              已有本平台關懷表（已提交／已稽核）的個案不會出現。寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。同一個案再次勾選會以最新狀態覆寫。
+              已有本平台關懷表（已提交／已稽核）的個案不會出現。請先以橫列下拉選擇本次民政／社政訪查員，再勾選狀態；寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。
             </p>
           </div>
         </div>
@@ -287,6 +322,46 @@ export function MohwProgressPanel() {
 
         {village && (
           <>
+            <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
+              <div className="flex min-w-[28rem] flex-row flex-wrap items-end gap-3 sm:flex-nowrap">
+                <div className="min-w-[10rem] flex-1">
+                  <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={civilVisitorId}
+                    onChange={(event) => setCivilVisitorId(event.target.value)}
+                    disabled={busy || loading}
+                  >
+                    <option value="">請選擇民政訪查員</option>
+                    {civilVisitors.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>
+                        {visitorLabel(visitor)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-[10rem] flex-1">
+                  <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={socialVisitorId}
+                    onChange={(event) => setSocialVisitorId(event.target.value)}
+                    disabled={busy || loading}
+                  >
+                    <option value="">請選擇社政訪查員</option>
+                    {socialVisitors.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>
+                        {visitorLabel(visitor)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                名單來自訪查員主檔（民政＝公所人員／civil；社政＝志工／social）。至少選一側後再送出；會寫入本次批次與每筆標記。
+              </p>
+            </div>
+
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>未建檔 {cases.length}</span>
               {typeof rosterTotal === "number" && <span>名冊 {rosterTotal}</span>}
@@ -352,86 +427,79 @@ export function MohwProgressPanel() {
               ))}
             </div>
 
-            <div className="overflow-hidden rounded-md border">
-              <div className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                <div>個案（訪查／建檔／稽核）</div>
-                {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
-                  <div key={outcome} className="text-center">
-                    {outcome}
-                  </div>
-                ))}
-              </div>
-              <div className="max-h-[55vh] overflow-y-auto">
-                {loadingCases ? (
-                  <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
-                ) : filteredCases.length === 0 ? (
-                  <p className="px-3 py-6 text-sm text-muted-foreground">
-                    {contextWarning
-                      ? "無法載入未建檔名單。"
-                      : "此條件沒有未建檔個案（本平台已有關懷表者已排除）。"}
-                  </p>
-                ) : (
-                  filteredCases.map((row) => {
-                    const current = outcomes[row.case_id] || "";
-                    const civil = row.civil_worker_name?.trim() || "";
-                    const social = row.social_worker_name?.trim() || "";
-                    const keyedBy = row.keyed_by_name?.trim() || "";
-                    const auditors = (row.audit_supervisors ?? [])
-                      .map((item) => item.trim())
-                      .filter(Boolean);
-                    const visitorLine = [
-                      civil ? `民政 ${civil}` : "",
-                      social ? `社政 ${social}` : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ");
-                    return (
-                      <div
-                        key={row.case_id}
-                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-start gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
-                      >
-                        <div className="min-w-0 space-y-1.5 pr-2">
-                          <p className="truncate font-medium">
-                            {row.village_seq != null ? `#${row.village_seq} ` : ""}
-                            {row.name || "（未填姓名）"}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {row.encoded_id || row.case_id}
-                          </p>
-                          <div className="space-y-1 rounded-md border border-dashed border-border/80 bg-muted/30 px-2 py-1.5">
-                            <StaffMetaRow label="訪查" value={visitorLine} />
-                            <StaffMetaRow label="建檔" value={keyedBy} />
-                            <StaffMetaRow
-                              label="稽核"
-                              value={auditors.length ? auditors.join("、") : ""}
-                            />
+            <div className="overflow-x-auto rounded-md border">
+              <div className="min-w-[36rem]">
+                <div className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <div>個案</div>
+                  {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
+                    <div key={outcome} className="text-center">
+                      {outcome}
+                    </div>
+                  ))}
+                </div>
+                <div className="max-h-[55vh] overflow-y-auto">
+                  {loadingCases ? (
+                    <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
+                  ) : filteredCases.length === 0 ? (
+                    <p className="px-3 py-6 text-sm text-muted-foreground">
+                      {contextWarning
+                        ? "無法載入未建檔名單。"
+                        : "此條件沒有未建檔個案（本平台已有關懷表者已排除）。"}
+                    </p>
+                  ) : (
+                    filteredCases.map((row) => {
+                      const current = outcomes[row.case_id] || "";
+                      const civil = row.civil_worker_name?.trim() || "";
+                      const social = row.social_worker_name?.trim() || "";
+                      const staffBits = [
+                        civil ? `民政 ${civil}` : "",
+                        social ? `社政 ${social}` : "",
+                      ].filter(Boolean);
+                      return (
+                        <div
+                          key={row.case_id}
+                          className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="truncate font-medium">
+                              {row.village_seq != null ? `#${row.village_seq} ` : ""}
+                              {row.name || "（未填姓名）"}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {row.encoded_id || row.case_id}
+                            </p>
+                            {staffBits.length > 0 && (
+                              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                {staffBits.join(" · ")}
+                              </p>
+                            )}
                           </div>
+                          {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
+                            const checked = current === outcome;
+                            return (
+                              <label
+                                key={outcome}
+                                className="flex cursor-pointer items-center justify-center py-1"
+                              >
+                                <input
+                                  type="radio"
+                                  className="h-4 w-4 accent-[hsl(var(--primary))]"
+                                  name={`outcome-${row.case_id}`}
+                                  checked={checked}
+                                  onChange={() => setOutcome(row.case_id, outcome)}
+                                  onClick={() => {
+                                    if (checked) setOutcome(row.case_id, "");
+                                  }}
+                                />
+                                <span className="sr-only">{outcome}</span>
+                              </label>
+                            );
+                          })}
                         </div>
-                        {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
-                          const checked = current === outcome;
-                          return (
-                            <label
-                              key={outcome}
-                              className="flex cursor-pointer items-center justify-center py-1"
-                            >
-                              <input
-                                type="radio"
-                                className="h-4 w-4 accent-[hsl(var(--primary))]"
-                                name={`outcome-${row.case_id}`}
-                                checked={checked}
-                                onChange={() => setOutcome(row.case_id, outcome)}
-                                onClick={() => {
-                                  if (checked) setOutcome(row.case_id, "");
-                                }}
-                              />
-                              <span className="sr-only">{outcome}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
 

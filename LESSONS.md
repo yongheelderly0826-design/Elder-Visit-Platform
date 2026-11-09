@@ -1,3 +1,11 @@
+## Lesson: MOHW progress desk uses horizontal civil/social self-select
+
+- **Trigger:** 訪查員要自己勾衛福部進度，並用下拉選民政／社政，操作需橫列而非只顯示垂直 meta 標籤。
+- **Cause:** 初版只有狀態 radio；人員靠派案推估唯讀顯示；visitor role 進 `/desk` 會被導走。
+- **Rule:** `/desk/mohw-progress` 頂部橫列「民政訪查員／社政訪查員」下拉（`visitors.list` slim＋`deskVisitorColumnSide`）；至少選一側才可送；寫入 report／marks 的 `civil_worker_*`／`social_worker_*`。維持 desk RBAC（`visits.submit`、非 visitor／desk_clerk）；訪員實務用承辦／示範帳或之後另開 visitor stub。
+- **Evidence:** `mohw-progress-panel.tsx`, `app/api/desk/mohw-progress/*`, `MohwProgressModule.gs`.
+- **Added on:** 2026-11-09
+
 ## Lesson: MOHW progress desk lists only unkeyed cases
 
 - **Trigger:** `/desk/mohw-progress` 被當成全里名單；使用者要 KEY 的是「本平台尚未建關懷表」的個案，已建檔者不必出現。訪查／建檔／稽核若用 11px muted 文字，容易以為欄位沒上線。

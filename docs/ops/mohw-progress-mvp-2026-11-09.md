@@ -12,10 +12,11 @@
 
 ## 試用
 
-1. 承辦登入 `/yonghe`（或示範 `manager@eldervisit.org`）
-2. 開啟 `/desk/mohw-progress`
-3. 選里 → 確認頂部「未建檔／名冊／已建檔排除」→ 在列上勾選「已完成／未遇／查無此人」→ 送出
-4. 每列個案名下方應見標籤列：訪查／建檔／稽核（未建檔列後兩者多為 —）
+1. 承辦／有 `visits.submit` 的 desk 帳號登入 `/yonghe`（或示範 `manager@eldervisit.org`）
+2. 開啟 `/desk/mohw-progress`（訪查員 role 目前會導向 `/visitor/home`，仍走 desk）
+3. 選里 → 橫列下拉選「民政訪查員」「社政訪查員」（訪查員主檔，依 civil/social 分欄）
+4. 確認「未建檔／名冊／已建檔排除」→ 橫列勾選「已完成／未遇／查無此人」→ 送出
+5. Sheets `MOHW進度回報`／`MOHW進度個案標記` 應寫入 `civil_worker_*`／`social_worker_*`
 
 ## Phase 2（未做）
 
