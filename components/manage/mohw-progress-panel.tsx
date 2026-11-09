@@ -180,8 +180,13 @@ export function MohwProgressPanel() {
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
   const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
   const selectedKeyedBy = allVisitors.find((item) => item.id === keyedById) ?? null;
-  /** 與 KEY 單相同：先里別、再訪員，才能看／勾個案 */
-  const canBrowseCases = Boolean(village && (selectedCivil || selectedSocial));
+  /** 選里別即可瀏覽／勾選個案；訪查員／建檔／稽核僅送出時必填 */
+  const canBrowseCases = Boolean(village);
+  const missingSubmitMeta = [
+    !selectedCivil && !selectedSocial ? "民政或社政訪查員" : "",
+    !selectedKeyedBy ? "建檔人員" : "",
+    auditSupervisors.length === 0 ? "稽核督導" : "",
+  ].filter(Boolean);
 
   function toggleAuditSupervisor(name: MohwProgressAuditSupervisor) {
     setAuditSupervisors((current) =>
@@ -379,7 +384,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="里別與民政／社政訪查員選好後，分「已KEY關懷表／已直KEY衛福部」兩頁籤確認；勾選狀態會匯總到各里進度儀表板。"
+        description="先選里別即可展開「已KEY關懷表／已直KEY衛福部」兩頁籤；送出前再補齊民政或社政、建檔與稽核。勾選狀態會匯總到各里進度儀表板。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -399,7 +404,7 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">1. 里別、訪查員、建檔與稽核</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            同一橫列：里別／民政／社政／建檔人員／稽核督導。選好後展開個案。
+            同一橫列：里別／民政／社政／建檔人員／稽核督導。選里別後即可看個案；訪查員等欄位於送出時必填。
           </p>
         </div>
         <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
@@ -517,7 +522,7 @@ export function MohwProgressPanel() {
 
         {!canBrowseCases ? (
           <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
-            請先選「里別」與民政／社政訪查員；建檔人員與稽核督導請一併勾選後再送出。
+            請先選擇「里別」，即可展開個案狀態與兩頁籤。
           </p>
         ) : (
           <>
@@ -544,7 +549,11 @@ export function MohwProgressPanel() {
               </p>
             )}
 
-            <div className="flex flex-wrap gap-1 border-b pb-2">
+            <div
+              role="tablist"
+              aria-label="個案狀態頁籤"
+              className="inline-flex w-full max-w-xl flex-wrap gap-1 rounded-full border bg-muted/40 p-1 sm:flex-nowrap"
+            >
               {(
                 [
                   ["direct", `已直KEY衛福部（${displayDirectCount}）`],
@@ -554,10 +563,12 @@ export function MohwProgressPanel() {
                 <button
                   key={key}
                   type="button"
-                  className={`rounded-md border px-3 py-1.5 text-sm ${
+                  role="tab"
+                  aria-selected={caseTab === key}
+                  className={`min-w-0 flex-1 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
                     caseTab === key
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "bg-background text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
                   }`}
                   onClick={() => {
                     setCaseTab(key);
@@ -749,6 +760,12 @@ export function MohwProgressPanel() {
                     placeholder="例如：已於衛福部平台完成 KEY"
                   />
                 </div>
+
+                {missingSubmitMeta.length > 0 && (
+                  <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    送出前請選{missingSubmitMeta.join("、")}。
+                  </p>
+                )}
 
                 <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
                   {busy
