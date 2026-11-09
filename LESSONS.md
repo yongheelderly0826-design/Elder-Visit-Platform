@@ -1,8 +1,16 @@
+## Lesson: TEMP desk_clerk can KEY MOHW progress like care-forms
+
+- **Trigger:** 臨時登打（TEMP）也要能直 KEY 衛福部進度回報，不能只限承辦。
+- **Cause:** 初版 page／API 明確 403／redirect `desk_clerk`；nav `allowedRoles` 未含 desk_clerk。
+- **Rule:** `desk_clerk` 可進 `/desk/mohw-progress`＋options／submit（需 `visits.submit`／已登入 TEMP）；nav 與關懷表並列；submit 時 `reported_by`／`keyed_by_*` 強制取 `demo_name`／`desk_clerk_id` cookie；範圍仍 `mode: all`；不重開稽核督導；拒訪維持第三狀態。
+- **Evidence:** `app/desk/mohw-progress/page.tsx`, `app/api/desk/mohw-progress/*`, `navigation.ts`, `mohw-progress-panel.tsx`.
+- **Added on:** 2026-11-09
+
 ## Lesson: MOHW progress desk uses horizontal civil/social self-select
 
 - **Trigger:** 訪查員要自己勾衛福部進度，並用下拉選民政／社政，操作需橫列而非只顯示垂直 meta 標籤。
 - **Cause:** 初版只有狀態 radio；人員靠派案推估唯讀顯示；visitor role 進 `/desk` 會被導走。
-- **Rule:** `/desk/mohw-progress` 頂部橫列「民政訪查員／社政訪查員」下拉（`visitors.list` slim＋`deskVisitorColumnSide`）；至少選一側才可送；寫入 report／marks 的 `civil_worker_*`／`social_worker_*`。維持 desk RBAC（`visits.submit`、非 visitor／desk_clerk）；訪員實務用承辦／示範帳或之後另開 visitor stub。
+- **Rule:** `/desk/mohw-progress` 頂部橫列「民政訪查員／社政訪查員」下拉（`visitors.list` slim＋`deskVisitorColumnSide`）；至少選一側才可送；寫入 report／marks 的 `civil_worker_*`／`social_worker_*`。desk RBAC：`visits.submit`、非 visitor；`desk_clerk` 亦可登打（見上則）。訪員實務用承辦／示範帳／TEMP 或之後另開 visitor stub。
 - **Evidence:** `mohw-progress-panel.tsx`, `app/api/desk/mohw-progress/*`, `MohwProgressModule.gs`.
 - **Added on:** 2026-11-09
 
@@ -265,7 +273,7 @@
 
 - **Trigger:** Need ~20 temp staff to KEY hundreds of paper care forms via `/yonghe`, then pay by piece and shut accounts when the campaign ends.
 - **Cause:** Old shared `DESK_SHARED_PASSCODE` logged everyone in as one identity, so piece-rate attribution was impossible.
-- **Rule:** Disable shared passcode. Issue `TEMP-01`…`TEMP-20` from 使用者→臨時登打（passcodes shown once). Role `desk_clerk` only sees 關懷表建檔. Each successful careform submit writes `紙本登打紀錄`; `counts_as_piece=1` except additional 未遇 papers for the same `case_id` count 0. Support manual disable + `valid_until` auto-block. Deploy GAS `DeskClerkModule` before using the UI. Keep logins split: `/yonghe` = manager Gmail only; `/temp-key` = TEMP clerks only (not under `/yonghe`, so temps do not open the manager page by mistake). Legacy `/yonghe/desk` redirects to `/temp-key`.
+- **Rule:** Disable shared passcode. Issue `TEMP-01`…`TEMP-20` from 使用者→臨時登打（passcodes shown once). Role `desk_clerk` sees 關懷表建檔與衛福部進度回報. Each successful careform submit writes `紙本登打紀錄`; `counts_as_piece=1` except additional 未遇 papers for the same `case_id` count 0. Support manual disable + `valid_until` auto-block. Deploy GAS `DeskClerkModule` before using the UI. Keep logins split: `/yonghe` = manager Gmail only; `/temp-key` = TEMP clerks only (not under `/yonghe`, so temps do not open the manager page by mistake). Legacy `/yonghe/desk` redirects to `/temp-key`.
 - **Evidence:** `gas/src/modules/DeskClerkModule.gs`, `lib/domain/desk-clerks.ts`, `app/api/auth/desk-clerk/route.ts`, `components/workspace/desk-clerks-panel.tsx`, `components/auth/manager-login-panel.tsx`, `components/auth/desk-clerk-login-panel.tsx`, `app/temp-key/page.tsx`.
 - **Added on:** 2026-10-27
 

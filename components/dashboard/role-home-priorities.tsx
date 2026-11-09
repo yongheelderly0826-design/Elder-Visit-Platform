@@ -183,6 +183,12 @@ const rolePriorities: Record<
         href: "/desk/care-forms",
         icon: FileText,
       },
+      {
+        title: "衛福部進度回報",
+        detail: "直 KEY 衛福部後勾選里別進度（已完成／未遇／拒訪）。",
+        href: "/desk/mohw-progress",
+        icon: ClipboardCheck,
+      },
     ],
   },
 };

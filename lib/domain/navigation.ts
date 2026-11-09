@@ -197,7 +197,7 @@ export const navItems: NavItem[] = [
     href: "/desk/mohw-progress",
     icon: ClipboardCheck,
     requiredCapabilities: ["visits.submit"],
-    allowedRoles: ["workspace_owner", "workspace_manager"],
+    allowedRoles: ["workspace_owner", "workspace_manager", "desk_clerk"],
     group: "operations",
   },
   {
@@ -359,7 +359,7 @@ export function getVisibleNavItems(
     if (roleKey === "visitor" && !item.allowedRoles?.includes("visitor")) {
       return false;
     }
-    // 臨時登打：僅顯示明確允許的關懷表建檔
+    // 臨時登打：僅顯示明確允許的項目（關懷表建檔、衛福部進度回報）
     if (roleKey === "desk_clerk") {
       if (!item.allowedRoles?.includes("desk_clerk")) return false;
     }

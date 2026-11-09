@@ -76,21 +76,14 @@ export async function GET(request: NextRequest) {
   if (forbidden) return forbidden;
 
   const roleKey = getRoleKey(request);
-  if (roleKey === "desk_clerk") {
-    return NextResponse.json(
-      {
-        error: {
-          code: "FORBIDDEN",
-          message: "臨時登打帳號暫不開放衛福部進度回報。",
-        },
-      },
-      { status: 403 },
-    );
-  }
 
   try {
     const manager = decodeManagerSession(request.cookies.get(SESSION_COOKIE)?.value);
-    const email = manager?.email || String(request.cookies.get("demo_email")?.value || "");
+    const clerkId = String(request.cookies.get("desk_clerk_id")?.value || "").trim();
+    const email =
+      manager?.email ||
+      String(request.cookies.get("demo_email")?.value || "").trim() ||
+      (roleKey === "desk_clerk" ? clerkId : "");
     const name =
       manager?.name ||
       String(request.cookies.get("demo_name")?.value || "").trim() ||

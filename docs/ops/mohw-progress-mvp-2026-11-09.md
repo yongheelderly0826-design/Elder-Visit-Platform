@@ -26,8 +26,8 @@
 
 ## 試用
 
-1. 承辦／有 `visits.submit` 的 desk 帳號登入 `/yonghe`（或示範 `manager@eldervisit.org`）
-2. 開啟 `/desk/mohw-progress`
-3. 選里 → 橫列下拉選「民政訪查員」「社政訪查員」
-4. 預設「已直KEY衛福部」頁籤勾狀態 → 送出
-5. 開啟 `/manager/mohw-progress` 看各里完成率
+1. 承辦：有 `visits.submit` 的帳號登入 `/yonghe`（或示範 `manager@eldervisit.org`）；或臨時登打：`/temp-key` 以 `TEMP-xx` 通關後填中文姓名
+2. 開啟 `/desk/mohw-progress`（TEMP 側欄也有「衛福部進度回報」）
+3. 選里 → 橫列下拉選「民政訪查員」「社政訪查員」（TEMP 建檔人員自動帶登打帳號）
+4. 預設「已直KEY衛福部」頁籤勾已完成／未遇／拒訪 → 送出
+5. 開啟 `/manager/mohw-progress` 看各里完成率（僅承辦）

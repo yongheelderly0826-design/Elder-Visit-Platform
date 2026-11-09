@@ -76,6 +76,9 @@ export function MohwProgressPanel() {
   const [civilVisitorId, setCivilVisitorId] = useState("");
   const [socialVisitorId, setSocialVisitorId] = useState("");
   const [keyedById, setKeyedById] = useState("");
+  const [deskClerk, setDeskClerk] = useState<{ id: string; name: string; label: string } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingCases, setLoadingCases] = useState(false);
@@ -85,6 +88,25 @@ export function MohwProgressPanel() {
   const [rosterTotal, setRosterTotal] = useState<number | null>(null);
   const [keyedCount, setKeyedCount] = useState<number | null>(null);
   const [directCount, setDirectCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const cookies = Object.fromEntries(
+      document.cookie.split(";").map((part) => {
+        const [key, ...rest] = part.trim().split("=");
+        return [key, decodeURIComponent(rest.join("=") || "")];
+      }),
+    );
+    if (String(cookies.demo_role || "").trim() !== "desk_clerk") return;
+    const clerkId = String(cookies.desk_clerk_id || "").trim();
+    if (!clerkId) return;
+    const name = String(cookies.demo_name || "").trim();
+    setDeskClerk({
+      id: clerkId,
+      name: name || clerkId,
+      label: name && name !== clerkId ? `${clerkId}／${name}` : clerkId,
+    });
+  }, []);
 
   async function loadOptions(selectedVillage?: string) {
     if (selectedVillage) setLoadingCases(true);
@@ -170,7 +192,9 @@ export function MohwProgressPanel() {
 
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
   const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
-  const selectedKeyedBy = allVisitors.find((item) => item.id === keyedById) ?? null;
+  const selectedKeyedBy = deskClerk
+    ? { id: deskClerk.id, name: deskClerk.name }
+    : allVisitors.find((item) => item.id === keyedById) ?? null;
   /** 選里別即可瀏覽／勾選個案；訪查員／建檔僅送出時必填 */
   const canBrowseCases = Boolean(village);
   const missingSubmitMeta = [
@@ -376,6 +400,12 @@ export function MohwProgressPanel() {
         </div>
       </div>
 
+      {deskClerk ? (
+        <p className="rounded-md border bg-secondary/60 px-3 py-2 text-sm text-muted-foreground">
+          登打帳號 <span className="font-semibold text-foreground">{deskClerk.label}</span>
+        </p>
+      ) : null}
+
       <section className="rounded-lg border bg-card p-4 space-y-3">
         <div>
           <h2 className="font-semibold">1. 里別、訪查員與建檔</h2>
@@ -444,19 +474,25 @@ export function MohwProgressPanel() {
             </div>
             <div className="min-w-[8.5rem] flex-1">
               <label className="text-xs font-medium text-muted-foreground">建檔人員</label>
-              <select
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={keyedById}
-                onChange={(event) => setKeyedById(event.target.value)}
-                disabled={busy || loading || !village}
-              >
-                <option value="">{village ? "請選擇建檔人員" : "請先選里別"}</option>
-                {allVisitors.map((visitor) => (
-                  <option key={visitor.id} value={visitor.id}>
-                    {visitorLabel(visitor)}
-                  </option>
-                ))}
-              </select>
+              {deskClerk ? (
+                <p className="mt-1 rounded-md border bg-secondary/50 px-3 py-2 text-sm">
+                  {deskClerk.label}
+                </p>
+              ) : (
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={keyedById}
+                  onChange={(event) => setKeyedById(event.target.value)}
+                  disabled={busy || loading || !village}
+                >
+                  <option value="">{village ? "請選擇建檔人員" : "請先選里別"}</option>
+                  {allVisitors.map((visitor) => (
+                    <option key={visitor.id} value={visitor.id}>
+                      {visitorLabel(visitor)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           {options?.scope?.label && (

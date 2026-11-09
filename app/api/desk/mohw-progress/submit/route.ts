@@ -23,17 +23,6 @@ export async function POST(request: NextRequest) {
   if (forbidden) return forbidden;
 
   const roleKey = getRoleKey(request);
-  if (roleKey === "desk_clerk") {
-    return NextResponse.json(
-      {
-        error: {
-          code: "FORBIDDEN",
-          message: "臨時登打帳號暫不開放衛福部進度回報。",
-        },
-      },
-      { status: 403 },
-    );
-  }
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -46,10 +35,15 @@ export async function POST(request: NextRequest) {
     }
 
     const manager = decodeManagerSession(request.cookies.get(SESSION_COOKIE)?.value);
-    const email = manager?.email || String(request.cookies.get("demo_email")?.value || "");
+    const clerkId = String(request.cookies.get("desk_clerk_id")?.value || "").trim();
+    const clerkName = String(request.cookies.get("demo_name")?.value || "").trim();
+    const email =
+      manager?.email ||
+      String(request.cookies.get("demo_email")?.value || "").trim() ||
+      (roleKey === "desk_clerk" ? clerkId : "");
     const name =
       manager?.name ||
-      String(request.cookies.get("demo_name")?.value || "").trim() ||
+      clerkName ||
       email;
 
     const adminRows = await gasClient.villageAdmins
@@ -115,8 +109,15 @@ export async function POST(request: NextRequest) {
     const socialWorkerName = String(
       body.socialWorkerName || body.social_worker_name || "",
     ).trim();
-    const keyedById = String(body.keyedById || body.keyed_by_id || "").trim();
-    const keyedByName = String(body.keyedByName || body.keyed_by_name || "").trim();
+    // 臨時登打：建檔／回報人強制取 cookie（同關懷表），不採前端訪客下拉
+    const keyedById =
+      roleKey === "desk_clerk" && clerkId
+        ? clerkId
+        : String(body.keyedById || body.keyed_by_id || "").trim();
+    const keyedByName =
+      roleKey === "desk_clerk" && (clerkName || clerkId)
+        ? clerkName || clerkId
+        : String(body.keyedByName || body.keyed_by_name || "").trim();
     if (!civilWorkerName && !socialWorkerName) {
       return NextResponse.json(
         {
@@ -130,7 +131,12 @@ export async function POST(request: NextRequest) {
     }
     if (!keyedByName) {
       return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "請選擇建檔人員。" } },
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: roleKey === "desk_clerk" ? "登打帳號姓名未設定。" : "請選擇建檔人員。",
+          },
+        },
         { status: 400 },
       );
     }
