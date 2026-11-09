@@ -11,7 +11,48 @@ export type MohwProgressCaseRow = {
   village_seq: number | null;
   name: string;
   outcome: MohwProgressOutcome | "";
+  /** 民政訪查人員 */
+  civil_worker_name: string;
+  /** 社政訪查人員 */
+  social_worker_name: string;
+  /** 建檔／紙本登打人員 */
+  keyed_by_name: string;
+  /** 稽核督導（通過或已決策的 reviewer） */
+  audit_supervisors: string[];
 };
+
+export function emptyMohwProgressCaseMeta(): Pick<
+  MohwProgressCaseRow,
+  "civil_worker_name" | "social_worker_name" | "keyed_by_name" | "audit_supervisors"
+> {
+  return {
+    civil_worker_name: "",
+    social_worker_name: "",
+    keyed_by_name: "",
+    audit_supervisors: [],
+  };
+}
+
+export function mapMohwProgressCaseContext(
+  raw: Record<string, unknown> | null | undefined,
+): Pick<
+  MohwProgressCaseRow,
+  "civil_worker_name" | "social_worker_name" | "keyed_by_name" | "audit_supervisors"
+> {
+  if (!raw) return emptyMohwProgressCaseMeta();
+  const supervisors = Array.isArray(raw.audit_supervisors)
+    ? raw.audit_supervisors.map((item) => String(item || "").trim()).filter(Boolean)
+    : String(raw.audit_supervisors || "")
+        .split(/[,，、;/｜|]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+  return {
+    civil_worker_name: String(raw.civil_worker_name || "").trim(),
+    social_worker_name: String(raw.social_worker_name || "").trim(),
+    keyed_by_name: String(raw.keyed_by_name || "").trim(),
+    audit_supervisors: [...new Set(supervisors)],
+  };
+}
 
 export function isMohwProgressOutcome(value: string): value is MohwProgressOutcome {
   return (MOHW_PROGRESS_OUTCOMES as readonly string[]).includes(value);

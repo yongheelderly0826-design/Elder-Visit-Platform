@@ -101,7 +101,17 @@ export function MohwProgressPanel() {
       if (filter === "unset" && current) return false;
       if (filter !== "all" && filter !== "unset" && current !== filter) return false;
       if (!q) return true;
-      const hay = `${row.village_seq ?? ""} ${row.name} ${row.encoded_id}`.toLowerCase();
+      const hay = [
+        row.village_seq ?? "",
+        row.name,
+        row.encoded_id,
+        row.civil_worker_name,
+        row.social_worker_name,
+        row.keyed_by_name,
+        ...(row.audit_supervisors ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
       return hay.includes(q);
     });
   }, [cases, outcomes, filter, query]);
@@ -324,10 +334,22 @@ export function MohwProgressPanel() {
                 ) : (
                   filteredCases.map((row) => {
                     const current = outcomes[row.case_id] || "";
+                    const civil = row.civil_worker_name?.trim() || "";
+                    const social = row.social_worker_name?.trim() || "";
+                    const keyedBy = row.keyed_by_name?.trim() || "";
+                    const auditors = (row.audit_supervisors ?? [])
+                      .map((item) => item.trim())
+                      .filter(Boolean);
+                    const visitorLine = [
+                      civil ? `民政 ${civil}` : "",
+                      social ? `社政 ${social}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
                     return (
                       <div
                         key={row.case_id}
-                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-center gap-0 border-b px-3 py-2 text-sm last:border-b-0"
+                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-start gap-0 border-b px-3 py-2 text-sm last:border-b-0"
                       >
                         <div className="min-w-0 pr-2">
                           <p className="truncate font-medium">
@@ -336,6 +358,14 @@ export function MohwProgressPanel() {
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {row.encoded_id || row.case_id}
+                          </p>
+                          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                            訪查 {visitorLine || "—"}
+                          </p>
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            建檔 {keyedBy || "—"}
+                            <span className="mx-1 text-muted-foreground/60">·</span>
+                            稽核 {auditors.length ? auditors.join("、") : "—"}
                           </p>
                         </div>
                         {MOHW_PROGRESS_OUTCOMES.map((outcome) => {

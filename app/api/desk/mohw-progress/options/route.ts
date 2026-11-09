@@ -4,7 +4,10 @@ import { getRoleKey, requireManagerCapability } from "@/lib/api/authorization";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import {
+  emptyMohwProgressCaseMeta,
   isMohwProgressOutcome,
+  mapMohwProgressCaseContext,
+  type MohwProgressCaseRow,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
 import {
@@ -92,13 +95,7 @@ export async function GET(request: NextRequest) {
         : sortYongheVillagesByCode(allVillages.filter((name) => allowed.includes(name)));
 
     let rosterTotal: number | null = null;
-    let cases: Array<{
-      case_id: string;
-      encoded_id: string;
-      village_seq: number | null;
-      name: string;
-      outcome: MohwProgressOutcome | "";
-    }> = [];
+    let cases: MohwProgressCaseRow[] = [];
 
     if (villageParam) {
       if (allowed && !allowed.includes(villageParam)) {
@@ -107,17 +104,21 @@ export async function GET(request: NextRequest) {
           { status: 403 },
         );
       }
-      const caseRows = sortCases(
-        (await gasClient.cases.list({
+      const [rawCaseRows, marks, contextPayload] = await Promise.all([
+        gasClient.cases.list({
           district: "永和區",
           visit_village: villageParam,
-        })) as Record<string, unknown>[],
-      );
+        }) as Promise<Record<string, unknown>[]>,
+        gasClient.mohwProgress
+          .listMarks({ village_name: villageParam })
+          .catch(() => [] as Record<string, unknown>[]),
+        gasClient.mohwProgress
+          .listCaseContext({ village_name: villageParam })
+          .catch(() => ({ items: [] as Record<string, unknown>[] })),
+      ]);
+      const caseRows = sortCases(rawCaseRows);
       rosterTotal = caseRows.length;
 
-      const marks = await gasClient.mohwProgress
-        .listMarks({ village_name: villageParam })
-        .catch(() => [] as Record<string, unknown>[]);
       const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
       for (const mark of marks) {
         const outcome = String(mark.outcome || "");
@@ -126,15 +127,27 @@ export async function GET(request: NextRequest) {
         if (caseId) outcomeByCaseId.set(caseId, outcome);
       }
 
+      const contextByCaseId = new Map<
+        string,
+        ReturnType<typeof mapMohwProgressCaseContext>
+      >();
+      for (const item of contextPayload.items ?? []) {
+        const caseId = String(item.case_id || "").trim();
+        if (!caseId) continue;
+        contextByCaseId.set(caseId, mapMohwProgressCaseContext(item));
+      }
+
       cases = caseRows.map((row) => {
         const caseId = String(row.case_id || "");
         const seqRaw = Number(row.village_seq);
+        const meta = contextByCaseId.get(caseId) ?? emptyMohwProgressCaseMeta();
         return {
           case_id: caseId,
           encoded_id: String(row.encoded_id || ""),
           village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
           name: String(row.name || row.elder_name || ""),
           outcome: outcomeByCaseId.get(caseId) || "",
+          ...meta,
         };
       });
     }

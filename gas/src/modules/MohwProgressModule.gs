@@ -453,6 +453,204 @@ var MohwProgressModule = (function () {
     return rows;
   }
 
+  function parseAnswers_(careform) {
+    if (!careform || !careform.answers_json) return {};
+    try {
+      return typeof careform.answers_json === 'string'
+        ? JSON.parse(careform.answers_json)
+        : careform.answers_json;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function noteLabel_(segment) {
+    var text = String(segment || '').trim();
+    if (!text) return { id: '', name: '' };
+    var parts = text.split(':');
+    if (parts.length >= 2) {
+      return {
+        id: String(parts[0] || '').trim(),
+        name: String(parts.slice(1).join(':') || '').trim(),
+      };
+    }
+    return { id: text, name: '' };
+  }
+
+  function visitorSide_(visitor) {
+    var group = String((visitor && (visitor.volunteer_group || visitor.worker_group)) || '')
+      .trim()
+      .toLowerCase();
+    if (group.indexOf('social') !== -1 || group.indexOf('社政') !== -1) return 'social';
+    if (group.indexOf('civil') !== -1 || group.indexOf('民政') !== -1) return 'civil';
+    var id = String((visitor && visitor.visitor_id) || '').toUpperCase();
+    if (id.indexOf('-SOC-') !== -1) return 'social';
+    if (id.indexOf('-CIV-') !== -1) return 'civil';
+    return 'civil';
+  }
+
+  function applyAssignmentFallback_(index, caseId, civil, social) {
+    var nextCivil = civil;
+    var nextSocial = social;
+    var assignments = index.assignmentsByCase[String(caseId || '').trim()] || [];
+    if (!assignments.length) {
+      return { civil: nextCivil, social: nextSocial };
+    }
+    var assignment = assignments[assignments.length - 1];
+    var notes = String(assignment.notes || '');
+    var primaryMatch = notes.match(/主填:([^｜|]+)/);
+    var companionMatch = notes.match(/同行:([^｜|]+)/);
+    var sideMatch = notes.match(/主填側:(民政|社政)/);
+    var primary = noteLabel_(primaryMatch && primaryMatch[1]);
+    var companions = companionMatch
+      ? companionMatch[1].split(',').map(function (part) {
+          return noteLabel_(part);
+        })
+      : [];
+    var primarySide =
+      sideMatch && sideMatch[1] === '社政'
+        ? 'social'
+        : sideMatch && sideMatch[1] === '民政'
+          ? 'civil'
+          : null;
+
+    function putName(side, name) {
+      var label = String(name || '').trim();
+      if (!label) return;
+      if (side === 'social' && !nextSocial) nextSocial = label;
+      if (side === 'civil' && !nextCivil) nextCivil = label;
+    }
+
+    if (primary.id || primary.name) {
+      var primaryVisitor = (index.visitorById && index.visitorById[primary.id]) || {};
+      var primaryName = primary.name || String(primaryVisitor.name || '').trim() || primary.id;
+      var side =
+        primarySide ||
+        visitorSide_({
+          visitor_id: primary.id || primaryVisitor.visitor_id,
+          volunteer_group: primaryVisitor.volunteer_group,
+        });
+      putName(side, primaryName);
+    }
+
+    companions.forEach(function (item) {
+      if (!item.id && !item.name) return;
+      var companion = (index.visitorById && index.visitorById[item.id]) || {};
+      var companionName = item.name || String(companion.name || '').trim() || item.id;
+      var companionSide = visitorSide_({
+        visitor_id: item.id || companion.visitor_id,
+        volunteer_group: companion.volunteer_group,
+      });
+      putName(companionSide, companionName);
+    });
+
+    if ((!nextCivil || !nextSocial) && assignment.visitor_id) {
+      var visitorId = String(assignment.visitor_id || '').trim();
+      var visitor = (index.visitorById && index.visitorById[visitorId]) || {};
+      var visitorName = String(visitor.name || '').trim();
+      if (visitorName) {
+        putName(
+          visitorSide_({
+            visitor_id: visitorId,
+            volunteer_group: visitor.volunteer_group,
+          }),
+          visitorName
+        );
+      }
+    }
+
+    return { civil: nextCivil, social: nextSocial };
+  }
+
+  function collectAuditSupervisors_(index, careformId) {
+    var rows = (index.auditsByCareform && index.auditsByCareform[String(careformId || '').trim()]) || [];
+    if (!rows.length) return [];
+    var approved = [];
+    var decided = [];
+    rows.forEach(function (row) {
+      var reviewer = String(row.reviewer || '').trim();
+      if (!reviewer) return;
+      var decision = String(row.decision || '').trim();
+      if (decision === '通過') approved.push(reviewer);
+      else if (decision) decided.push(reviewer);
+    });
+    var source = approved.length ? approved : decided;
+    var seen = {};
+    var out = [];
+    source.forEach(function (name) {
+      if (seen[name]) return;
+      seen[name] = true;
+      out.push(name);
+    });
+    return out;
+  }
+
+  function latestKeyedBy_(logsByCase, caseId) {
+    var rows = logsByCase[String(caseId || '').trim()] || [];
+    if (!rows.length) return '';
+    var best = rows[0];
+    for (var i = 1; i < rows.length; i++) {
+      var at = String(rows[i].keyed_at || rows[i].created_at || '');
+      var bestAt = String(best.keyed_at || best.created_at || '');
+      if (at > bestAt) best = rows[i];
+    }
+    return String(best.display_name || best.clerk_id || '').trim();
+  }
+
+  /**
+   * 里別個案補充欄：訪查人員（民政／社政）、建檔人員、稽核督導。
+   * MOHW 直 KEY 無本地關懷表時回空白。
+   */
+  function listCaseContext(params) {
+    params = params || {};
+    var village = String(params.village_name || '').trim();
+    if (!village) throw error_('VALIDATION_ERROR', 'village_name 必填');
+
+    var index = VisitRecordIndex.build();
+    var logs = SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.DESK_KEY_LOGS));
+    var logsByCase = {};
+    logs.forEach(function (row) {
+      var caseId = String(row.case_id || '').trim();
+      if (!caseId) return;
+      if (!logsByCase[caseId]) logsByCase[caseId] = [];
+      logsByCase[caseId].push(row);
+    });
+
+    var items = [];
+    index.cases.forEach(function (caseRow) {
+      if (String(caseRow.visit_village || '').trim() !== village) return;
+      var caseId = String(caseRow.case_id || '').trim();
+      if (!caseId) return;
+
+      var civil = '';
+      var social = '';
+      var auditSupervisors = [];
+      var careform = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
+      if (careform) {
+        var answers = parseAnswers_(careform);
+        civil = String(answers.civil_worker_name || '').trim();
+        social = String(answers.social_worker_name || '').trim();
+        auditSupervisors = collectAuditSupervisors_(index, careform.careform_id);
+      }
+
+      if (!civil || !social) {
+        var fallback = applyAssignmentFallback_(index, caseId, civil, social);
+        civil = fallback.civil;
+        social = fallback.social;
+      }
+
+      items.push({
+        case_id: caseId,
+        civil_worker_name: civil,
+        social_worker_name: social,
+        keyed_by_name: latestKeyedBy_(logsByCase, caseId),
+        audit_supervisors: auditSupervisors,
+      });
+    });
+
+    return { village_name: village, items: items };
+  }
+
   function summary(params) {
     params = params || {};
     ensureSchema_();
@@ -556,6 +754,7 @@ var MohwProgressModule = (function () {
     submit: submit,
     list: list,
     listMarks: listMarks,
+    listCaseContext: listCaseContext,
     summary: summary,
     ensureSchema: ensureSchema_,
   };
