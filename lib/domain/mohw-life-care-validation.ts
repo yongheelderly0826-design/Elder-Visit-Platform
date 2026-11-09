@@ -58,6 +58,7 @@ export type MohwValidationError = {
     | "VISIT_DURATION_MIN"
     | "STATUS_MISSED_CONFLICT"
     | "HELP_SOURCES_HAS_WHEN_NONE"
+    | "HELP_SOURCES_NONE_WHEN_HAS"
     | "INVALID_LIVING_CITY";
   message: string;
   /** Manager / export message with Excel cell: `I3 身分證號碼格式不正確` */

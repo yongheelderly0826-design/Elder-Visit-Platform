@@ -21,6 +21,7 @@ export type MohwSubmitGuardIssue = {
     | "VISIT_DURATION_MIN"
     | "STATUS_MISSED_CONFLICT"
     | "HELP_SOURCES_HAS_WHEN_NONE"
+    | "HELP_SOURCES_NONE_WHEN_HAS"
     | "INVALID_LIVING_CITY";
   message: string;
 };
@@ -48,6 +49,9 @@ const LIVING_DETAIL_KEYS = [
 ] as const;
 
 function hasVal(v: unknown): boolean {
+  if (Array.isArray(v)) {
+    return v.some((item) => String(item ?? "").trim() !== "");
+  }
   return String(v ?? "").trim() !== "";
 }
 
@@ -229,12 +233,37 @@ export function collectMohwSubmitGuardIssues(
   }
 
   const helpFlag = String(answers.help_sources_flag ?? "").trim();
-  if (helpFlag === "無" && hasVal(answers.help_sources_has)) {
-    issues.push({
-      key: "help_sources_has",
-      code: "HELP_SOURCES_HAS_WHEN_NONE",
-      message: "求助對象選「無」時，「求助對象-有的複選選項」應留空",
-    });
+  if (helpFlag === "無") {
+    if (hasVal(answers.help_sources_has)) {
+      issues.push({
+        key: "help_sources_has",
+        code: "HELP_SOURCES_HAS_WHEN_NONE",
+        message: "求助對象選「無」時，「求助對象-有的複選選項」應留空",
+      });
+    }
+    if (hasVal(answers.help_sources_has_other)) {
+      issues.push({
+        key: "help_sources_has_other",
+        code: "HELP_SOURCES_HAS_WHEN_NONE",
+        message: "求助對象選「無」時，「求助對象有-其他說明」應留空",
+      });
+    }
+  }
+  if (helpFlag === "有") {
+    if (hasVal(answers.help_sources_none)) {
+      issues.push({
+        key: "help_sources_none",
+        code: "HELP_SOURCES_NONE_WHEN_HAS",
+        message: "求助對象選「有」時，「求助對象-無的複選選項」應留空",
+      });
+    }
+    if (hasVal(answers.help_sources_none_other)) {
+      issues.push({
+        key: "help_sources_none_other",
+        code: "HELP_SOURCES_NONE_WHEN_HAS",
+        message: "求助對象選「有」時，「求助對象無-其他說明」應留空",
+      });
+    }
   }
 
   const livingCity = String(answers.living_city ?? "").trim();

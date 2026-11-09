@@ -1,3 +1,11 @@
+## Lesson: help_sources 有／無 must clear opposite side on flag change
+
+- **Trigger:** 關懷表「求助對象」選無時，右側只應出現無側複選；若先前選過有側，殘值仍可能留在 answers 並進匯出／衛福部檢核。
+- **Cause:** UI `showWhen` 已隱藏對側，但切換 `help_sources_flag` 未即時清空；驗證原先只擋「無＋has」未對稱擋「有＋none」。
+- **Rule:** 切旗標時呼叫 `normalizeMohwHelpSourcesExclusive`（同 `pruneCohabitantAnswersIfAlone` 模式）；送出／options normalize／GAS `applySubmitGuards_` 亦清對側；`collectMohwSubmitGuardIssues` 雙向擋殘值。
+- **Evidence:** `visit-dialogue-form.tsx`, `mohw-submit-guard-rules.ts`, `mohw-life-care-options.ts`, `MohwLifeCareValidator.gs`, `CareFormModule.gs`.
+- **Added on:** 2026-11-09
+
 ## Lesson: Category-5 quality gaps are formal submit guards
 
 - **Trigger:** 資料品質清完後，短訪（1 分）、08–20 外時段、未遇／拒訪仍殘同住欄、住址不詳仍殘居住地址、已完成卻含「訪視未遇」戳仍可能再寫入。

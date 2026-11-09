@@ -1,5 +1,6 @@
 import { MOHW_LIFE_CARE_COLUMNS } from "@/lib/domain/mohw-life-care-form";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import { normalizeMohwHelpSourcesExclusive } from "@/lib/domain/mohw-submit-guard-rules";
 
 /**
  * Official allowed-value helpers for MOHW 生活關懷表.
@@ -158,7 +159,9 @@ export function pruneCohabitantAnswersIfAlone(
 }
 
 export function normalizeMohwAnswersOptions(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
-  const next: MohwLifeCareAnswers = { ...pruneCohabitantAnswersIfAlone(answers) };
+  const next: MohwLifeCareAnswers = {
+    ...normalizeMohwHelpSourcesExclusive(pruneCohabitantAnswersIfAlone(answers)),
+  };
 
   for (const column of MOHW_LIFE_CARE_COLUMNS) {
     const raw = next[column.key];

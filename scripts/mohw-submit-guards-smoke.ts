@@ -88,4 +88,41 @@ import {
 assert.deepEqual(deskSuccessDurationOptions([1, 5, 10]), [5, 10]);
 assert.equal(MIN_SUCCESS_DURATION_MINUTES, 5);
 
+// 求助對象有／無互斥：正規化清對側；驗證擋殘值
+{
+  const clearedHas = normalizeMohwQualityGuards({
+    help_sources_flag: "無",
+    help_sources_none: "沒發生過",
+    help_sources_has: "家人",
+    help_sources_has_other: "親戚",
+  });
+  assert.equal(clearedHas.help_sources_has, "");
+  assert.equal(clearedHas.help_sources_has_other, "");
+  assert.equal(clearedHas.help_sources_none, "沒發生過");
+
+  const clearedNone = normalizeMohwQualityGuards({
+    help_sources_flag: "有",
+    help_sources_has: "家人",
+    help_sources_none: "沒發生過",
+    help_sources_none_other: "自己處理",
+  });
+  assert.equal(clearedNone.help_sources_none, "");
+  assert.equal(clearedNone.help_sources_none_other, "");
+  assert.equal(clearedNone.help_sources_has, "家人");
+
+  const hasWhenNone = collectMohwSubmitGuardIssues({
+    help_sources_flag: "無",
+    help_sources_has: "家人",
+    help_sources_has_other: "親戚",
+  });
+  assert.ok(hasWhenNone.some((i) => i.code === "HELP_SOURCES_HAS_WHEN_NONE"));
+
+  const noneWhenHas = collectMohwSubmitGuardIssues({
+    help_sources_flag: "有",
+    help_sources_none: "沒發生過",
+    help_sources_none_other: "自己處理",
+  });
+  assert.ok(noneWhenHas.some((i) => i.code === "HELP_SOURCES_NONE_WHEN_HAS"));
+}
+
 console.log("mohw-submit-guards-smoke: ok");

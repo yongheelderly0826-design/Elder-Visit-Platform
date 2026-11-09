@@ -60,6 +60,7 @@ import { applyMohwSubmitGuards } from "@/lib/domain/mohw-submit-guards";
 import {
   deskSuccessDurationOptions,
   MIN_SUCCESS_DURATION_MINUTES,
+  normalizeMohwHelpSourcesExclusive,
 } from "@/lib/domain/mohw-submit-guard-rules";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
@@ -1663,6 +1664,10 @@ export function VisitDialogueForm({
                               field.key === "cohabitation_status"
                             ) {
                               next = pruneCohabitantAnswersIfAlone(next);
+                            }
+                            // 求助對象有／無互斥：切換旗標時清掉另一側複選與說明
+                            if (field.key === "help_sources_flag") {
+                              next = normalizeMohwHelpSourcesExclusive(next);
                             }
                             // 電話欄一律走補前導 0，避免只改畫面、answers 仍缺 0
                             if (

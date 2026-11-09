@@ -240,8 +240,21 @@ var MohwLifeCareValidator = (function () {
     }
     if (visitStatus !== '拒絕訪視' && visitStatus !== '查無此人' &&
         visitStatus !== '無法溝通' && visitStatus !== '住址不詳') {
-      if (asString(answers.help_sources_flag) === '無' && hasValue(answers.help_sources_has)) {
-        pushErr(errors, 'help_sources_has', row, '求助對象選「無」時，「求助對象-有的複選選項」應留空');
+      if (asString(answers.help_sources_flag) === '無') {
+        if (hasValue(answers.help_sources_has)) {
+          pushErr(errors, 'help_sources_has', row, '求助對象選「無」時，「求助對象-有的複選選項」應留空');
+        }
+        if (hasValue(answers.help_sources_has_other)) {
+          pushErr(errors, 'help_sources_has_other', row, '求助對象選「無」時，「求助對象有-其他說明」應留空');
+        }
+      }
+      if (asString(answers.help_sources_flag) === '有') {
+        if (hasValue(answers.help_sources_none)) {
+          pushErr(errors, 'help_sources_none', row, '求助對象選「有」時，「求助對象-無的複選選項」應留空');
+        }
+        if (hasValue(answers.help_sources_none_other)) {
+          pushErr(errors, 'help_sources_none_other', row, '求助對象選「有」時，「求助對象無-其他說明」應留空');
+        }
       }
     }
     if (asString(answers.living_city) === '彰化市') {
