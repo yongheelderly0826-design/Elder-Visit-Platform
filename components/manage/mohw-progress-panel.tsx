@@ -292,7 +292,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="順序與關懷表 KEY 單相同：先選里別 → 再選訪查員 → 才看個案列表（依紙本里編號排序）。僅未建檔個案。"
+        description="里別與民政／社政訪查員同一橫列選好後，再勾個案狀態（依紙本里編號排序）。僅未建檔個案。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -301,7 +301,7 @@ export function MohwProgressPanel() {
           <div>
             <p className="font-medium">未建檔名單才在這裡 KEY</p>
             <p className="mt-1 text-amber-900/90">
-              操作順序：1 里別 → 2 民政／社政訪查員 → 3 個案狀態。已有本平台關懷表（已提交／已稽核）不會出現。
+              上方橫列先選里別與民政／社政訪查員，再勾個案狀態。已有本平台關懷表（已提交／已稽核）不會出現。
             </p>
           </div>
         </div>
@@ -309,91 +309,78 @@ export function MohwProgressPanel() {
 
       <section className="rounded-lg border bg-card p-4 space-y-3">
         <div>
-          <h2 className="font-semibold">1. 里別</h2>
-          <p className="mt-1 text-sm text-muted-foreground">先選責任里，再選訪查員。</p>
+          <h2 className="font-semibold">1. 里別與訪查員</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            里別、民政、社政同一橫列；選好里與至少一位訪查員後展開個案。
+          </p>
         </div>
-        <div>
-          <label className="text-sm font-medium">里別</label>
-          <select
-            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-            value={village}
-            disabled={loading}
-            onChange={(event) => {
-              setVillage(event.target.value);
-              setCivilVisitorId("");
-              setSocialVisitorId("");
-              setFilter("all");
-              setQuery("");
-              setMessage(null);
-            }}
-          >
-            <option value="">{loading ? "載入中…" : "請選擇里別"}</option>
-            {villages.map((name) => (
-              <option key={name} value={name}>
-                {formatYongheVillageSelectLabel(name, villageCodeByName[name])}
-              </option>
-            ))}
-          </select>
+        <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
+          <div className="flex min-w-[36rem] flex-row flex-wrap items-end gap-3 lg:flex-nowrap">
+            <div className="min-w-[9rem] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">里別</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={village}
+                disabled={loading}
+                onChange={(event) => {
+                  setVillage(event.target.value);
+                  setCivilVisitorId("");
+                  setSocialVisitorId("");
+                  setFilter("all");
+                  setQuery("");
+                  setMessage(null);
+                }}
+              >
+                <option value="">{loading ? "載入中…" : "請選擇里別"}</option>
+                {villages.map((name) => (
+                  <option key={name} value={name}>
+                    {formatYongheVillageSelectLabel(name, villageCodeByName[name])}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[9rem] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={civilVisitorId}
+                onChange={(event) => setCivilVisitorId(event.target.value)}
+                disabled={busy || loading || !village}
+              >
+                <option value="">{village ? "請選擇民政訪查員" : "請先選里別"}</option>
+                {civilVisitors.map((visitor) => (
+                  <option key={visitor.id} value={visitor.id}>
+                    {visitorLabel(visitor)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[9rem] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={socialVisitorId}
+                onChange={(event) => setSocialVisitorId(event.target.value)}
+                disabled={busy || loading || !village}
+              >
+                <option value="">{village ? "請選擇社政訪查員" : "請先選里別"}</option>
+                {socialVisitors.map((visitor) => (
+                  <option key={visitor.id} value={visitor.id}>
+                    {visitorLabel(visitor)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           {options?.scope?.label && (
-            <p className="mt-1 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
+            <p className="mt-2 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
           )}
         </div>
       </section>
 
-      <section className="rounded-lg border bg-card p-4 space-y-3">
-        <div>
-          <h2 className="font-semibold">2. 訪查員（民政／社政）</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            橫列下拉勾選；至少選一側後才會展開個案列表。
-          </p>
-        </div>
-        {!village ? (
-          <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
-            請先完成上方「里別」。
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
-            <div className="flex min-w-[28rem] flex-row flex-wrap items-end gap-3 sm:flex-nowrap">
-              <div className="min-w-[10rem] flex-1">
-                <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
-                <select
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={civilVisitorId}
-                  onChange={(event) => setCivilVisitorId(event.target.value)}
-                  disabled={busy || loading}
-                >
-                  <option value="">請選擇民政訪查員</option>
-                  {civilVisitors.map((visitor) => (
-                    <option key={visitor.id} value={visitor.id}>
-                      {visitorLabel(visitor)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[10rem] flex-1">
-                <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
-                <select
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={socialVisitorId}
-                  onChange={(event) => setSocialVisitorId(event.target.value)}
-                  disabled={busy || loading}
-                >
-                  <option value="">請選擇社政訪查員</option>
-                  {socialVisitors.map((visitor) => (
-                    <option key={visitor.id} value={visitor.id}>
-                      {visitorLabel(visitor)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
       <section className="rounded-lg border bg-card p-4 space-y-4">
         <div>
-          <h2 className="font-semibold">3. 個案狀態</h2>
+          <h2 className="font-semibold">2. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             依紙本「里編號」排序；姓名前顯示 #里編號，與關懷表 KEY 單相同。
           </p>
@@ -401,7 +388,7 @@ export function MohwProgressPanel() {
 
         {!canBrowseCases ? (
           <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
-            請先完成上方「里別」與「訪查員」（民政或社政至少選一）。
+            請先在上方橫列選「里別」，並選民政或社政訪查員至少一位。
           </p>
         ) : (
           <>
