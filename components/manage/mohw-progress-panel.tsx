@@ -6,6 +6,7 @@ import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import { deskVisitorColumnSide } from "@/lib/domain/desk-care-batch";
 import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
+import { formatDeskCasePaperLabel } from "@/lib/domain/manager-care-form-desk";
 import {
   formatYongheVillageSelectLabel,
   type DeskScope,
@@ -128,6 +129,8 @@ export function MohwProgressPanel() {
 
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
   const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
+  /** 與 KEY 單相同：先里別、再訪員，才能看／勾個案 */
+  const canBrowseCases = Boolean(village && (selectedCivil || selectedSocial));
 
   // 登入者姓名若在名冊，預選對應側（僅在尚未手動選時）
   useEffect(() => {
@@ -145,9 +148,19 @@ export function MohwProgressPanel() {
     [outcomes],
   );
 
+  /** 與 KEY 單 compareDeskCasesByVillageSeq 相同：紙本里編號 → 姓名 */
+  const sortedCases = useMemo(() => {
+    return [...cases].sort((a, b) => {
+      const aSeq = a.village_seq ?? Number.POSITIVE_INFINITY;
+      const bSeq = b.village_seq ?? Number.POSITIVE_INFINITY;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+    });
+  }, [cases]);
+
   const filteredCases = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return cases.filter((row) => {
+    return sortedCases.filter((row) => {
       const current = outcomes[row.case_id] || "";
       if (filter === "unset" && current) return false;
       if (filter !== "all" && filter !== "unset" && current !== filter) return false;
@@ -165,7 +178,7 @@ export function MohwProgressPanel() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [cases, outcomes, filter, query]);
+  }, [sortedCases, outcomes, filter, query]);
 
   const dirtyCount = useMemo(() => {
     let n = 0;
@@ -279,7 +292,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="僅列出尚未在本平台建立關懷表的個案。訪查員先選民政／社政，再以橫列勾選每筆狀態。此頁只統計進度，不會建立關懷表。"
+        description="順序與關懷表 KEY 單相同：先選里別 → 再選訪查員 → 才看個案列表（依紙本里編號排序）。僅未建檔個案。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -288,13 +301,17 @@ export function MohwProgressPanel() {
           <div>
             <p className="font-medium">未建檔名單才在這裡 KEY</p>
             <p className="mt-1 text-amber-900/90">
-              已有本平台關懷表（已提交／已稽核）的個案不會出現。請先以橫列下拉選擇本次民政／社政訪查員，再勾選狀態；寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。
+              操作順序：1 里別 → 2 民政／社政訪查員 → 3 個案狀態。已有本平台關懷表（已提交／已稽核）不會出現。
             </p>
           </div>
         </div>
       </div>
 
-      <section className="rounded-lg border bg-card p-4 space-y-4">
+      <section className="rounded-lg border bg-card p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">1. 里別</h2>
+          <p className="mt-1 text-sm text-muted-foreground">先選責任里，再選訪查員。</p>
+        </div>
         <div>
           <label className="text-sm font-medium">里別</label>
           <select
@@ -303,6 +320,8 @@ export function MohwProgressPanel() {
             disabled={loading}
             onChange={(event) => {
               setVillage(event.target.value);
+              setCivilVisitorId("");
+              setSocialVisitorId("");
               setFilter("all");
               setQuery("");
               setMessage(null);
@@ -319,49 +338,73 @@ export function MohwProgressPanel() {
             <p className="mt-1 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
           )}
         </div>
+      </section>
 
-        {village && (
-          <>
-            <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
-              <div className="flex min-w-[28rem] flex-row flex-wrap items-end gap-3 sm:flex-nowrap">
-                <div className="min-w-[10rem] flex-1">
-                  <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
-                  <select
-                    className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={civilVisitorId}
-                    onChange={(event) => setCivilVisitorId(event.target.value)}
-                    disabled={busy || loading}
-                  >
-                    <option value="">請選擇民政訪查員</option>
-                    {civilVisitors.map((visitor) => (
-                      <option key={visitor.id} value={visitor.id}>
-                        {visitorLabel(visitor)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="min-w-[10rem] flex-1">
-                  <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
-                  <select
-                    className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={socialVisitorId}
-                    onChange={(event) => setSocialVisitorId(event.target.value)}
-                    disabled={busy || loading}
-                  >
-                    <option value="">請選擇社政訪查員</option>
-                    {socialVisitors.map((visitor) => (
-                      <option key={visitor.id} value={visitor.id}>
-                        {visitorLabel(visitor)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      <section className="rounded-lg border bg-card p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">2. 訪查員（民政／社政）</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            橫列下拉勾選；至少選一側後才會展開個案列表。
+          </p>
+        </div>
+        {!village ? (
+          <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
+            請先完成上方「里別」。
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
+            <div className="flex min-w-[28rem] flex-row flex-wrap items-end gap-3 sm:flex-nowrap">
+              <div className="min-w-[10rem] flex-1">
+                <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={civilVisitorId}
+                  onChange={(event) => setCivilVisitorId(event.target.value)}
+                  disabled={busy || loading}
+                >
+                  <option value="">請選擇民政訪查員</option>
+                  {civilVisitors.map((visitor) => (
+                    <option key={visitor.id} value={visitor.id}>
+                      {visitorLabel(visitor)}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                名單來自訪查員主檔（民政＝公所人員／civil；社政＝志工／social）。至少選一側後再送出；會寫入本次批次與每筆標記。
-              </p>
+              <div className="min-w-[10rem] flex-1">
+                <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={socialVisitorId}
+                  onChange={(event) => setSocialVisitorId(event.target.value)}
+                  disabled={busy || loading}
+                >
+                  <option value="">請選擇社政訪查員</option>
+                  {socialVisitors.map((visitor) => (
+                    <option key={visitor.id} value={visitor.id}>
+                      {visitorLabel(visitor)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+          </div>
+        )}
+      </section>
 
+      <section className="rounded-lg border bg-card p-4 space-y-4">
+        <div>
+          <h2 className="font-semibold">3. 個案狀態</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            依紙本「里編號」排序；姓名前顯示 #里編號，與關懷表 KEY 單相同。
+          </p>
+        </div>
+
+        {!canBrowseCases ? (
+          <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
+            請先完成上方「里別」與「訪查員」（民政或社政至少選一）。
+          </p>
+        ) : (
+          <>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>未建檔 {cases.length}</span>
               {typeof rosterTotal === "number" && <span>名冊 {rosterTotal}</span>}
@@ -384,7 +427,7 @@ export function MohwProgressPanel() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:max-w-xs"
-                placeholder="搜尋序號／姓名／編碼／訪查人"
+                placeholder="搜尋序號／姓名／編碼"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -449,6 +492,13 @@ export function MohwProgressPanel() {
                   ) : (
                     filteredCases.map((row) => {
                       const current = outcomes[row.case_id] || "";
+                      const paper = formatDeskCasePaperLabel({
+                        villageCode: villageCodeByName[village],
+                        village,
+                        villageSeq: row.village_seq,
+                        name: row.name,
+                        caseCode: row.encoded_id,
+                      });
                       const civil = row.civil_worker_name?.trim() || "";
                       const social = row.social_worker_name?.trim() || "";
                       const staffBits = [
@@ -461,12 +511,9 @@ export function MohwProgressPanel() {
                           className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
                         >
                           <div className="min-w-0 pr-2">
-                            <p className="truncate font-medium">
-                              {row.village_seq != null ? `#${row.village_seq} ` : ""}
-                              {row.name || "（未填姓名）"}
-                            </p>
+                            <p className="truncate font-medium">{paper.primary}</p>
                             <p className="truncate text-xs text-muted-foreground">
-                              {row.encoded_id || row.case_id}
+                              {paper.secondary || row.encoded_id || row.case_id}
                             </p>
                             {staffBits.length > 0 && (
                               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">

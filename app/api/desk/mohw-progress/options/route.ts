@@ -29,12 +29,19 @@ import {
 
 const UNASSIGNED_VILLAGES = ["中溪里", "中興里", "光明里", "協和里", "忠義里", "前溪里", "勵行里"];
 
-function sortCases(rows: Record<string, unknown>[]) {
+/** 與關懷表建檔 KEY 單相同：紙本里編號 village_seq，缺則 external_id，再比姓名。 */
+function sortCasesLikeDeskKey(rows: Record<string, unknown>[]) {
   return [...rows].sort((a, b) => {
-    const sa = Number(a.village_seq);
-    const sb = Number(b.village_seq);
-    if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
-    return String(a.encoded_id || "").localeCompare(String(b.encoded_id || ""));
+    const aSeqRaw = Number(a.village_seq);
+    const bSeqRaw = Number(b.village_seq);
+    const aSeq = Number.isFinite(aSeqRaw)
+      ? aSeqRaw
+      : Number(a.external_id) || Number.POSITIVE_INFINITY;
+    const bSeq = Number.isFinite(bSeqRaw)
+      ? bSeqRaw
+      : Number(b.external_id) || Number.POSITIVE_INFINITY;
+    if (aSeq !== bSeq) return aSeq - bSeq;
+    return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
   });
 }
 
@@ -144,7 +151,7 @@ export async function GET(request: NextRequest) {
             message: error instanceof Error ? error.message : "讀取未建檔個案失敗",
           })),
       ]);
-      const caseRows = sortCases(rawCaseRows);
+      const caseRows = sortCasesLikeDeskKey(rawCaseRows);
       rosterTotal = caseRows.length;
 
       if (!contextResult.ok) {
