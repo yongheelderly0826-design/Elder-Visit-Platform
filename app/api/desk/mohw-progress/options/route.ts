@@ -5,8 +5,8 @@ import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager"
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import {
   emptyMohwProgressCaseMeta,
-  isMohwProgressOutcome,
   mapMohwProgressCaseContext,
+  normalizeMohwProgressOutcome,
   type MohwProgressCaseRow,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
@@ -246,8 +246,8 @@ export async function GET(request: NextRequest) {
           { civil_worker_name: string; social_worker_name: string }
         >();
         for (const mark of marks) {
-          const outcome = String(mark.outcome || "");
-          if (!isMohwProgressOutcome(outcome)) continue;
+          const outcome = normalizeMohwProgressOutcome(String(mark.outcome || ""));
+          if (!outcome) continue;
           const caseId = String(mark.case_id || "");
           if (!caseId) continue;
           // 直 KEY 標記只套在直 KEY 分組

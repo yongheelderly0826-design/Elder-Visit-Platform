@@ -1,9 +1,12 @@
 export const MOHW_PROGRESS_SOURCE = "MOHW直KEY" as const;
 
-export const MOHW_PROGRESS_OUTCOMES = ["已完成", "未遇", "查無此人"] as const;
+export const MOHW_PROGRESS_OUTCOMES = ["已完成", "未遇", "拒訪"] as const;
 export type MohwProgressOutcome = (typeof MOHW_PROGRESS_OUTCOMES)[number];
 
-/** 衛福部進度回報：稽核督導固定選項（永和承辦指定） */
+/** 舊版直 KEY 第三狀態；讀取時對應為「拒訪」 */
+export const MOHW_PROGRESS_OUTCOME_LEGACY_NOT_FOUND = "查無此人" as const;
+
+/** 衛福部進度回報：稽核督導固定選項（暫不要求送出；UI 已隱藏） */
 export const MOHW_PROGRESS_AUDIT_SUPERVISORS = ["沈煒庭", "課長"] as const;
 export type MohwProgressAuditSupervisor = (typeof MOHW_PROGRESS_AUDIT_SUPERVISORS)[number];
 
@@ -131,8 +134,18 @@ export function mapMohwProgressCaseContext(
   };
 }
 
-export function isMohwProgressOutcome(value: string): value is MohwProgressOutcome {
-  return (MOHW_PROGRESS_OUTCOMES as readonly string[]).includes(value);
+/** 將舊「查無此人」標記正規化為「拒訪」；無效則回空字串 */
+export function normalizeMohwProgressOutcome(value: string): MohwProgressOutcome | "" {
+  const trimmed = String(value || "").trim();
+  if (trimmed === MOHW_PROGRESS_OUTCOME_LEGACY_NOT_FOUND) return "拒訪";
+  if ((MOHW_PROGRESS_OUTCOMES as readonly string[]).includes(trimmed)) {
+    return trimmed as MohwProgressOutcome;
+  }
+  return "";
+}
+
+export function isMohwProgressOutcome(value: string): boolean {
+  return normalizeMohwProgressOutcome(value) !== "";
 }
 
 export function normalizeNonNegInt(value: unknown): number {
@@ -164,9 +177,10 @@ export function summarizeCaseOutcomes(
   let notFound = 0;
   let unset = 0;
   for (const outcome of outcomes) {
-    if (outcome === "已完成") done += 1;
-    else if (outcome === "未遇") missed += 1;
-    else if (outcome === "查無此人") notFound += 1;
+    const normalized = normalizeMohwProgressOutcome(outcome);
+    if (normalized === "已完成") done += 1;
+    else if (normalized === "未遇") missed += 1;
+    else if (normalized === "拒訪") notFound += 1;
     else unset += 1;
   }
   return { done, missed, notFound, unset };

@@ -58,7 +58,7 @@ function VillageTable({ villages }: { villages: MohwProgressVillageSummary[] }) 
             <th className="px-3 py-2 font-medium text-right">本系統已KEY</th>
             <th className="px-3 py-2 font-medium text-right">直KEY已完成</th>
             <th className="px-3 py-2 font-medium text-right">未遇</th>
-            <th className="px-3 py-2 font-medium text-right">查無此人</th>
+            <th className="px-3 py-2 font-medium text-right">拒訪</th>
             <th className="px-3 py-2 font-medium text-right">直KEY尚未勾選</th>
             <th className="px-3 py-2 font-medium text-right">整體進度</th>
             <th className="px-3 py-2 font-medium text-right">完成率</th>
@@ -126,7 +126,7 @@ export function MohwProgressDashboard() {
         icon={BarChart3}
         eyebrow="里別匯總"
         title="衛福部進度儀表板"
-        description="各里名冊進度：本系統已KEY關懷表＋直KEY衛福部狀態（已完成／未遇／查無此人），供承辦掌握完成率。"
+        description="各里名冊進度：本系統已KEY關懷表＋直KEY衛福部狀態（已完成／未遇／拒訪），供承辦掌握完成率。"
       />
 
       <div className="flex flex-wrap items-center gap-2">

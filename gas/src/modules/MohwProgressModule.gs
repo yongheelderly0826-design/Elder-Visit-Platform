@@ -6,7 +6,19 @@ var MohwProgressModule = (function () {
   var REPORTS = Config.SHEET_NAMES.MOHW_PROGRESS_REPORTS;
   var MARKS = Config.SHEET_NAMES.MOHW_PROGRESS_MARKS;
   var SOURCE = 'MOHW直KEY';
-  var OUTCOMES = { done: '已完成', missed: '未遇', notFound: '查無此人' };
+  var OUTCOMES = { done: '已完成', missed: '未遇', notFound: '拒訪' };
+  var LEGACY_NOT_FOUND = '查無此人';
+
+  function normalizeOutcome_(outcome) {
+    var o = String(outcome || '').trim();
+    if (o === LEGACY_NOT_FOUND) return OUTCOMES.notFound;
+    return o;
+  }
+
+  function isValidOutcome_(outcome) {
+    var o = normalizeOutcome_(outcome);
+    return o === OUTCOMES.done || o === OUTCOMES.missed || o === OUTCOMES.notFound;
+  }
 
   var REPORT_HEADERS = [
     'report_id',
@@ -287,12 +299,8 @@ var MohwProgressModule = (function () {
         });
         items.forEach(function (item) {
           item = item || {};
-          var outcome = String(item.outcome || '').trim();
-          if (
-            outcome !== OUTCOMES.done &&
-            outcome !== OUTCOMES.missed &&
-            outcome !== OUTCOMES.notFound
-          ) {
+          var outcome = normalizeOutcome_(item.outcome);
+          if (!isValidOutcome_(outcome)) {
             warnings.push('略過無效狀態：' + String(item.case_id || item.encoded_id || ''));
             return;
           }
@@ -335,9 +343,9 @@ var MohwProgressModule = (function () {
           })
         );
       } else if (mode === 'case_codes') {
-        var outcome = String(data.outcome || '').trim();
-        if (outcome !== OUTCOMES.done && outcome !== OUTCOMES.missed && outcome !== OUTCOMES.notFound) {
-          throw error_('VALIDATION_ERROR', '請選擇結果：已完成／未遇／查無此人。');
+        var outcome = normalizeOutcome_(data.outcome);
+        if (!isValidOutcome_(outcome)) {
+          throw error_('VALIDATION_ERROR', '請選擇結果：已完成／未遇／拒訪。');
         }
         var codes = Array.isArray(data.case_codes)
           ? data.case_codes
@@ -386,13 +394,9 @@ var MohwProgressModule = (function () {
         if (outcome === OUTCOMES.missed) countMissed = marks.length;
         if (outcome === OUTCOMES.notFound) countNotFound = marks.length;
       } else {
-        var rangeOutcome = String(data.outcome || '').trim();
-        if (
-          rangeOutcome !== OUTCOMES.done &&
-          rangeOutcome !== OUTCOMES.missed &&
-          rangeOutcome !== OUTCOMES.notFound
-        ) {
-          throw error_('VALIDATION_ERROR', '請選擇結果：已完成／未遇／查無此人。');
+        var rangeOutcome = normalizeOutcome_(data.outcome);
+        if (!isValidOutcome_(rangeOutcome)) {
+          throw error_('VALIDATION_ERROR', '請選擇結果：已完成／未遇／拒訪。');
         }
         rangeText = String(data.range_text || '').trim();
         var parsed = parseRangeText_(villageName, rangeText);
@@ -654,7 +658,7 @@ var MohwProgressModule = (function () {
   /**
    * 里別名冊分兩組（合計＝全里）：
    * - items_keyed：本平台已有 eligible 關懷表（已提交／已稽核）→ 儀表板算「本系統已KEY／已完成進度」
-   * - items_direct：其餘 → 需直 KEY 衛福部狀態（已完成／未遇／查無此人）
+   * - items_direct：其餘 → 需直 KEY 衛福部狀態（已完成／未遇／拒訪；舊資料「查無此人」視為拒訪）
    * 草稿／作廢／待補件不算已建檔，仍進 items_direct。
    * 相容：items ＝ items_direct；excluded_with_careform ＝ keyed_count。
    */
@@ -794,12 +798,8 @@ var MohwProgressModule = (function () {
       var caseId = String(row.case_id || '').trim();
       // 已 KEY 關懷表個案不計入直 KEY 分項，避免與 platform_keyed 重複
       if (caseId && bucket.keyed_case_ids[caseId]) return;
-      var outcome = String(row.outcome || '');
-      if (
-        outcome !== OUTCOMES.done &&
-        outcome !== OUTCOMES.missed &&
-        outcome !== OUTCOMES.notFound
-      ) {
+      var outcome = normalizeOutcome_(row.outcome);
+      if (!isValidOutcome_(outcome)) {
         return;
       }
       if (caseId) bucket.marked_case_ids[caseId] = outcome;

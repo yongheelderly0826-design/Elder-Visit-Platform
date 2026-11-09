@@ -4,7 +4,7 @@ import { getRoleKey, requireManagerCapability } from "@/lib/api/authorization";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import {
-  isMohwProgressOutcome,
+  normalizeMohwProgressOutcome,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
 import {
@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
       [];
     for (const raw of rawItems) {
       const item = (raw || {}) as Record<string, unknown>;
-      const outcome = String(item.outcome || "").trim();
-      if (!isMohwProgressOutcome(outcome)) continue;
+      const outcome = normalizeMohwProgressOutcome(String(item.outcome || ""));
+      if (!outcome) continue;
       const caseId = String(item.case_id || item.caseId || "").trim();
       const encodedId = String(item.encoded_id || item.encodedId || "").trim();
       if (!caseId && !encodedId) continue;
@@ -117,12 +117,6 @@ export async function POST(request: NextRequest) {
     ).trim();
     const keyedById = String(body.keyedById || body.keyed_by_id || "").trim();
     const keyedByName = String(body.keyedByName || body.keyed_by_name || "").trim();
-    const auditSupervisors = Array.isArray(body.auditSupervisors)
-      ? body.auditSupervisors.map((item) => String(item || "").trim()).filter(Boolean)
-      : String(body.audit_supervisors || "")
-          .split(/[;；,，]/)
-          .map((item) => item.trim())
-          .filter(Boolean);
     if (!civilWorkerName && !socialWorkerName) {
       return NextResponse.json(
         {
@@ -140,12 +134,6 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (!auditSupervisors.length) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "請至少勾選一位稽核督導。" } },
-        { status: 400 },
-      );
-    }
 
     const result = await gasClient.mohwProgress.submit({
       village_name: villageName,
@@ -158,7 +146,7 @@ export async function POST(request: NextRequest) {
       social_worker_name: socialWorkerName,
       keyed_by_id: keyedById,
       keyed_by_name: keyedByName,
-      audit_supervisors: auditSupervisors,
+      audit_supervisors: [],
       reported_by: name,
       reported_by_email: email,
       notes: String(body.notes || "").trim(),
