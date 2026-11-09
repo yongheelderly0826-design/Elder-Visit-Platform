@@ -186,6 +186,7 @@ var ApiRouter = (function () {
 
     'mohwProgress.submit': function (p, b) { return MohwProgressModule.submit(b || p); },
     'mohwProgress.list': function (p) { return MohwProgressModule.list(p); },
+    'mohwProgress.listMarks': function (p) { return MohwProgressModule.listMarks(p); },
     'mohwProgress.summary': function (p) { return MohwProgressModule.summary(p); },
   };
 

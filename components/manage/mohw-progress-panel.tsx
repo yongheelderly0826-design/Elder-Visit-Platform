@@ -9,11 +9,10 @@ import {
   type DeskScope,
 } from "@/lib/domain/village-admins";
 import {
-  countTotal,
   MOHW_PROGRESS_OUTCOMES,
-  type MohwProgressMode,
+  summarizeCaseOutcomes,
+  type MohwProgressCaseRow,
   type MohwProgressOutcome,
-  overRosterWarning,
 } from "@/lib/domain/mohw-progress";
 
 type OptionsPayload = {
@@ -21,34 +20,33 @@ type OptionsPayload = {
   villages: string[];
   villageCodeByName?: Record<string, string>;
   rosterTotal?: number | null;
+  cases?: MohwProgressCaseRow[];
   reporter?: { name: string; email: string };
 };
+
+type FilterKey = "all" | "unset" | MohwProgressOutcome;
 
 export function MohwProgressPanel() {
   const [options, setOptions] = useState<OptionsPayload | null>(null);
   const [village, setVillage] = useState("");
-  const [rosterTotal, setRosterTotal] = useState<number | null>(null);
-  const [mode, setMode] = useState<MohwProgressMode>("count");
-  const [countDone, setCountDone] = useState("0");
-  const [countMissed, setCountMissed] = useState("0");
-  const [countNotFound, setCountNotFound] = useState("0");
-  const [outcome, setOutcome] = useState<MohwProgressOutcome>("已完成");
-  const [caseCodesText, setCaseCodesText] = useState("");
-  const [rangeText, setRangeText] = useState("");
+  const [cases, setCases] = useState<MohwProgressCaseRow[]>([]);
+  const [outcomes, setOutcomes] = useState<Record<string, MohwProgressOutcome | "">>({});
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingCases, setLoadingCases] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
   async function loadOptions(selectedVillage?: string) {
-    setLoading(true);
+    if (selectedVillage) setLoadingCases(true);
+    else setLoading(true);
     setMessage(null);
     try {
-      const query = selectedVillage
-        ? `?village=${encodeURIComponent(selectedVillage)}`
-        : "";
-      const response = await fetch(`/api/desk/mohw-progress/options${query}`);
+      const q = selectedVillage ? `?village=${encodeURIComponent(selectedVillage)}` : "";
+      const response = await fetch(`/api/desk/mohw-progress/options${q}`);
       const json = (await response.json()) as {
         data?: OptionsPayload;
         error?: { message?: string };
@@ -59,14 +57,19 @@ export function MohwProgressPanel() {
       }
       setOptions(json.data ?? null);
       if (selectedVillage) {
-        setRosterTotal(
-          typeof json.data?.rosterTotal === "number" ? json.data.rosterTotal : null,
-        );
+        const nextCases = json.data?.cases ?? [];
+        setCases(nextCases);
+        const nextOutcomes: Record<string, MohwProgressOutcome | ""> = {};
+        for (const row of nextCases) {
+          nextOutcomes[row.case_id] = row.outcome || "";
+        }
+        setOutcomes(nextOutcomes);
       }
     } catch {
-      setMessage("無法載入里別，請稍後再試。");
+      setMessage("無法載入資料，請稍後再試。");
     } finally {
       setLoading(false);
+      setLoadingCases(false);
     }
   }
 
@@ -76,7 +79,8 @@ export function MohwProgressPanel() {
 
   useEffect(() => {
     if (!village) {
-      setRosterTotal(null);
+      setCases([]);
+      setOutcomes({});
       return;
     }
     void loadOptions(village);
@@ -85,48 +89,95 @@ export function MohwProgressPanel() {
   const villages = options?.villages ?? [];
   const villageCodeByName = options?.villageCodeByName ?? {};
 
-  const parsedCounts = useMemo(
-    () => ({
-      countDone: Math.max(0, Math.floor(Number(countDone) || 0)),
-      countMissed: Math.max(0, Math.floor(Number(countMissed) || 0)),
-      countNotFound: Math.max(0, Math.floor(Number(countNotFound) || 0)),
-    }),
-    [countDone, countMissed, countNotFound],
+  const summary = useMemo(
+    () => summarizeCaseOutcomes(Object.values(outcomes)),
+    [outcomes],
   );
 
-  const previewTotal = countTotal(parsedCounts);
-  const overWarning =
-    mode === "count" && rosterTotal != null
-      ? overRosterWarning(previewTotal, rosterTotal)
-      : null;
+  const filteredCases = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return cases.filter((row) => {
+      const current = outcomes[row.case_id] || "";
+      if (filter === "unset" && current) return false;
+      if (filter !== "all" && filter !== "unset" && current !== filter) return false;
+      if (!q) return true;
+      const hay = `${row.village_seq ?? ""} ${row.name} ${row.encoded_id}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [cases, outcomes, filter, query]);
+
+  const dirtyCount = useMemo(() => {
+    let n = 0;
+    for (const row of cases) {
+      const current = outcomes[row.case_id] || "";
+      const original = row.outcome || "";
+      if (current && current !== original) n += 1;
+      else if (current && !original) n += 1;
+    }
+    // include newly set or changed; also allow re-save of already set if user wants — count all with a status when submitting selected with changes OR all checked
+    return n;
+  }, [cases, outcomes]);
+
+  const selectedForSubmit = useMemo(() => {
+    return cases
+      .map((row) => {
+        const outcome = outcomes[row.case_id] || "";
+        if (!outcome) return null;
+        const original = row.outcome || "";
+        // send all currently checked rows (latest overwrite); include unchanged so batch confirm works
+        if (!outcome) return null;
+        return {
+          case_id: row.case_id,
+          encoded_id: row.encoded_id,
+          outcome,
+          changed: outcome !== original,
+        };
+      })
+      .filter(Boolean) as Array<{
+      case_id: string;
+      encoded_id: string;
+      outcome: MohwProgressOutcome;
+      changed: boolean;
+    }>;
+  }, [cases, outcomes]);
+
+  function setOutcome(caseId: string, value: MohwProgressOutcome | "") {
+    setOutcomes((prev) => ({ ...prev, [caseId]: value }));
+  }
+
+  function applyFilterBulk(outcome: MohwProgressOutcome) {
+    setOutcomes((prev) => {
+      const next = { ...prev };
+      for (const row of filteredCases) {
+        next[row.case_id] = outcome;
+      }
+      return next;
+    });
+  }
 
   async function submit() {
+    const items = selectedForSubmit.map(({ case_id, encoded_id, outcome }) => ({
+      case_id,
+      encoded_id,
+      outcome,
+    }));
+    if (!items.length) {
+      setMessage("請先勾選至少一筆個案狀態。");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     setWarnings([]);
     try {
-      const body: Record<string, unknown> = {
-        villageName: village,
-        villageCode: villageCodeByName[village] || "",
-        mode,
-        notes,
-      };
-      if (mode === "count") {
-        body.countDone = parsedCounts.countDone;
-        body.countMissed = parsedCounts.countMissed;
-        body.countNotFound = parsedCounts.countNotFound;
-      } else if (mode === "case_codes") {
-        body.outcome = outcome;
-        body.caseCodesText = caseCodesText;
-      } else {
-        body.outcome = outcome;
-        body.rangeText = rangeText;
-      }
-
       const response = await fetch("/api/desk/mohw-progress/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          villageName: village,
+          villageCode: villageCodeByName[village] || "",
+          items,
+          notes,
+        }),
       });
       const json = (await response.json()) as {
         data?: { warnings?: string[]; report?: { report_id?: string }; marks_written?: number };
@@ -136,22 +187,13 @@ export function MohwProgressPanel() {
         setMessage(json.error?.message ?? "送出失敗");
         return;
       }
-      const warn = json.data?.warnings ?? [];
-      setWarnings(warn);
+      setWarnings(json.data?.warnings ?? []);
       const reportId = json.data?.report?.report_id || "";
       setMessage(
-        mode === "count"
-          ? `已送出手填人數（${reportId}）。同里最新一筆會覆蓋先前人數。`
-          : `已送出（${reportId}），個案標記 ${json.data?.marks_written ?? 0} 筆。`,
+        `已確認 ${json.data?.marks_written ?? items.length} 筆（${reportId}）。同個案以最新狀態為準。`,
       );
-      if (mode === "count") {
-        setCountDone("0");
-        setCountMissed("0");
-        setCountNotFound("0");
-      }
-      setCaseCodesText("");
-      setRangeText("");
       setNotes("");
+      await loadOptions(village);
     } catch {
       setMessage("送出失敗，請稍後再試。");
     } finally {
@@ -159,14 +201,7 @@ export function MohwProgressPanel() {
     }
   }
 
-  const canSubmit =
-    Boolean(village) &&
-    !busy &&
-    (mode === "count"
-      ? previewTotal > 0
-      : mode === "case_codes"
-        ? caseCodesText.trim().length > 0
-        : rangeText.trim().length > 0);
+  const canSubmit = Boolean(village) && !busy && selectedForSubmit.length > 0;
 
   return (
     <div className="space-y-4">
@@ -174,7 +209,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="給已直接 KEY 入衛福部系統的訪查員／承辦使用。此頁只統計進度，不會建立關懷表、也不寫入匯出路徑。"
+        description="選里後在列表勾選每筆個案狀態（已完成／未遇／查無此人）。此頁只統計進度，不會建立關懷表。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -183,7 +218,7 @@ export function MohwProgressPanel() {
           <div>
             <p className="font-medium">不建立關懷表</p>
             <p className="mt-1 text-amber-900/90">
-              資料會寫入「MOHW進度回報」試算表分頁，來源標記為「MOHW直KEY」。同里手填人數以最新送出為準。
+              寫入「MOHW進度回報／個案標記」，來源「MOHW直KEY」。同一個案再次勾選會以最新狀態覆寫。
             </p>
           </div>
         </div>
@@ -196,7 +231,12 @@ export function MohwProgressPanel() {
             className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
             value={village}
             disabled={loading}
-            onChange={(event) => setVillage(event.target.value)}
+            onChange={(event) => {
+              setVillage(event.target.value);
+              setFilter("all");
+              setQuery("");
+              setMessage(null);
+            }}
           >
             <option value="">{loading ? "載入中…" : "請選擇里別"}</option>
             {villages.map((name) => (
@@ -205,108 +245,145 @@ export function MohwProgressPanel() {
               </option>
             ))}
           </select>
-          {village && rosterTotal != null && (
-            <p className="mt-1 text-xs text-muted-foreground">名冊人數：{rosterTotal}</p>
-          )}
           {options?.scope?.label && (
             <p className="mt-1 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
           )}
         </div>
 
-        <div>
-          <p className="text-sm font-medium">輸入方式</p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {(
-              [
-                ["count", "手填人數"],
-                ["case_codes", "個案編碼"],
-                ["range", "整批區間"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={`rounded-md border px-2 py-2 text-sm ${
-                  mode === value ? "border-primary bg-primary/10 text-primary" : "bg-background"
-                }`}
-                onClick={() => setMode(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {village && (
+          <>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span>名冊 {cases.length}</span>
+              <span>已完成 {summary.done}</span>
+              <span>未遇 {summary.missed}</span>
+              <span>查無此人 {summary.notFound}</span>
+              <span>尚未勾選 {summary.unset}</span>
+              {dirtyCount > 0 && <span className="text-amber-800">本次變更 {dirtyCount}</span>}
+            </div>
 
-        {mode === "count" ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <NumberField label="已完成" value={countDone} onChange={setCountDone} />
-            <NumberField label="未遇" value={countMissed} onChange={setCountMissed} />
-            <NumberField label="查無此人" value={countNotFound} onChange={setCountNotFound} />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-medium">結果</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {MOHW_PROGRESS_OUTCOMES.map((item) => (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm sm:max-w-xs"
+                placeholder="搜尋序號／姓名／編碼"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    ["all", "全部"],
+                    ["unset", "尚未勾選"],
+                    ["已完成", "已完成"],
+                    ["未遇", "未遇"],
+                    ["查無此人", "查無此人"],
+                  ] as const
+                ).map(([key, label]) => (
                   <button
-                    key={item}
+                    key={key}
                     type="button"
-                    className={`rounded-md border px-3 py-1.5 text-sm ${
-                      outcome === item
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "bg-background"
+                    className={`rounded-md border px-2 py-1 text-xs ${
+                      filter === key ? "border-primary bg-primary/10 text-primary" : "bg-background"
                     }`}
-                    onClick={() => setOutcome(item)}
+                    onClick={() => setFilter(key)}
                   >
-                    {item}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
-            {mode === "case_codes" ? (
-              <div>
-                <label className="text-sm font-medium">個案編碼</label>
-                <textarea
-                  className="mt-1 min-h-[96px] w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="可多筆，空白或逗號分隔，例如 YH-115-A100"
-                  value={caseCodesText}
-                  onChange={(event) => setCaseCodesText(event.target.value)}
-                />
+
+            <div className="flex flex-wrap gap-2">
+              <span className="self-center text-xs text-muted-foreground">將目前列表設為：</span>
+              {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
+                <button
+                  key={outcome}
+                  type="button"
+                  className="rounded-md border bg-background px-2 py-1 text-xs"
+                  onClick={() => applyFilterBulk(outcome)}
+                  disabled={!filteredCases.length || busy}
+                >
+                  {outcome}
+                </button>
+              ))}
+            </div>
+
+            <div className="overflow-hidden rounded-md border">
+              <div className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] gap-0 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <div>個案</div>
+                {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
+                  <div key={outcome} className="text-center">
+                    {outcome}
+                  </div>
+                ))}
               </div>
-            ) : (
-              <div>
-                <label className="text-sm font-medium">整批區間</label>
-                <input
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="例如 1-41、永成1-41、YH-115-A100-A120"
-                  value={rangeText}
-                  onChange={(event) => setRangeText(event.target.value)}
-                />
+              <div className="max-h-[55vh] overflow-y-auto">
+                {loadingCases ? (
+                  <p className="px-3 py-6 text-sm text-muted-foreground">載入個案中…</p>
+                ) : filteredCases.length === 0 ? (
+                  <p className="px-3 py-6 text-sm text-muted-foreground">此條件沒有個案。</p>
+                ) : (
+                  filteredCases.map((row) => {
+                    const current = outcomes[row.case_id] || "";
+                    return (
+                      <div
+                        key={row.case_id}
+                        className="grid grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(4.5rem,auto))] items-center gap-0 border-b px-3 py-2 text-sm last:border-b-0"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="truncate font-medium">
+                            {row.village_seq != null ? `#${row.village_seq} ` : ""}
+                            {row.name || "（未填姓名）"}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {row.encoded_id || row.case_id}
+                          </p>
+                        </div>
+                        {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
+                          const checked = current === outcome;
+                          return (
+                            <label
+                              key={outcome}
+                              className="flex cursor-pointer items-center justify-center py-1"
+                            >
+                              <input
+                                type="radio"
+                                className="h-4 w-4 accent-[hsl(var(--primary))]"
+                                name={`outcome-${row.case_id}`}
+                                checked={checked}
+                                onChange={() => setOutcome(row.case_id, outcome)}
+                                onClick={() => {
+                                  // allow toggle off by clicking same radio
+                                  if (checked) setOutcome(row.case_id, "");
+                                }}
+                              />
+                              <span className="sr-only">{outcome}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            )}
-          </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">備註（選填）</label>
+              <input
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="例如：已於衛福部平台完成 KEY"
+              />
+            </div>
+
+            <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
+              {busy
+                ? "送出中…"
+                : `確認送出（${selectedForSubmit.length} 筆已勾選）`}
+            </Button>
+          </>
         )}
-
-        <div>
-          <label className="text-sm font-medium">備註（選填）</label>
-          <input
-            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="例如：已於衛福部平台完成 KEY"
-          />
-        </div>
-
-        {overWarning && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            {overWarning}
-          </p>
-        )}
-
-        <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
-          {busy ? "送出中…" : "送出進度"}
-        </Button>
 
         {message && <p className="text-sm text-foreground">{message}</p>}
         {warnings.length > 0 && (
@@ -317,30 +394,6 @@ export function MohwProgressPanel() {
           </ul>
         )}
       </section>
-    </div>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div>
-      <label className="text-sm font-medium">{label}</label>
-      <input
-        type="number"
-        min={0}
-        inputMode="numeric"
-        className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
     </div>
   );
 }

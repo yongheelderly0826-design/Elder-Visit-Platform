@@ -201,7 +201,12 @@ var MohwProgressModule = (function () {
       if (!villageName) throw error_('VALIDATION_ERROR', '請選擇里別。');
 
       var mode = String(data.mode || 'count').trim();
-      if (mode !== 'count' && mode !== 'case_codes' && mode !== 'range') {
+      if (
+        mode !== 'count' &&
+        mode !== 'case_codes' &&
+        mode !== 'range' &&
+        mode !== 'case_list'
+      ) {
         throw error_('VALIDATION_ERROR', '不支援的輸入模式：' + mode);
       }
 
@@ -229,6 +234,59 @@ var MohwProgressModule = (function () {
           throw error_('VALIDATION_ERROR', '請至少填一項人數。');
         }
         supersedeCountReports_(villageName);
+      } else if (mode === 'case_list') {
+        var items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) throw error_('VALIDATION_ERROR', '請至少勾選一筆個案狀態。');
+        var allCasesForList = SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.CASES));
+        var byCaseId = {};
+        var byEncoded = {};
+        allCasesForList.forEach(function (row) {
+          if (String(row.visit_village || '') !== villageName) return;
+          byCaseId[String(row.case_id || '')] = row;
+          if (row.encoded_id) byEncoded[String(row.encoded_id)] = row;
+        });
+        items.forEach(function (item) {
+          item = item || {};
+          var outcome = String(item.outcome || '').trim();
+          if (
+            outcome !== OUTCOMES.done &&
+            outcome !== OUTCOMES.missed &&
+            outcome !== OUTCOMES.notFound
+          ) {
+            warnings.push('略過無效狀態：' + String(item.case_id || item.encoded_id || ''));
+            return;
+          }
+          var found =
+            byCaseId[String(item.case_id || '')] ||
+            byEncoded[String(item.encoded_id || '')];
+          if (!found) {
+            warnings.push('找不到個案：' + String(item.case_id || item.encoded_id || ''));
+            return;
+          }
+          marks.push({
+            mark_id: 'MPM-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10),
+            report_id: reportId,
+            case_id: String(found.case_id || ''),
+            encoded_id: String(found.encoded_id || ''),
+            village_seq: found.village_seq != null ? Number(found.village_seq) || '' : '',
+            village_name: villageName,
+            outcome: outcome,
+            source: SOURCE,
+            reported_by: reportedBy,
+            reported_by_email: reportedByEmail,
+            reported_at: reportedAt,
+            status: 'active',
+          });
+          if (outcome === OUTCOMES.done) countDone += 1;
+          if (outcome === OUTCOMES.missed) countMissed += 1;
+          if (outcome === OUTCOMES.notFound) countNotFound += 1;
+        });
+        if (!marks.length) throw error_('VALIDATION_ERROR', '沒有可寫入的個案狀態。');
+        caseCodesJson = JSON.stringify(
+          marks.map(function (m) {
+            return { case_id: m.case_id, encoded_id: m.encoded_id, outcome: m.outcome };
+          })
+        );
       } else if (mode === 'case_codes') {
         var outcome = String(data.outcome || '').trim();
         if (outcome !== OUTCOMES.done && outcome !== OUTCOMES.missed && outcome !== OUTCOMES.notFound) {
@@ -377,6 +435,24 @@ var MohwProgressModule = (function () {
     return rows;
   }
 
+  function listMarks(params) {
+    params = params || {};
+    ensureSchema_();
+    var village = String(params.village_name || '').trim();
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(MARKS)).filter(function (row) {
+      if (String(row.status || 'active') !== 'active') return false;
+      if (village && String(row.village_name || '') !== village) return false;
+      return true;
+    });
+    rows.sort(function (a, b) {
+      var sa = Number(a.village_seq);
+      var sb = Number(b.village_seq);
+      if (isFinite(sa) && isFinite(sb) && sa !== sb) return sa - sb;
+      return String(a.encoded_id || '').localeCompare(String(b.encoded_id || ''));
+    });
+    return rows;
+  }
+
   function summary(params) {
     params = params || {};
     ensureSchema_();
@@ -479,6 +555,7 @@ var MohwProgressModule = (function () {
   return {
     submit: submit,
     list: list,
+    listMarks: listMarks,
     summary: summary,
     ensureSchema: ensureSchema_,
   };

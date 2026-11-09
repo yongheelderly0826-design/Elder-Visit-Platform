@@ -4,6 +4,10 @@ import { getRoleKey, requireManagerCapability } from "@/lib/api/authorization";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import {
+  isMohwProgressOutcome,
+  type MohwProgressOutcome,
+} from "@/lib/domain/mohw-progress";
+import {
   formatYongheVillageCode,
   mapVillageAdminRow,
   mergeYongheVillageCodeByName,
@@ -15,6 +19,15 @@ import {
 import { gasClient } from "@/lib/gas-client";
 
 const UNASSIGNED_VILLAGES = ["中溪里", "中興里", "光明里", "協和里", "忠義里", "前溪里", "勵行里"];
+
+function sortCases(rows: Record<string, unknown>[]) {
+  return [...rows].sort((a, b) => {
+    const sa = Number(a.village_seq);
+    const sb = Number(b.village_seq);
+    if (Number.isFinite(sa) && Number.isFinite(sb) && sa !== sb) return sa - sb;
+    return String(a.encoded_id || "").localeCompare(String(b.encoded_id || ""));
+  });
+}
 
 export async function GET(request: NextRequest) {
   const forbidden = requireManagerCapability(request, "visits.submit");
@@ -79,6 +92,14 @@ export async function GET(request: NextRequest) {
         : sortYongheVillagesByCode(allVillages.filter((name) => allowed.includes(name)));
 
     let rosterTotal: number | null = null;
+    let cases: Array<{
+      case_id: string;
+      encoded_id: string;
+      village_seq: number | null;
+      name: string;
+      outcome: MohwProgressOutcome | "";
+    }> = [];
+
     if (villageParam) {
       if (allowed && !allowed.includes(villageParam)) {
         return NextResponse.json(
@@ -86,11 +107,36 @@ export async function GET(request: NextRequest) {
           { status: 403 },
         );
       }
-      const cases = (await gasClient.cases.list({
-        district: "永和區",
-        visit_village: villageParam,
-      })) as Record<string, unknown>[];
-      rosterTotal = cases.length;
+      const caseRows = sortCases(
+        (await gasClient.cases.list({
+          district: "永和區",
+          visit_village: villageParam,
+        })) as Record<string, unknown>[],
+      );
+      rosterTotal = caseRows.length;
+
+      const marks = await gasClient.mohwProgress
+        .listMarks({ village_name: villageParam })
+        .catch(() => [] as Record<string, unknown>[]);
+      const outcomeByCaseId = new Map<string, MohwProgressOutcome>();
+      for (const mark of marks) {
+        const outcome = String(mark.outcome || "");
+        if (!isMohwProgressOutcome(outcome)) continue;
+        const caseId = String(mark.case_id || "");
+        if (caseId) outcomeByCaseId.set(caseId, outcome);
+      }
+
+      cases = caseRows.map((row) => {
+        const caseId = String(row.case_id || "");
+        const seqRaw = Number(row.village_seq);
+        return {
+          case_id: caseId,
+          encoded_id: String(row.encoded_id || ""),
+          village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
+          name: String(row.name || row.elder_name || ""),
+          outcome: outcomeByCaseId.get(caseId) || "",
+        };
+      });
     }
 
     return NextResponse.json({
@@ -99,6 +145,7 @@ export async function GET(request: NextRequest) {
         villages,
         villageCodeByName,
         rosterTotal,
+        cases,
         reporter: { name, email },
       },
     });

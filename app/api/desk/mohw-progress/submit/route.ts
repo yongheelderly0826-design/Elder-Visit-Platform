@@ -4,9 +4,8 @@ import { getRoleKey, requireManagerCapability } from "@/lib/api/authorization";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
 import {
-  countTotal,
-  normalizeNonNegInt,
-  overRosterWarning,
+  isMohwProgressOutcome,
+  type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
 import {
   formatYongheVillageCode,
@@ -39,7 +38,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const villageName = String(body.villageName || body.village_name || "").trim();
-    const mode = String(body.mode || "count").trim() as "count" | "case_codes" | "range";
     if (!villageName) {
       return NextResponse.json(
         { error: { code: "VALIDATION_ERROR", message: "請選擇里別。" } },
@@ -88,66 +86,41 @@ export async function POST(request: NextRequest) {
       villageCodeByName[villageName] ||
       "";
 
-    const payload: Record<string, unknown> = {
-      village_name: villageName,
-      village_code: villageCode,
-      mode,
-      reported_by: name,
-      reported_by_email: email,
-      notes: String(body.notes || "").trim(),
-      source: "MOHW直KEY",
-    };
-
-    if (mode === "count") {
-      const countDone = normalizeNonNegInt(body.countDone ?? body.count_done);
-      const countMissed = normalizeNonNegInt(body.countMissed ?? body.count_missed);
-      const countNotFound = normalizeNonNegInt(body.countNotFound ?? body.count_not_found);
-      if (countTotal({ countDone, countMissed, countNotFound }) <= 0) {
-        return NextResponse.json(
-          { error: { code: "VALIDATION_ERROR", message: "請至少填一項人數。" } },
-          { status: 400 },
-        );
-      }
-      payload.count_done = countDone;
-      payload.count_missed = countMissed;
-      payload.count_not_found = countNotFound;
-    } else if (mode === "case_codes") {
-      payload.outcome = String(body.outcome || "").trim();
-      payload.case_codes_text = String(body.caseCodesText || body.case_codes_text || "").trim();
-    } else if (mode === "range") {
-      payload.outcome = String(body.outcome || "").trim();
-      payload.range_text = String(body.rangeText || body.range_text || "").trim();
-    } else {
+    const rawItems = Array.isArray(body.items) ? body.items : [];
+    const items: Array<{ case_id: string; encoded_id?: string; outcome: MohwProgressOutcome }> =
+      [];
+    for (const raw of rawItems) {
+      const item = (raw || {}) as Record<string, unknown>;
+      const outcome = String(item.outcome || "").trim();
+      if (!isMohwProgressOutcome(outcome)) continue;
+      const caseId = String(item.case_id || item.caseId || "").trim();
+      const encodedId = String(item.encoded_id || item.encodedId || "").trim();
+      if (!caseId && !encodedId) continue;
+      items.push({
+        case_id: caseId,
+        encoded_id: encodedId || undefined,
+        outcome,
+      });
+    }
+    if (!items.length) {
       return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "不支援的輸入模式。" } },
+        { error: { code: "VALIDATION_ERROR", message: "請至少勾選一筆個案狀態。" } },
         { status: 400 },
       );
     }
 
-    const result = await gasClient.mohwProgress.submit(payload);
-    const clientWarning =
-      mode === "count"
-        ? overRosterWarning(
-            countTotal({
-              countDone: normalizeNonNegInt(payload.count_done),
-              countMissed: normalizeNonNegInt(payload.count_missed),
-              countNotFound: normalizeNonNegInt(payload.count_not_found),
-            }),
-            Number(result.roster_total || 0),
-          )
-        : null;
-
-    return NextResponse.json({
-      data: {
-        ...result,
-        warnings: [
-          ...(result.warnings || []),
-          ...(clientWarning && !(result.warnings || []).includes(clientWarning)
-            ? [clientWarning]
-            : []),
-        ],
-      },
+    const result = await gasClient.mohwProgress.submit({
+      village_name: villageName,
+      village_code: villageCode,
+      mode: "case_list",
+      items,
+      reported_by: name,
+      reported_by_email: email,
+      notes: String(body.notes || "").trim(),
+      source: "MOHW直KEY",
     });
+
+    return NextResponse.json({ data: result });
   } catch (error) {
     if (error instanceof GasApiError) {
       const status = error.code === "VALIDATION_ERROR" ? 400 : 502;

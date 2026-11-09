@@ -854,6 +854,10 @@ export const gasClient = {
       gasFetch<Array<Record<string, unknown>>>("mohwProgress.list", {
         params: params as Record<string, string> | undefined,
       }),
+    listMarks: (params?: { village_name?: string }) =>
+      gasFetch<Array<Record<string, unknown>>>("mohwProgress.listMarks", {
+        params: params as Record<string, string> | undefined,
+      }),
     summary: (params?: { village_name?: string }) =>
       gasFetch<{
         villages: Array<Record<string, unknown>>;
