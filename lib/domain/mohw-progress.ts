@@ -3,6 +3,10 @@ export const MOHW_PROGRESS_SOURCE = "MOHW直KEY" as const;
 export const MOHW_PROGRESS_OUTCOMES = ["已完成", "未遇", "查無此人"] as const;
 export type MohwProgressOutcome = (typeof MOHW_PROGRESS_OUTCOMES)[number];
 
+/** 衛福部進度回報：稽核督導固定選項（永和承辦指定） */
+export const MOHW_PROGRESS_AUDIT_SUPERVISORS = ["沈煒庭", "課長"] as const;
+export type MohwProgressAuditSupervisor = (typeof MOHW_PROGRESS_AUDIT_SUPERVISORS)[number];
+
 export type MohwProgressMode = "count" | "case_codes" | "range" | "case_list";
 
 export type MohwProgressCaseRow = {

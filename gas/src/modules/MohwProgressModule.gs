@@ -26,6 +26,9 @@ var MohwProgressModule = (function () {
     'civil_worker_name',
     'social_worker_id',
     'social_worker_name',
+    'keyed_by_id',
+    'keyed_by_name',
+    'audit_supervisors',
     'reported_by',
     'reported_by_email',
     'reported_at',
@@ -46,6 +49,9 @@ var MohwProgressModule = (function () {
     'civil_worker_name',
     'social_worker_id',
     'social_worker_name',
+    'keyed_by_id',
+    'keyed_by_name',
+    'audit_supervisors',
     'reported_by',
     'reported_by_email',
     'reported_at',
@@ -140,6 +146,9 @@ var MohwProgressModule = (function () {
         civil_worker_name: mark.civil_worker_name || '',
         social_worker_id: mark.social_worker_id || '',
         social_worker_name: mark.social_worker_name || '',
+        keyed_by_id: mark.keyed_by_id || '',
+        keyed_by_name: mark.keyed_by_name || '',
+        audit_supervisors: mark.audit_supervisors || '',
         reported_by: mark.reported_by,
         reported_by_email: mark.reported_by_email,
         reported_at: mark.reported_at,
@@ -231,6 +240,21 @@ var MohwProgressModule = (function () {
       var civilWorkerName = String(data.civil_worker_name || '').trim();
       var socialWorkerId = String(data.social_worker_id || '').trim();
       var socialWorkerName = String(data.social_worker_name || '').trim();
+      var keyedById = String(data.keyed_by_id || '').trim();
+      var keyedByName = String(data.keyed_by_name || '').trim();
+      var auditSupervisors = Array.isArray(data.audit_supervisors)
+        ? data.audit_supervisors
+            .map(function (item) {
+              return String(item || '').trim();
+            })
+            .filter(Boolean)
+        : String(data.audit_supervisors || '')
+            .split(/[;；,，]/)
+            .map(function (item) {
+              return String(item || '').trim();
+            })
+            .filter(Boolean);
+      var auditSupervisorsText = auditSupervisors.join('；');
       var rosterTotal = rosterTotal_(villageName);
       var reportId = 'MPR-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
       var warnings = [];
@@ -292,6 +316,9 @@ var MohwProgressModule = (function () {
             civil_worker_name: civilWorkerName,
             social_worker_id: socialWorkerId,
             social_worker_name: socialWorkerName,
+            keyed_by_id: keyedById,
+            keyed_by_name: keyedByName,
+            audit_supervisors: auditSupervisorsText,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -346,6 +373,9 @@ var MohwProgressModule = (function () {
             civil_worker_name: civilWorkerName,
             social_worker_id: socialWorkerId,
             social_worker_name: socialWorkerName,
+            keyed_by_id: keyedById,
+            keyed_by_name: keyedByName,
+            audit_supervisors: auditSupervisorsText,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -387,6 +417,9 @@ var MohwProgressModule = (function () {
             civil_worker_name: civilWorkerName,
             social_worker_id: socialWorkerId,
             social_worker_name: socialWorkerName,
+            keyed_by_id: keyedById,
+            keyed_by_name: keyedByName,
+            audit_supervisors: auditSupervisorsText,
             reported_by: reportedBy,
             reported_by_email: reportedByEmail,
             reported_at: reportedAt,
@@ -424,6 +457,9 @@ var MohwProgressModule = (function () {
         civil_worker_name: civilWorkerName,
         social_worker_id: socialWorkerId,
         social_worker_name: socialWorkerName,
+        keyed_by_id: keyedById,
+        keyed_by_name: keyedByName,
+        audit_supervisors: auditSupervisorsText,
         reported_by: reportedBy,
         reported_by_email: reportedByEmail,
         reported_at: reportedAt,

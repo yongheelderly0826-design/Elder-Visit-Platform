@@ -12,8 +12,10 @@ import {
   type DeskScope,
 } from "@/lib/domain/village-admins";
 import {
+  MOHW_PROGRESS_AUDIT_SUPERVISORS,
   MOHW_PROGRESS_OUTCOMES,
   summarizeCaseOutcomes,
+  type MohwProgressAuditSupervisor,
   type MohwProgressCaseRow,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
@@ -47,6 +49,10 @@ export function MohwProgressPanel() {
   const [notes, setNotes] = useState("");
   const [civilVisitorId, setCivilVisitorId] = useState("");
   const [socialVisitorId, setSocialVisitorId] = useState("");
+  const [keyedById, setKeyedById] = useState("");
+  const [auditSupervisors, setAuditSupervisors] = useState<MohwProgressAuditSupervisor[]>([
+    ...MOHW_PROGRESS_AUDIT_SUPERVISORS,
+  ]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingCases, setLoadingCases] = useState(false);
@@ -129,8 +135,15 @@ export function MohwProgressPanel() {
 
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
   const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
+  const selectedKeyedBy = allVisitors.find((item) => item.id === keyedById) ?? null;
   /** 與 KEY 單相同：先里別、再訪員，才能看／勾個案 */
   const canBrowseCases = Boolean(village && (selectedCivil || selectedSocial));
+
+  function toggleAuditSupervisor(name: MohwProgressAuditSupervisor) {
+    setAuditSupervisors((current) =>
+      current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
+    );
+  }
 
   // 登入者姓名若在名冊，預選對應側（僅在尚未手動選時）
   useEffect(() => {
@@ -240,6 +253,14 @@ export function MohwProgressPanel() {
       setMessage("請先從上方下拉選擇民政或社政訪查員。");
       return;
     }
+    if (!selectedKeyedBy) {
+      setMessage("請選擇建檔人員。");
+      return;
+    }
+    if (!auditSupervisors.length) {
+      setMessage("請至少勾選一位稽核督導（沈煒庭／課長）。");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     setWarnings([]);
@@ -256,6 +277,9 @@ export function MohwProgressPanel() {
           civilWorkerName: selectedCivil?.name || "",
           socialWorkerId: selectedSocial?.id || "",
           socialWorkerName: selectedSocial?.name || "",
+          keyedById: selectedKeyedBy.id,
+          keyedByName: selectedKeyedBy.name,
+          auditSupervisors,
         }),
       });
       const json = (await response.json()) as {
@@ -284,7 +308,9 @@ export function MohwProgressPanel() {
     Boolean(village) &&
     !busy &&
     selectedForSubmit.length > 0 &&
-    Boolean(selectedCivil || selectedSocial);
+    Boolean(selectedCivil || selectedSocial) &&
+    Boolean(selectedKeyedBy) &&
+    auditSupervisors.length > 0;
 
   return (
     <div className="space-y-4">
@@ -309,12 +335,12 @@ export function MohwProgressPanel() {
 
       <section className="rounded-lg border bg-card p-4 space-y-3">
         <div>
-          <h2 className="font-semibold">1. 里別與訪查員</h2>
+          <h2 className="font-semibold">1. 里別、訪查員、建檔與稽核</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            里別、民政、社政同一橫列；選好里與至少一位訪查員後展開個案。
+            第一橫列：里別／民政／社政。第二橫列：建檔人員／稽核督導。選好後展開個案。
           </p>
         </div>
-        <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
+        <div className="space-y-3 overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
           <div className="flex min-w-[36rem] flex-row flex-wrap items-end gap-3 lg:flex-nowrap">
             <div className="min-w-[9rem] flex-1">
               <label className="text-xs font-medium text-muted-foreground">里別</label>
@@ -326,6 +352,7 @@ export function MohwProgressPanel() {
                   setVillage(event.target.value);
                   setCivilVisitorId("");
                   setSocialVisitorId("");
+                  setKeyedById("");
                   setFilter("all");
                   setQuery("");
                   setMessage(null);
@@ -372,15 +399,57 @@ export function MohwProgressPanel() {
               </select>
             </div>
           </div>
+
+          <div className="flex min-w-[36rem] flex-row flex-wrap items-end gap-3 lg:flex-nowrap">
+            <div className="min-w-[9rem] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">2. 建檔人員</label>
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={keyedById}
+                onChange={(event) => setKeyedById(event.target.value)}
+                disabled={busy || loading || !village}
+              >
+                <option value="">{village ? "請選擇建檔人員" : "請先選里別"}</option>
+                {allVisitors.map((visitor) => (
+                  <option key={visitor.id} value={visitor.id}>
+                    {visitorLabel(visitor)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[14rem] flex-[1.2]">
+              <label className="text-xs font-medium text-muted-foreground">3. 稽核督導</label>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {MOHW_PROGRESS_AUDIT_SUPERVISORS.map((name) => {
+                  const checked = auditSupervisors.includes(name);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        checked
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "bg-background text-foreground"
+                      }`}
+                      onClick={() => toggleAuditSupervisor(name)}
+                      disabled={busy}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           {options?.scope?.label && (
-            <p className="mt-2 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
+            <p className="text-xs text-muted-foreground">範圍：{options.scope.label}</p>
           )}
         </div>
       </section>
 
       <section className="rounded-lg border bg-card p-4 space-y-4">
         <div>
-          <h2 className="font-semibold">2. 個案狀態</h2>
+          <h2 className="font-semibold">4. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             依紙本「里編號」排序；姓名前顯示 #里編號，與關懷表 KEY 單相同。
           </p>
@@ -388,7 +457,7 @@ export function MohwProgressPanel() {
 
         {!canBrowseCases ? (
           <p className="rounded-md bg-secondary px-3 py-2 text-sm text-muted-foreground">
-            請先在上方橫列選「里別」，並選民政或社政訪查員至少一位。
+            請先選「里別」與民政／社政訪查員；建檔人員與稽核督導請一併勾選後再送出。
           </p>
         ) : (
           <>

@@ -115,6 +115,14 @@ export async function POST(request: NextRequest) {
     const socialWorkerName = String(
       body.socialWorkerName || body.social_worker_name || "",
     ).trim();
+    const keyedById = String(body.keyedById || body.keyed_by_id || "").trim();
+    const keyedByName = String(body.keyedByName || body.keyed_by_name || "").trim();
+    const auditSupervisors = Array.isArray(body.auditSupervisors)
+      ? body.auditSupervisors.map((item) => String(item || "").trim()).filter(Boolean)
+      : String(body.audit_supervisors || "")
+          .split(/[;；,，]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
     if (!civilWorkerName && !socialWorkerName) {
       return NextResponse.json(
         {
@@ -123,6 +131,18 @@ export async function POST(request: NextRequest) {
             message: "請至少選擇民政或社政訪查員。",
           },
         },
+        { status: 400 },
+      );
+    }
+    if (!keyedByName) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION_ERROR", message: "請選擇建檔人員。" } },
+        { status: 400 },
+      );
+    }
+    if (!auditSupervisors.length) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION_ERROR", message: "請至少勾選一位稽核督導。" } },
         { status: 400 },
       );
     }
@@ -136,6 +156,9 @@ export async function POST(request: NextRequest) {
       civil_worker_name: civilWorkerName,
       social_worker_id: socialWorkerId,
       social_worker_name: socialWorkerName,
+      keyed_by_id: keyedById,
+      keyed_by_name: keyedByName,
+      audit_supervisors: auditSupervisors,
       reported_by: name,
       reported_by_email: email,
       notes: String(body.notes || "").trim(),
