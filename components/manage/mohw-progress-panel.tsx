@@ -566,8 +566,7 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">2. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            依紙本「里編號」排序；兩頁籤合計＝該里名冊。送出成功後預設只顯示「尚未勾選」；人名下的「民政／社政
-            ○○」是該案已記錄的訪查員，與上方下拉本次選擇分開。
+            依紙本「里編號」排序；兩頁籤合計＝該里名冊。送出成功後預設只顯示「尚未勾選」。本次訪查員只看上方「民政／社政」下拉（請自行點選），名單列不再顯示舊紀錄人名，避免誤用。
           </p>
         </div>
 
@@ -754,7 +753,6 @@ export function MohwProgressPanel() {
                             name: row.name,
                             caseCode: row.encoded_id,
                           });
-                          const bits = staffLine(row);
                           return (
                             <div
                               key={row.case_id}
@@ -765,11 +763,6 @@ export function MohwProgressPanel() {
                                 <p className="truncate text-xs text-muted-foreground">
                                   {paper.secondary || row.encoded_id || row.case_id}
                                 </p>
-                                {bits.length > 0 && (
-                                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                    {bits.join(" · ")}
-                                  </p>
-                                )}
                               </div>
                               {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
                                 const checked = current === outcome;
