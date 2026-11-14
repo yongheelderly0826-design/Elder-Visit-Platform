@@ -10,6 +10,7 @@ import {
   type MohwProgressCaseRow,
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
+import { filterOperationalStaffByName } from "@/lib/domain/desk-staff-picker";
 import { mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
 import {
   formatYongheVillageCode,
@@ -134,17 +135,23 @@ export async function GET(request: NextRequest) {
     let contextWarning: string | null = null;
 
     const visitors = await cachedRead(
-      ["desk-mohw-progress-visitors-slim-v1"],
+      ["desk-mohw-progress-visitors-slim-v2-ops-surname"],
       [GAS_READ_TAGS.deskCareFormOptions],
       async () => {
         const visitorRows = (await gasClient.visitors.list({ slim: true })) as Record<
           string,
           unknown
         >[];
-        return visitorRows
+        const mapped = visitorRows
           .map(mapDeskVisitor)
-          .filter((item) => item.id)
-          .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
+          .filter((item) => item.id);
+        const operational = filterOperationalStaffByName(mapped, (item) => item.name);
+        // 已核准優先，同群再依中文姓氏排序（民政／社政下拉較好找）
+        return [...operational].sort((a, b) => {
+          const byStatus = Number(b.status === "已核准") - Number(a.status === "已核准");
+          if (byStatus !== 0) return byStatus;
+          return a.name.localeCompare(b.name, "zh-Hant");
+        });
       },
       GAS_READ_CACHE_SECONDS_DESK,
     ).catch(() => []);

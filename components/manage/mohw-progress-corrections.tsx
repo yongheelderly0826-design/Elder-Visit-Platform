@@ -16,6 +16,7 @@ type StaffOption = {
   id: string;
   name: string;
   kind: "visitor" | "desk_clerk" | "mark";
+  side?: "civil" | "social" | "unknown";
 };
 
 type ApplyFields = {
@@ -32,6 +33,10 @@ function emptyApply(): ApplyFields {
 function staffLabel(item: StaffOption) {
   if (item.kind === "desk_clerk") return `${item.name}（${item.id}）`;
   return item.name;
+}
+
+function bySurname(a: StaffOption, b: StaffOption) {
+  return a.name.localeCompare(b.name, "zh-Hant");
 }
 
 export function MohwProgressCorrections() {
@@ -58,6 +63,19 @@ export function MohwProgressCorrections() {
   const [clearSocial, setClearSocial] = useState(false);
   const [nextOutcome, setNextOutcome] = useState<MohwProgressOutcome | "">("");
   const [note, setNote] = useState("");
+
+  const keyedStaff = useMemo(
+    () => [...staffOptions].sort(bySurname),
+    [staffOptions],
+  );
+  const civilStaff = useMemo(
+    () => staffOptions.filter((item) => item.side === "civil").sort(bySurname),
+    [staffOptions],
+  );
+  const socialStaff = useMemo(
+    () => staffOptions.filter((item) => item.side === "social").sort(bySurname),
+    [staffOptions],
+  );
 
   const loadMarks = useCallback(async (villageName: string) => {
     setLoading(true);
@@ -403,8 +421,8 @@ export function MohwProgressCorrections() {
               disabled={!applyFields.keyed}
               onChange={(event) => setNextKeyedId(event.target.value)}
             >
-              <option value="">— 選擇正確建檔人員（{staffOptions.length}）—</option>
-              {staffOptions.map((item) => (
+              <option value="">— 選擇正確建檔人員（{keyedStaff.length}）—</option>
+              {keyedStaff.map((item) => (
                 <option key={`keyed-${item.id}`} value={item.id}>
                   {staffLabel(item)}
                 </option>
@@ -432,8 +450,8 @@ export function MohwProgressCorrections() {
                 setClearCivil(false);
               }}
             >
-              <option value="">— 選擇民政 —</option>
-              {staffOptions.map((item) => (
+              <option value="">— 選擇民政（依姓氏）—</option>
+              {civilStaff.map((item) => (
                 <option key={`civil-${item.id}`} value={item.id}>
                   {staffLabel(item)}
                 </option>
@@ -473,8 +491,8 @@ export function MohwProgressCorrections() {
                 setClearSocial(false);
               }}
             >
-              <option value="">— 選擇社政 —</option>
-              {staffOptions.map((item) => (
+              <option value="">— 選擇社政（依姓氏）—</option>
+              {socialStaff.map((item) => (
                 <option key={`social-${item.id}`} value={item.id}>
                   {staffLabel(item)}
                 </option>

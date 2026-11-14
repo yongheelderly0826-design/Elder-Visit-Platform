@@ -204,11 +204,22 @@ export function MohwProgressPanel() {
   const allVisitors = useMemo(() => options?.visitors ?? [], [options?.visitors]);
 
   const civilVisitors = useMemo(
-    () => allVisitors.filter((item) => deskVisitorColumnSide(item) === "civil"),
+    () =>
+      [...allVisitors.filter((item) => deskVisitorColumnSide(item) === "civil")].sort((a, b) =>
+        a.name.localeCompare(b.name, "zh-Hant"),
+      ),
     [allVisitors],
   );
   const socialVisitors = useMemo(
-    () => allVisitors.filter((item) => deskVisitorColumnSide(item) === "social"),
+    () =>
+      [...allVisitors.filter((item) => deskVisitorColumnSide(item) === "social")].sort((a, b) =>
+        a.name.localeCompare(b.name, "zh-Hant"),
+      ),
+    [allVisitors],
+  );
+  const keyedVisitors = useMemo(
+    () =>
+      [...allVisitors].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant")),
     [allVisitors],
   );
 
@@ -547,7 +558,7 @@ export function MohwProgressPanel() {
                   {village ? "— 請自行選擇建檔人員 —" : "請先選里別"}
                 </option>
                 {village
-                  ? allVisitors.map((visitor) => (
+                  ? keyedVisitors.map((visitor) => (
                       <option key={visitor.id} value={visitor.id}>
                         {visitorLabel(visitor)}
                       </option>
