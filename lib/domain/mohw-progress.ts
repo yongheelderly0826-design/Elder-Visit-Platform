@@ -87,6 +87,73 @@ export type MohwProgressSummaryPayload = {
   totals: MohwProgressSummaryTotals;
 };
 
+/** 已送出直 KEY 標記（管理者修正用） */
+export type MohwProgressMarkRow = {
+  mark_id: string;
+  report_id: string;
+  case_id: string;
+  encoded_id: string;
+  village_seq: number | null;
+  village_name: string;
+  name: string;
+  outcome: MohwProgressOutcome | "";
+  civil_worker_id: string;
+  civil_worker_name: string;
+  social_worker_id: string;
+  social_worker_name: string;
+  keyed_by_id: string;
+  keyed_by_name: string;
+  reported_by: string;
+  reported_by_email: string;
+  reported_at: string;
+  corrected_at: string;
+  corrected_by: string;
+  correction_note: string;
+};
+
+export type MohwProgressMarkPatch = {
+  mark_id: string;
+  outcome?: MohwProgressOutcome;
+  civil_worker_id?: string;
+  civil_worker_name?: string;
+  social_worker_id?: string;
+  social_worker_name?: string;
+  keyed_by_id?: string;
+  keyed_by_name?: string;
+};
+
+export function mapMohwProgressMarkRow(
+  raw: Record<string, unknown> | null | undefined,
+  nameByCaseId?: Map<string, string>,
+): MohwProgressMarkRow {
+  const caseId = String(raw?.case_id || "").trim();
+  const seqRaw = Number(raw?.village_seq);
+  return {
+    mark_id: String(raw?.mark_id || "").trim(),
+    report_id: String(raw?.report_id || "").trim(),
+    case_id: caseId,
+    encoded_id: String(raw?.encoded_id || "").trim(),
+    village_seq: Number.isFinite(seqRaw) ? seqRaw : null,
+    village_name: String(raw?.village_name || "").trim(),
+    name:
+      String(raw?.name || raw?.elder_name || "").trim() ||
+      (caseId && nameByCaseId ? nameByCaseId.get(caseId) || "" : ""),
+    outcome: normalizeMohwProgressOutcome(String(raw?.outcome || "")),
+    civil_worker_id: String(raw?.civil_worker_id || "").trim(),
+    civil_worker_name: String(raw?.civil_worker_name || "").trim(),
+    social_worker_id: String(raw?.social_worker_id || "").trim(),
+    social_worker_name: String(raw?.social_worker_name || "").trim(),
+    keyed_by_id: String(raw?.keyed_by_id || "").trim(),
+    keyed_by_name: String(raw?.keyed_by_name || "").trim(),
+    reported_by: String(raw?.reported_by || "").trim(),
+    reported_by_email: String(raw?.reported_by_email || "").trim(),
+    reported_at: String(raw?.reported_at || "").trim(),
+    corrected_at: String(raw?.corrected_at || "").trim(),
+    corrected_by: String(raw?.corrected_by || "").trim(),
+    correction_note: String(raw?.correction_note || "").trim(),
+  };
+}
+
 export function emptyMohwProgressCaseMeta(): Pick<
   MohwProgressCaseRow,
   | "civil_worker_name"

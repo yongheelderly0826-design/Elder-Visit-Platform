@@ -27,6 +27,7 @@ import {
   UserRound,
   Wallet,
   Workflow,
+  Wrench,
 } from "lucide-react";
 import type { Capability, WorkspaceRoleKey } from "@/lib/domain/types";
 
@@ -43,6 +44,7 @@ export type NavKey =
   | "careForms"
   | "mohwProgress"
   | "mohwProgressDashboard"
+  | "mohwProgressCorrections"
   | "villageAdmins"
   | "dailyVisits"
   | "audit"
@@ -206,6 +208,15 @@ export const navItems: NavItem[] = [
     href: "/manager/mohw-progress",
     icon: BarChart3,
     requiredCapabilities: ["visits.read"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
+    group: "operations",
+  },
+  {
+    key: "mohwProgressCorrections",
+    label: "進度修正",
+    href: "/manager/mohw-progress/corrections",
+    icon: Wrench,
+    requiredCapabilities: ["visits.submit"],
     allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",
   },

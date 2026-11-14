@@ -68,6 +68,9 @@ var MohwProgressModule = (function () {
     'reported_by_email',
     'reported_at',
     'status',
+    'corrected_at',
+    'corrected_by',
+    'correction_note',
   ];
 
   function ensureSchema_() {
@@ -906,10 +909,160 @@ var MohwProgressModule = (function () {
     };
   }
 
+  /**
+   * 管理者改正已送出標記（不改 reported_by／reported_at）。
+   * data.patches: [{ mark_id, outcome?, civil_worker_id?, civil_worker_name?,
+   *   social_worker_id?, social_worker_name?, keyed_by_id?, keyed_by_name? }]
+   * 欄位若未傳入則保留原值；字串可傳空字串以清空。
+   */
+  function patchMarks(data) {
+    data = data || {};
+    var patches = data.patches || [];
+    if (!patches.length) throw error_('VALIDATION_ERROR', 'patches 不可為空');
+    var correctedBy = String(data.corrected_by || '').trim();
+    var note = String(data.note || data.correction_note || '').trim();
+    var stamp = now_();
+
+    return withLock_(function () {
+      var updated = [];
+      var missing = [];
+      var reportTouch = {};
+
+      for (var i = 0; i < patches.length; i++) {
+        var p = patches[i] || {};
+        var markId = String(p.mark_id || '').trim();
+        if (!markId) {
+          missing.push({ mark_id: '', reason: '缺少 mark_id' });
+          continue;
+        }
+        var existing = SheetHelper.findByKey(MARKS, 'mark_id', markId)[0];
+        if (!existing || String(existing.status || 'active') !== 'active') {
+          missing.push({ mark_id: markId, reason: '找不到作用中標記' });
+          continue;
+        }
+
+        var patch = {
+          corrected_at: stamp,
+          corrected_by: correctedBy || existing.corrected_by || '',
+          correction_note: note || existing.correction_note || '',
+        };
+
+        if (Object.prototype.hasOwnProperty.call(p, 'outcome')) {
+          var outcome = normalizeOutcome_(p.outcome);
+          if (!isValidOutcome_(outcome)) {
+            missing.push({ mark_id: markId, reason: '狀態無效' });
+            continue;
+          }
+          patch.outcome = outcome;
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'civil_worker_id')) {
+          patch.civil_worker_id = String(p.civil_worker_id || '').trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'civil_worker_name')) {
+          patch.civil_worker_name = String(p.civil_worker_name || '').trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'social_worker_id')) {
+          patch.social_worker_id = String(p.social_worker_id || '').trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'social_worker_name')) {
+          patch.social_worker_name = String(p.social_worker_name || '').trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'keyed_by_id')) {
+          patch.keyed_by_id = String(p.keyed_by_id || '').trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(p, 'keyed_by_name')) {
+          patch.keyed_by_name = String(p.keyed_by_name || '').trim();
+        }
+
+        var row = SheetHelper.updateByKey(MARKS, 'mark_id', markId, patch);
+        if (!row) {
+          missing.push({ mark_id: markId, reason: '更新失敗' });
+          continue;
+        }
+        updated.push(row);
+        var rid = String(row.report_id || existing.report_id || '').trim();
+        if (rid) {
+          if (!reportTouch[rid]) reportTouch[rid] = [];
+          reportTouch[rid].push(String(row.mark_id || markId));
+        }
+      }
+
+      // 同一 report：若該 report 下全部 active marks 皆在本次更新集合，同步 report staff／notes
+      var reportIds = Object.keys(reportTouch);
+      for (var r = 0; r < reportIds.length; r++) {
+        var reportId = reportIds[r];
+        var report = SheetHelper.findByKey(REPORTS, 'report_id', reportId)[0];
+        if (!report) continue;
+        var siblingMarks = SheetHelper.rowsToObjects(SheetHelper.getSheet(MARKS)).filter(
+          function (row) {
+            return (
+              String(row.report_id || '') === reportId &&
+              String(row.status || 'active') === 'active'
+            );
+          }
+        );
+        var touched = {};
+        reportTouch[reportId].forEach(function (id) {
+          touched[id] = true;
+        });
+        var allTouched =
+          siblingMarks.length > 0 &&
+          siblingMarks.every(function (row) {
+            return touched[String(row.mark_id || '')];
+          });
+        var noteLine =
+          Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm') +
+          ' 管理者修正 ' +
+          reportTouch[reportId].length +
+          ' 筆標記' +
+          (correctedBy ? '（' + correctedBy + '）' : '') +
+          (note ? '：' + note : '');
+        var reportPatch = {
+          notes: String(report.notes || '')
+            ? String(report.notes || '') + '｜' + noteLine
+            : noteLine,
+        };
+        if (allTouched && siblingMarks.length) {
+          var first = siblingMarks[0];
+          // 整批同 report 全改：用第一筆的 staff 寫回 report（同梯次通常一致）
+          reportPatch.keyed_by_id = String(first.keyed_by_id || '');
+          reportPatch.keyed_by_name = String(first.keyed_by_name || '');
+          reportPatch.civil_worker_id = String(first.civil_worker_id || '');
+          reportPatch.civil_worker_name = String(first.civil_worker_name || '');
+          reportPatch.social_worker_id = String(first.social_worker_id || '');
+          reportPatch.social_worker_name = String(first.social_worker_name || '');
+          var done = 0;
+          var missed = 0;
+          var notFound = 0;
+          siblingMarks.forEach(function (m) {
+            var o = normalizeOutcome_(m.outcome);
+            if (o === OUTCOMES.done) done += 1;
+            else if (o === OUTCOMES.missed) missed += 1;
+            else if (o === OUTCOMES.notFound) notFound += 1;
+          });
+          reportPatch.count_done = done;
+          reportPatch.count_missed = missed;
+          reportPatch.count_not_found = notFound;
+          reportPatch.count_total = done + missed + notFound;
+        }
+        SheetHelper.updateByKey(REPORTS, 'report_id', reportId, reportPatch);
+      }
+
+      return {
+        updated_count: updated.length,
+        missing_count: missing.length,
+        updated: updated,
+        missing: missing,
+        corrected_at: stamp,
+      };
+    });
+  }
+
   return {
     submit: submit,
     list: list,
     listMarks: listMarks,
+    patchMarks: patchMarks,
     listCaseContext: listCaseContext,
     summary: summary,
     ensureSchema: ensureSchema_,

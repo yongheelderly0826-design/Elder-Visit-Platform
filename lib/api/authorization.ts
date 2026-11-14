@@ -69,6 +69,28 @@ export function requireManagerCapability(request: NextRequest, capability: Capab
   return requireCapability(request, capability);
 }
 
+/** 僅 workspace_owner／workspace_manager（不含 desk_clerk、visitor） */
+export function requireOwnerOrManagerCapability(
+  request: NextRequest,
+  capability: Capability,
+) {
+  const roleKey = getRoleKey(request);
+  if (roleKey !== "workspace_owner" && roleKey !== "workspace_manager") {
+    return NextResponse.json(
+      {
+        error: {
+          code: "FORBIDDEN",
+          message: "此功能僅供承辦管理者使用。",
+          requiredCapability: capability,
+          roleKey,
+        },
+      },
+      { status: 403 },
+    );
+  }
+  return requireCapability(request, capability);
+}
+
 export function requireManagerAnyCapability(
   request: NextRequest,
   capabilities: Capability[],

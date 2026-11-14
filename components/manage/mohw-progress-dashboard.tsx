@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BarChart3, ClipboardCheck, RefreshCw } from "lucide-react";
+import { BarChart3, ClipboardCheck, RefreshCw, Wrench } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import type {
@@ -141,7 +141,22 @@ export function MohwProgressDashboard() {
           <ClipboardCheck className="mr-2 h-4 w-4" />
           前往進度回報
         </Link>
+        <Link
+          href="/manager/mohw-progress/corrections"
+          className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted/40"
+        >
+          <Wrench className="mr-2 h-4 w-4" />
+          修正已送出
+        </Link>
       </div>
+
+      <section className="rounded-lg border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+        已送出但建檔／民政／社政／狀態填錯時，請至「
+        <Link href="/manager/mohw-progress/corrections" className="text-primary underline-offset-2 hover:underline">
+          修正已送出
+        </Link>
+        」批次改正；不會改動登入送出帳號與原始回報時間。
+      </section>
 
       {message && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">

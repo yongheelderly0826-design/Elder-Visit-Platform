@@ -858,6 +858,19 @@ export const gasClient = {
       gasFetch<Array<Record<string, unknown>>>("mohwProgress.listMarks", {
         params: params as Record<string, string> | undefined,
       }),
+    patchMarks: (body: {
+      patches: Array<Record<string, unknown>>;
+      corrected_by?: string;
+      note?: string;
+      correction_note?: string;
+    }) =>
+      gasFetch<{
+        updated_count: number;
+        missing_count: number;
+        updated: Array<Record<string, unknown>>;
+        missing: Array<{ mark_id?: string; reason?: string }>;
+        corrected_at?: string;
+      }>("mohwProgress.patchMarks", { method: "POST", body }),
     listCaseContext: (params: { village_name: string }) =>
       gasFetch<{
         village_name?: string;
