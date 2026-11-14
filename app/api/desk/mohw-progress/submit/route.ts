@@ -109,15 +109,9 @@ export async function POST(request: NextRequest) {
     const socialWorkerName = String(
       body.socialWorkerName || body.social_worker_name || "",
     ).trim();
-    // 臨時登打：建檔／回報人強制取 cookie（同關懷表），不採前端訪客下拉
-    const keyedById =
-      roleKey === "desk_clerk" && clerkId
-        ? clerkId
-        : String(body.keyedById || body.keyed_by_id || "").trim();
-    const keyedByName =
-      roleKey === "desk_clerk" && (clerkName || clerkId)
-        ? clerkName || clerkId
-        : String(body.keyedByName || body.keyed_by_name || "").trim();
+    // 建檔人員改由前端自行選擇（紙本實際建檔人）；登打帳號仍寫 reported_by 留痕
+    const keyedById = String(body.keyedById || body.keyed_by_id || "").trim();
+    const keyedByName = String(body.keyedByName || body.keyed_by_name || "").trim();
     if (!civilWorkerName && !socialWorkerName) {
       return NextResponse.json(
         {
@@ -134,7 +128,7 @@ export async function POST(request: NextRequest) {
         {
           error: {
             code: "VALIDATION_ERROR",
-            message: roleKey === "desk_clerk" ? "登打帳號姓名未設定。" : "請選擇建檔人員。",
+            message: "請選擇建檔人員。",
           },
         },
         { status: 400 },

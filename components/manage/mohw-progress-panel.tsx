@@ -214,9 +214,7 @@ export function MohwProgressPanel() {
 
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
   const selectedSocial = socialVisitors.find((item) => item.id === socialVisitorId) ?? null;
-  const selectedKeyedBy = deskClerk
-    ? { id: deskClerk.id, name: deskClerk.name }
-    : allVisitors.find((item) => item.id === keyedById) ?? null;
+  const selectedKeyedBy = allVisitors.find((item) => item.id === keyedById) ?? null;
   /** 選里別即可瀏覽／勾選個案；訪查員／建檔僅送出時必填 */
   const canBrowseCases = Boolean(village);
   const missingSubmitMeta = [
@@ -371,12 +369,13 @@ export function MohwProgressPanel() {
       const written = json.data?.marks_written ?? items.length;
       setNotes("");
       clearBothVisitors();
+      setKeyedById("");
       setFilter("unset");
       setCaseTab("direct");
       setQuery("");
       await loadOptions(village);
       setMessage(
-        `已確認 ${written} 筆（${reportId}），已寫入儀表板。民政／社政已清空，請依下一波紙本重新點選。下方已切到「尚未勾選」。`,
+        `已確認 ${written} 筆（${reportId}），已寫入儀表板。民政／社政／建檔人員已清空，請依下一波紙本重新點選。下方已切到「尚未勾選」。`,
       );
     } catch {
       setMessage("送出失敗，請稍後再試。");
@@ -428,7 +427,7 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">1. 里別、訪查員與建檔</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            同一橫列：里別／民政／社政／建檔人員。選里別後即可看個案。民政／社政請依紙本自行點選（可擇一或兩個都選，至少一側有人；預設「無人」，不依登打帳號帶入）；建檔人員為登打帳號，送出時必填。
+            同一橫列：里別／民政／社政／建檔人員。選里別後即可看個案。民政／社政／建檔人員皆請依紙本自行點選（民政／社政可擇一或兩個都選，至少一側有人；皆不預設人名）。送出時建檔人員必選。
           </p>
         </div>
         <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
@@ -524,26 +523,37 @@ export function MohwProgressPanel() {
               </select>
             </div>
             <div className="min-w-[8.5rem] flex-1">
-              <label className="text-xs font-medium text-muted-foreground">建檔人員</label>
-              {deskClerk ? (
-                <p className="mt-1 rounded-md border bg-secondary/50 px-3 py-2 text-sm">
-                  {deskClerk.label}
-                </p>
-              ) : (
-                <select
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={keyedById}
-                  onChange={(event) => setKeyedById(event.target.value)}
-                  disabled={busy || loading || !village}
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-muted-foreground">建檔人員</label>
+                <button
+                  type="button"
+                  className="text-[11px] text-primary underline-offset-2 hover:underline disabled:opacity-40"
+                  disabled={busy || loading || !village || !keyedById}
+                  onClick={() => setKeyedById("")}
                 >
-                  <option value="">{village ? "請選擇建檔人員" : "請先選里別"}</option>
-                  {allVisitors.map((visitor) => (
-                    <option key={visitor.id} value={visitor.id}>
-                      {visitorLabel(visitor)}
-                    </option>
-                  ))}
-                </select>
-              )}
+                  清除
+                </button>
+              </div>
+              <select
+                key={`keyed-${staffSelectEpoch}-${village || "none"}`}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={village ? keyedById : ""}
+                autoComplete="off"
+                name="mohw-keyed-by"
+                onChange={(event) => setKeyedById(event.target.value)}
+                disabled={busy || loading || !village}
+              >
+                <option value="">
+                  {village ? "— 請自行選擇建檔人員 —" : "請先選里別"}
+                </option>
+                {village
+                  ? allVisitors.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>
+                        {visitorLabel(visitor)}
+                      </option>
+                    ))
+                  : null}
+              </select>
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
