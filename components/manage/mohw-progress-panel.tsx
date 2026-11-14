@@ -75,7 +75,23 @@ export function MohwProgressPanel() {
   const [notes, setNotes] = useState("");
   const [civilVisitorId, setCivilVisitorId] = useState("");
   const [socialVisitorId, setSocialVisitorId] = useState("");
+  /** 強迫下拉重掛，避免瀏覽器殘留顯示舊人名 */
+  const [staffSelectEpoch, setStaffSelectEpoch] = useState(0);
   const [keyedById, setKeyedById] = useState("");
+
+  function clearCivilVisitor() {
+    setCivilVisitorId("");
+    setStaffSelectEpoch((n) => n + 1);
+  }
+  function clearSocialVisitor() {
+    setSocialVisitorId("");
+    setStaffSelectEpoch((n) => n + 1);
+  }
+  function clearBothVisitors() {
+    setCivilVisitorId("");
+    setSocialVisitorId("");
+    setStaffSelectEpoch((n) => n + 1);
+  }
   const [deskClerk, setDeskClerk] = useState<{ id: string; name: string; label: string } | null>(
     null,
   );
@@ -163,6 +179,11 @@ export function MohwProgressPanel() {
     void loadOptions();
   }, []);
 
+  // 進入頁面即清空訪查員，避免舊版／快取殘留登打姓名
+  useEffect(() => {
+    clearBothVisitors();
+  }, []);
+
   useEffect(() => {
     if (!village) {
       setCasesKeyed([]);
@@ -172,6 +193,7 @@ export function MohwProgressPanel() {
       setKeyedCount(null);
       setDirectCount(null);
       setContextWarning(null);
+      clearBothVisitors();
       return;
     }
     void loadOptions(village);
@@ -202,15 +224,7 @@ export function MohwProgressPanel() {
     !selectedKeyedBy ? "建檔人員" : "",
   ].filter(Boolean);
 
-  useEffect(() => {
-    const reporterName = options?.reporter?.name?.trim();
-    if (!reporterName || !allVisitors.length) return;
-    if (civilVisitorId || socialVisitorId) return;
-    const match = allVisitors.find((item) => item.name.trim() === reporterName);
-    if (!match) return;
-    if (deskVisitorColumnSide(match) === "social") setSocialVisitorId(match.id);
-    else setCivilVisitorId(match.id);
-  }, [options?.reporter?.name, allVisitors, civilVisitorId, socialVisitorId]);
+  // 不依登打帳號姓名自動帶入民政／社政：手上紙本常是別人訪視，須由使用者自行點選。
 
   const summary = useMemo(
     () => summarizeCaseOutcomes(Object.values(outcomes)),
@@ -271,24 +285,24 @@ export function MohwProgressPanel() {
     return n;
   }, [casesDirect, outcomes]);
 
+  /** 僅送出本次有變更的勾選；已送且未改動的不重送、不佔按鈕筆數 */
   const selectedForSubmit = useMemo(() => {
     return casesDirect
       .map((row) => {
         const outcome = outcomes[row.case_id] || "";
         if (!outcome) return null;
         const original = row.outcome || "";
+        if (outcome === original) return null;
         return {
           case_id: row.case_id,
           encoded_id: row.encoded_id,
           outcome,
-          changed: outcome !== original,
         };
       })
       .filter(Boolean) as Array<{
       case_id: string;
       encoded_id: string;
       outcome: MohwProgressOutcome;
-      changed: boolean;
     }>;
   }, [casesDirect, outcomes]);
 
@@ -317,7 +331,7 @@ export function MohwProgressPanel() {
       return;
     }
     if (!selectedCivil && !selectedSocial) {
-      setMessage("請先從上方下拉選擇民政或社政訪查員。");
+      setMessage("請至少選擇民政或社政訪查員其中一側（另一側可維持「無人」）。");
       return;
     }
     if (!selectedKeyedBy) {
@@ -354,11 +368,16 @@ export function MohwProgressPanel() {
       }
       setWarnings(json.data?.warnings ?? []);
       const reportId = json.data?.report?.report_id || "";
-      setMessage(
-        `已確認 ${json.data?.marks_written ?? items.length} 筆（${reportId}），將匯入里別進度儀表板。同個案以最新狀態為準。`,
-      );
+      const written = json.data?.marks_written ?? items.length;
       setNotes("");
+      clearBothVisitors();
+      setFilter("unset");
+      setCaseTab("direct");
+      setQuery("");
       await loadOptions(village);
+      setMessage(
+        `已確認 ${written} 筆（${reportId}），已寫入儀表板。民政／社政已清空，請依下一波紙本重新點選。下方已切到「尚未勾選」。`,
+      );
     } catch {
       setMessage("送出失敗，請稍後再試。");
     } finally {
@@ -384,7 +403,7 @@ export function MohwProgressPanel() {
         icon={ClipboardCheck}
         eyebrow="獨立回報"
         title="衛福部進度回報"
-        description="先選里別即可展開「已KEY關懷表／已直KEY衛福部」兩頁籤；送出前再補齊民政或社政、建檔人員。勾選狀態會匯總到各里進度儀表板。"
+        description="先選里別即可展開「已KEY關懷表／已直KEY衛福部」兩頁籤；送出前請選建檔人員，民政／社政訪查員可擇一或兩個都選。勾選狀態會匯總到各里進度儀表板。"
       />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -393,8 +412,7 @@ export function MohwProgressPanel() {
           <div>
             <p className="font-medium">勾選是為了里別進度儀表板匯總</p>
             <p className="mt-1 text-amber-900/90">
-              「已KEY關懷表」已算本系統完成進度（唯讀）。「已直KEY衛福部」請勾已完成／未遇／拒訪並送出，與前者合計＝該里名冊，供
-              `/manager/mohw-progress` 儀表板使用。
+              「已KEY關懷表」唯讀。「已直KEY衛福部」勾選送出後，系統會自動切到「尚未勾選」方便繼續做下一波；已送的人不會從名冊刪除，要核對請點「全部」或狀態篩選。只有本平台建好關懷表後，該人才會改到「已KEY關懷表」。
             </p>
           </div>
         </div>
@@ -410,7 +428,7 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">1. 里別、訪查員與建檔</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            同一橫列：里別／民政／社政／建檔人員。選里別後即可看個案；訪查員等欄位於送出時必填。
+            同一橫列：里別／民政／社政／建檔人員。選里別後即可看個案。民政／社政請依紙本自行點選（可擇一或兩個都選，至少一側有人；預設「無人」，不依登打帳號帶入）；建檔人員為登打帳號，送出時必填。
           </p>
         </div>
         <div className="overflow-x-auto rounded-md border bg-muted/20 px-3 py-3">
@@ -423,8 +441,7 @@ export function MohwProgressPanel() {
                 disabled={loading}
                 onChange={(event) => {
                   setVillage(event.target.value);
-                  setCivilVisitorId("");
-                  setSocialVisitorId("");
+                  clearBothVisitors();
                   setKeyedById("");
                   setCaseTab("direct");
                   setFilter("all");
@@ -441,35 +458,69 @@ export function MohwProgressPanel() {
               </select>
             </div>
             <div className="min-w-[8.5rem] flex-1">
-              <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-muted-foreground">民政訪查員</label>
+                <button
+                  type="button"
+                  className="text-[11px] text-primary underline-offset-2 hover:underline disabled:opacity-40"
+                  disabled={busy || loading || !village || !civilVisitorId}
+                  onClick={() => clearCivilVisitor()}
+                >
+                  清除
+                </button>
+              </div>
               <select
+                key={`civil-${staffSelectEpoch}-${village || "none"}`}
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={civilVisitorId}
+                value={village ? civilVisitorId : ""}
+                autoComplete="off"
+                name="mohw-civil-visitor"
                 onChange={(event) => setCivilVisitorId(event.target.value)}
                 disabled={busy || loading || !village}
               >
-                <option value="">{village ? "請選擇民政訪查員" : "請先選里別"}</option>
-                {civilVisitors.map((visitor) => (
-                  <option key={visitor.id} value={visitor.id}>
-                    {visitorLabel(visitor)}
-                  </option>
-                ))}
+                <option value="">
+                  {village ? "— 請自行選擇（預設無人）—" : "請先選里別"}
+                </option>
+                {village
+                  ? civilVisitors.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>
+                        {visitorLabel(visitor)}
+                      </option>
+                    ))
+                  : null}
               </select>
             </div>
             <div className="min-w-[8.5rem] flex-1">
-              <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-muted-foreground">社政訪查員</label>
+                <button
+                  type="button"
+                  className="text-[11px] text-primary underline-offset-2 hover:underline disabled:opacity-40"
+                  disabled={busy || loading || !village || !socialVisitorId}
+                  onClick={() => clearSocialVisitor()}
+                >
+                  清除
+                </button>
+              </div>
               <select
+                key={`social-${staffSelectEpoch}-${village || "none"}`}
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={socialVisitorId}
+                value={village ? socialVisitorId : ""}
+                autoComplete="off"
+                name="mohw-social-visitor"
                 onChange={(event) => setSocialVisitorId(event.target.value)}
                 disabled={busy || loading || !village}
               >
-                <option value="">{village ? "請選擇社政訪查員" : "請先選里別"}</option>
-                {socialVisitors.map((visitor) => (
-                  <option key={visitor.id} value={visitor.id}>
-                    {visitorLabel(visitor)}
-                  </option>
-                ))}
+                <option value="">
+                  {village ? "— 請自行選擇（預設無人）—" : "請先選里別"}
+                </option>
+                {village
+                  ? socialVisitors.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>
+                        {visitorLabel(visitor)}
+                      </option>
+                    ))
+                  : null}
               </select>
             </div>
             <div className="min-w-[8.5rem] flex-1">
@@ -495,9 +546,19 @@ export function MohwProgressPanel() {
               )}
             </div>
           </div>
-          {options?.scope?.label && (
-            <p className="mt-2 text-xs text-muted-foreground">範圍：{options.scope.label}</p>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {options?.scope?.label && (
+              <p className="text-xs text-muted-foreground">範圍：{options.scope.label}</p>
+            )}
+            <button
+              type="button"
+              className="text-xs text-primary underline-offset-2 hover:underline disabled:opacity-40"
+              disabled={busy || loading || !village || (!civilVisitorId && !socialVisitorId)}
+              onClick={() => clearBothVisitors()}
+            >
+              清除民政＋社政
+            </button>
+          </div>
         </div>
       </section>
 
@@ -505,7 +566,8 @@ export function MohwProgressPanel() {
         <div>
           <h2 className="font-semibold">2. 個案狀態</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            依紙本「里編號」排序；兩頁籤合計＝該里名冊。勾選結果供儀表板匯總。
+            依紙本「里編號」排序；兩頁籤合計＝該里名冊。送出成功後預設只顯示「尚未勾選」；人名下的「民政／社政
+            ○○」是該案已記錄的訪查員，與上方下拉本次選擇分開。
           </p>
         </div>
 
@@ -517,7 +579,7 @@ export function MohwProgressPanel() {
           <>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>本系統已KEY {displayKeyedCount}</span>
-              <span>直KEY待回報 {displayDirectCount}</span>
+              <span>直KEY名單 {displayDirectCount}</span>
               <span>名冊 {displayRoster}</span>
               {caseTab === "direct" && (
                 <>
