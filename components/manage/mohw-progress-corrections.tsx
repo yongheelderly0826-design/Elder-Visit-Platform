@@ -5,8 +5,6 @@ import Link from "next/link";
 import { ArrowLeft, CheckSquare, RefreshCw, Wrench } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
-import { deskVisitorColumnSide } from "@/lib/domain/desk-care-batch";
-import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
 import {
   MOHW_PROGRESS_OUTCOMES,
   type MohwProgressMarkPatch,
@@ -14,7 +12,11 @@ import {
   type MohwProgressOutcome,
 } from "@/lib/domain/mohw-progress";
 
-const ZHANG_XINYUN_QUICK = "張馨云";
+type StaffOption = {
+  id: string;
+  name: string;
+  kind: "visitor" | "desk_clerk" | "mark";
+};
 
 type ApplyFields = {
   keyed: boolean;
@@ -27,17 +29,23 @@ function emptyApply(): ApplyFields {
   return { keyed: true, civil: false, social: false, outcome: false };
 }
 
+function staffLabel(item: StaffOption) {
+  if (item.kind === "desk_clerk") return `${item.name}（${item.id}）`;
+  return item.name;
+}
+
 export function MohwProgressCorrections() {
   const [villages, setVillages] = useState<string[]>([]);
-  const [village, setVillage] = useState("");
+  const [village, setVillage] = useState(""); // "" = 全部里
   const [marks, setMarks] = useState<MohwProgressMarkRow[]>([]);
-  const [visitors, setVisitors] = useState<DeskVisitorOption[]>([]);
+  const [keyedByNames, setKeyedByNames] = useState<string[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [keyedFilter, setKeyedFilter] = useState("");
+  const [keyedFilter, setKeyedFilter] = useState(""); // "" = 全部建檔人員
   const [outcomeFilter, setOutcomeFilter] = useState<"" | MohwProgressOutcome>("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -51,46 +59,21 @@ export function MohwProgressCorrections() {
   const [nextOutcome, setNextOutcome] = useState<MohwProgressOutcome | "">("");
   const [note, setNote] = useState("");
 
-  const civilVisitors = useMemo(
-    () => visitors.filter((item) => deskVisitorColumnSide(item) === "civil"),
-    [visitors],
-  );
-  const socialVisitors = useMemo(
-    () => visitors.filter((item) => deskVisitorColumnSide(item) === "social"),
-    [visitors],
-  );
-
-  const loadVisitors = useCallback(async () => {
-    try {
-      const response = await fetch("/api/desk/mohw-progress/options");
-      const json = (await response.json()) as {
-        data?: { visitors?: DeskVisitorOption[]; villages?: string[] };
-      };
-      if (response.ok) {
-        setVisitors(json.data?.visitors ?? []);
-        if (!villages.length && json.data?.villages?.length) {
-          setVillages(json.data.villages);
-        }
-      }
-    } catch {
-      // visitors optional for display; corrections can still list marks
-    }
-  }, [villages.length]);
-
   const loadMarks = useCallback(async (villageName: string) => {
-    if (!villageName) {
-      setMarks([]);
-      setSelected({});
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(
-        `/api/manager/mohw-progress/marks?village=${encodeURIComponent(villageName)}`,
-      );
+      const qs = villageName
+        ? `?village=${encodeURIComponent(villageName)}`
+        : "";
+      const response = await fetch(`/api/manager/mohw-progress/marks${qs}`);
       const json = (await response.json()) as {
-        data?: { marks?: MohwProgressMarkRow[]; villages?: string[] };
+        data?: {
+          marks?: MohwProgressMarkRow[];
+          villages?: string[];
+          keyed_by_names?: string[];
+          staff_options?: StaffOption[];
+        };
         error?: { message?: string };
       };
       if (!response.ok) {
@@ -100,6 +83,8 @@ export function MohwProgressCorrections() {
       }
       if (json.data?.villages?.length) setVillages(json.data.villages);
       setMarks(json.data?.marks ?? []);
+      setKeyedByNames(json.data?.keyed_by_names ?? []);
+      setStaffOptions(json.data?.staff_options ?? []);
       setSelected({});
       setMessage(null);
     } catch {
@@ -111,35 +96,17 @@ export function MohwProgressCorrections() {
   }, []);
 
   useEffect(() => {
-    void loadVisitors();
-  }, [loadVisitors]);
-
-  useEffect(() => {
     void loadMarks(village);
   }, [village, loadMarks]);
-
-  const keyedNameOptions = useMemo(() => {
-    const fromMarks = new Set<string>();
-    for (const row of marks) {
-      const name = row.keyed_by_name.trim();
-      if (name) fromMarks.add(name);
-    }
-    return [...fromMarks].sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [marks]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return marks.filter((row) => {
-      if (keyedFilter === "__ZHANG__") {
-        if (!row.keyed_by_name.includes(ZHANG_XINYUN_QUICK) && !row.keyed_by_id.includes("TEMP-02")) {
-          return false;
-        }
-      } else if (keyedFilter && row.keyed_by_name !== keyedFilter) {
-        return false;
-      }
+      if (keyedFilter && row.keyed_by_name.trim() !== keyedFilter) return false;
       if (outcomeFilter && row.outcome !== outcomeFilter) return false;
       if (!q) return true;
       const hay = [
+        row.village_name,
         row.village_seq ?? "",
         row.name,
         row.encoded_id,
@@ -173,15 +140,19 @@ export function MohwProgressCorrections() {
     });
   }
 
+  function findStaff(id: string) {
+    return staffOptions.find((item) => item.id === id) ?? null;
+  }
+
   function buildPatches(): MohwProgressMarkPatch[] | { error: string } {
     if (!selectedIds.length) return { error: "請先勾選要修正的標記。" };
     if (!applyFields.keyed && !applyFields.civil && !applyFields.social && !applyFields.outcome) {
       return { error: "請至少勾選一項要改正的欄位。" };
     }
 
-    const keyed = visitors.find((item) => item.id === nextKeyedId) ?? null;
-    const civil = civilVisitors.find((item) => item.id === nextCivilId) ?? null;
-    const social = socialVisitors.find((item) => item.id === nextSocialId) ?? null;
+    const keyed = findStaff(nextKeyedId);
+    const civil = findStaff(nextCivilId);
+    const social = findStaff(nextSocialId);
 
     if (applyFields.keyed && !keyed) {
       return { error: "已勾選改正建檔人員，請選擇正確建檔人員。" };
@@ -199,7 +170,7 @@ export function MohwProgressCorrections() {
     return selectedIds.map((markId) => {
       const patch: MohwProgressMarkPatch = { mark_id: markId };
       if (applyFields.keyed && keyed) {
-        patch.keyed_by_id = keyed.id;
+        patch.keyed_by_id = keyed.id.startsWith("name:") ? "" : keyed.id;
         patch.keyed_by_name = keyed.name;
       }
       if (applyFields.civil) {
@@ -207,7 +178,7 @@ export function MohwProgressCorrections() {
           patch.civil_worker_id = "";
           patch.civil_worker_name = "";
         } else if (civil) {
-          patch.civil_worker_id = civil.id;
+          patch.civil_worker_id = civil.id.startsWith("name:") ? "" : civil.id;
           patch.civil_worker_name = civil.name;
         }
       }
@@ -216,7 +187,7 @@ export function MohwProgressCorrections() {
           patch.social_worker_id = "";
           patch.social_worker_name = "";
         } else if (social) {
-          patch.social_worker_id = social.id;
+          patch.social_worker_id = social.id.startsWith("name:") ? "" : social.id;
           patch.social_worker_name = social.name;
         }
       }
@@ -236,22 +207,13 @@ export function MohwProgressCorrections() {
 
     const parts: string[] = [];
     if (applyFields.keyed) {
-      const keyed = visitors.find((item) => item.id === nextKeyedId);
-      parts.push(`建檔→${keyed?.name || "—"}`);
+      parts.push(`建檔→${findStaff(nextKeyedId)?.name || "—"}`);
     }
     if (applyFields.civil) {
-      parts.push(
-        clearCivil
-          ? "民政→清空"
-          : `民政→${civilVisitors.find((item) => item.id === nextCivilId)?.name || "—"}`,
-      );
+      parts.push(clearCivil ? "民政→清空" : `民政→${findStaff(nextCivilId)?.name || "—"}`);
     }
     if (applyFields.social) {
-      parts.push(
-        clearSocial
-          ? "社政→清空"
-          : `社政→${socialVisitors.find((item) => item.id === nextSocialId)?.name || "—"}`,
-      );
+      parts.push(clearSocial ? "社政→清空" : `社政→${findStaff(nextSocialId)?.name || "—"}`);
     }
     if (applyFields.outcome) parts.push(`狀態→${nextOutcome}`);
 
@@ -286,7 +248,6 @@ export function MohwProgressCorrections() {
       const json = (await response.json()) as {
         data?: {
           updated_count?: number;
-          missing_count?: number;
           missing?: Array<{ mark_id?: string; reason?: string }>;
         };
         error?: { message?: string };
@@ -318,7 +279,7 @@ export function MohwProgressCorrections() {
         icon={Wrench}
         eyebrow="管理者"
         title="衛福部進度：修正已送出"
-        description="此頁只改正已送出的直 KEY 標記（建檔／民政／社政／狀態）。未送出請用「衛福部進度回報」。登入送出帳號與原始回報時間不會改動。"
+        description="可修正任一里、任一人的已送出直 KEY 標記（建檔／民政／社政／狀態）。未送出請用「衛福部進度回報」。登入送出帳號與原始回報時間不會改動。"
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -332,7 +293,7 @@ export function MohwProgressCorrections() {
         <Button
           type="button"
           variant="outline"
-          disabled={loading || !village}
+          disabled={loading}
           onClick={() => void loadMarks(village)}
         >
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -354,6 +315,9 @@ export function MohwProgressCorrections() {
 
       <section className="rounded-lg border bg-card p-4 space-y-3">
         <h2 className="font-semibold">1. 篩選已送出標記</h2>
+        <p className="text-sm text-muted-foreground">
+          預設載入全部里、全部建檔人員；再依需要縮小範圍。
+        </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-sm">
             <span className="text-xs font-medium text-muted-foreground">里別</span>
@@ -362,7 +326,7 @@ export function MohwProgressCorrections() {
               value={village}
               onChange={(event) => setVillage(event.target.value)}
             >
-              <option value="">— 請選里別 —</option>
+              <option value="">全部里</option>
               {villages.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -376,11 +340,9 @@ export function MohwProgressCorrections() {
               className="w-full rounded-md border bg-background px-3 py-2"
               value={keyedFilter}
               onChange={(event) => setKeyedFilter(event.target.value)}
-              disabled={!village}
             >
-              <option value="">全部</option>
-              <option value="__ZHANG__">快捷：張馨云／TEMP-02</option>
-              {keyedNameOptions.map((name) => (
+              <option value="">全部建檔人員（{keyedByNames.length} 人）</option>
+              {keyedByNames.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>
@@ -395,7 +357,6 @@ export function MohwProgressCorrections() {
               onChange={(event) =>
                 setOutcomeFilter(event.target.value as "" | MohwProgressOutcome)
               }
-              disabled={!village}
             >
               <option value="">全部</option>
               {MOHW_PROGRESS_OUTCOMES.map((item) => (
@@ -409,17 +370,16 @@ export function MohwProgressCorrections() {
             <span className="text-xs font-medium text-muted-foreground">搜尋</span>
             <input
               className="w-full rounded-md border bg-background px-3 py-2"
-              placeholder="序號／姓名／編碼"
+              placeholder="里／序號／姓名／編碼／人名"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              disabled={!village}
             />
           </label>
         </div>
         <p className="text-sm text-muted-foreground">
-          {village
-            ? `目前列出 ${filtered.length}／${marks.length} 筆；已勾選 ${selectedIds.length} 筆。`
-            : "請先選里別。"}
+          {loading
+            ? "載入中…"
+            : `目前列出 ${filtered.length}／${marks.length} 筆；已勾選 ${selectedIds.length} 筆。`}
         </p>
       </section>
 
@@ -443,11 +403,10 @@ export function MohwProgressCorrections() {
               disabled={!applyFields.keyed}
               onChange={(event) => setNextKeyedId(event.target.value)}
             >
-              <option value="">— 選擇正確建檔人員 —</option>
-              {visitors.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                  {item.badgeNo ? `（${item.badgeNo}）` : ""}
+              <option value="">— 選擇正確建檔人員（{staffOptions.length}）—</option>
+              {staffOptions.map((item) => (
+                <option key={`keyed-${item.id}`} value={item.id}>
+                  {staffLabel(item)}
                 </option>
               ))}
             </select>
@@ -474,9 +433,9 @@ export function MohwProgressCorrections() {
               }}
             >
               <option value="">— 選擇民政 —</option>
-              {civilVisitors.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
+              {staffOptions.map((item) => (
+                <option key={`civil-${item.id}`} value={item.id}>
+                  {staffLabel(item)}
                 </option>
               ))}
             </select>
@@ -515,9 +474,9 @@ export function MohwProgressCorrections() {
               }}
             >
               <option value="">— 選擇社政 —</option>
-              {socialVisitors.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
+              {staffOptions.map((item) => (
+                <option key={`social-${item.id}`} value={item.id}>
+                  {staffLabel(item)}
                 </option>
               ))}
             </select>
@@ -570,7 +529,7 @@ export function MohwProgressCorrections() {
             className="w-full rounded-md border bg-background px-3 py-2"
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="例：得和里誤填建檔人員改正"
+            placeholder="例：誤填建檔人員改正"
           />
         </label>
 
@@ -598,18 +557,17 @@ export function MohwProgressCorrections() {
           </label>
         </div>
 
-        {!village ? (
-          <p className="text-sm text-muted-foreground">請先選里別。</p>
-        ) : loading ? (
+        {loading ? (
           <p className="text-sm text-muted-foreground">載入中…</p>
         ) : !filtered.length ? (
           <p className="text-sm text-muted-foreground">沒有符合條件的已送出標記。</p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
-            <table className="min-w-[64rem] w-full text-sm">
+            <table className="min-w-[68rem] w-full text-sm">
               <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 font-medium">勾選</th>
+                  <th className="px-3 py-2 font-medium">里別</th>
                   <th className="px-3 py-2 font-medium">里編號</th>
                   <th className="px-3 py-2 font-medium">姓名</th>
                   <th className="px-3 py-2 font-medium">編碼</th>
@@ -635,6 +593,7 @@ export function MohwProgressCorrections() {
                         }
                       />
                     </td>
+                    <td className="px-3 py-2">{row.village_name || "—"}</td>
                     <td className="px-3 py-2 tabular-nums">{row.village_seq ?? "—"}</td>
                     <td className="px-3 py-2 font-medium">{row.name || "—"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{row.encoded_id || "—"}</td>
