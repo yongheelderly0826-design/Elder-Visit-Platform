@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getRoleKey, requireManagerCapability } from "@/lib/api/authorization";
 import { decodeManagerSession, SESSION_COOKIE } from "@/lib/auth/google-manager";
 import { getDeskOrgEmailMap } from "@/lib/domain/desk-org-emails";
+import { filterOperationalStaffByName } from "@/lib/domain/desk-staff-picker";
 import { mapDeskCase, mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
 import {
   buildDeskIdentityOptions,
@@ -56,7 +57,8 @@ export async function GET(request: NextRequest) {
 
     if (part === "visitors") {
       const visitors = await cachedRead(
-        ["desk-care-form-visitors-slim-v3"],
+        // v6：擴大測試帳 denylist（正式寫入第四測／系統測試／核准流程…）
+        ["desk-care-form-visitors-slim-v6-deny-test"],
         [GAS_READ_TAGS.deskCareFormOptions],
         () => loadDeskVisitors(),
         GAS_READ_CACHE_SECONDS_DESK,
@@ -143,10 +145,17 @@ async function loadDeskVisitors() {
     string,
     unknown
   >[];
-  return visitorRows
-    .map(mapDeskVisitor)
-    .filter((item) => item.id)
-    .sort((a, b) => Number(b.status === "已核准") - Number(a.status === "已核准"));
+  const mapped = visitorRows.map(mapDeskVisitor).filter((item) => item.id);
+  const operational = filterOperationalStaffByName(
+    mapped,
+    (item) => item.name,
+    (item) => item.badgeNo,
+  );
+  return [...operational].sort((a, b) => {
+    const byStatus = Number(b.status === "已核准") - Number(a.status === "已核准");
+    if (byStatus !== 0) return byStatus;
+    return a.name.localeCompare(b.name, "zh-Hant");
+  });
 }
 
 async function resolveScopeOnly(identity: {

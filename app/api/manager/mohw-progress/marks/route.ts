@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import { requireOwnerOrManagerCapability } from "@/lib/api/authorization";
 import { deskVisitorColumnSide } from "@/lib/domain/desk-care-batch";
 import { listDeskClerks } from "@/lib/domain/desk-clerks";
-import { isDeskOperationalStaffName } from "@/lib/domain/desk-staff-picker";
+import {
+  isDeskOperationalStaff,
+  isDeskOperationalStaffName,
+} from "@/lib/domain/desk-staff-picker";
 import { mapDeskVisitor } from "@/lib/domain/manager-care-form-desk";
 import { mapMohwProgressMarkRow } from "@/lib/domain/mohw-progress";
 import { YONGHE_VILLAGE_NAMES, sortYongheVillagesByCode } from "@/lib/domain/village-admins";
@@ -68,7 +71,7 @@ export async function GET(request: NextRequest) {
     const staffById = new Map<string, MohwProgressStaffOption>();
     for (const row of visitorRows) {
       const mapped = mapDeskVisitor(row);
-      if (!mapped.id || !isDeskOperationalStaffName(mapped.name)) continue;
+      if (!mapped.id || !isDeskOperationalStaff(mapped)) continue;
       staffById.set(mapped.id, {
         id: mapped.id,
         name: mapped.name,

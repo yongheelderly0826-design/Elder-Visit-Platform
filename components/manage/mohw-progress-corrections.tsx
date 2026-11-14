@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, CheckSquare, RefreshCw, Wrench } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
+import { SearchableStaffSelect } from "@/components/manage/searchable-staff-select";
+import { isDeskOperationalStaffName } from "@/lib/domain/desk-staff-picker";
 import {
   MOHW_PROGRESS_OUTCOMES,
   type MohwProgressMarkPatch,
@@ -64,17 +66,21 @@ export function MohwProgressCorrections() {
   const [nextOutcome, setNextOutcome] = useState<MohwProgressOutcome | "">("");
   const [note, setNote] = useState("");
 
-  const keyedStaff = useMemo(
-    () => [...staffOptions].sort(bySurname),
+  const operationalStaff = useMemo(
+    () => staffOptions.filter((item) => isDeskOperationalStaffName(item.name)),
     [staffOptions],
+  );
+  const keyedStaff = useMemo(
+    () => [...operationalStaff].sort(bySurname),
+    [operationalStaff],
   );
   const civilStaff = useMemo(
-    () => staffOptions.filter((item) => item.side === "civil").sort(bySurname),
-    [staffOptions],
+    () => operationalStaff.filter((item) => item.side === "civil").sort(bySurname),
+    [operationalStaff],
   );
   const socialStaff = useMemo(
-    () => staffOptions.filter((item) => item.side === "social").sort(bySurname),
-    [staffOptions],
+    () => operationalStaff.filter((item) => item.side === "social").sort(bySurname),
+    [operationalStaff],
   );
 
   const loadMarks = useCallback(async (villageName: string) => {
@@ -415,19 +421,16 @@ export function MohwProgressCorrections() {
               />
               改正建檔人員
             </label>
-            <select
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            <SearchableStaffSelect
               value={nextKeyedId}
               disabled={!applyFields.keyed}
-              onChange={(event) => setNextKeyedId(event.target.value)}
-            >
-              <option value="">— 選擇正確建檔人員（{keyedStaff.length}）—</option>
-              {keyedStaff.map((item) => (
-                <option key={`keyed-${item.id}`} value={item.id}>
-                  {staffLabel(item)}
-                </option>
-              ))}
-            </select>
+              onChange={setNextKeyedId}
+              placeholder={`— 選擇正確建檔人員（可搜尋・${keyedStaff.length}）—`}
+              options={keyedStaff.map((item) => ({
+                id: item.id,
+                label: staffLabel(item),
+              }))}
+            />
           </div>
 
           <div className="space-y-2 rounded-md border p-3">
@@ -441,22 +444,19 @@ export function MohwProgressCorrections() {
               />
               改正民政
             </label>
-            <select
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            <SearchableStaffSelect
               value={nextCivilId}
               disabled={!applyFields.civil || clearCivil}
-              onChange={(event) => {
-                setNextCivilId(event.target.value);
+              onChange={(id) => {
+                setNextCivilId(id);
                 setClearCivil(false);
               }}
-            >
-              <option value="">— 選擇民政（依姓氏）—</option>
-              {civilStaff.map((item) => (
-                <option key={`civil-${item.id}`} value={item.id}>
-                  {staffLabel(item)}
-                </option>
-              ))}
-            </select>
+              placeholder="— 選擇民政（可搜尋・依姓氏）—"
+              options={civilStaff.map((item) => ({
+                id: item.id,
+                label: staffLabel(item),
+              }))}
+            />
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input
                 type="checkbox"
@@ -482,22 +482,19 @@ export function MohwProgressCorrections() {
               />
               改正社政
             </label>
-            <select
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            <SearchableStaffSelect
               value={nextSocialId}
               disabled={!applyFields.social || clearSocial}
-              onChange={(event) => {
-                setNextSocialId(event.target.value);
+              onChange={(id) => {
+                setNextSocialId(id);
                 setClearSocial(false);
               }}
-            >
-              <option value="">— 選擇社政（依姓氏）—</option>
-              {socialStaff.map((item) => (
-                <option key={`social-${item.id}`} value={item.id}>
-                  {staffLabel(item)}
-                </option>
-              ))}
-            </select>
+              placeholder="— 選擇社政（可搜尋・依姓氏）—"
+              options={socialStaff.map((item) => ({
+                id: item.id,
+                label: staffLabel(item),
+              }))}
+            />
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input
                 type="checkbox"

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Info } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
+import { SearchableStaffSelect } from "@/components/manage/searchable-staff-select";
 import { deskVisitorColumnSide } from "@/lib/domain/desk-care-batch";
+import { isDeskOperationalStaff } from "@/lib/domain/desk-staff-picker";
 import type { DeskVisitorOption } from "@/lib/domain/manager-care-form-desk";
 import { formatDeskCasePaperLabel } from "@/lib/domain/manager-care-form-desk";
 import {
@@ -201,7 +203,11 @@ export function MohwProgressPanel() {
 
   const villages = options?.villages ?? [];
   const villageCodeByName = options?.villageCodeByName ?? {};
-  const allVisitors = useMemo(() => options?.visitors ?? [], [options?.visitors]);
+  // 客戶端再擋一層，避免舊 API 快取仍帶測試帳（測試內勤乙／測試送餐甲）
+  const allVisitors = useMemo(
+    () => (options?.visitors ?? []).filter((item) => isDeskOperationalStaff(item)),
+    [options?.visitors],
+  );
 
   const civilVisitors = useMemo(
     () =>
@@ -221,6 +227,34 @@ export function MohwProgressPanel() {
     () =>
       [...allVisitors].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant")),
     [allVisitors],
+  );
+
+  const civilOptions = useMemo(
+    () =>
+      civilVisitors.map((visitor) => ({
+        id: visitor.id,
+        label: visitorLabel(visitor),
+        keywords: [visitor.badgeNo, visitor.jobTitle, visitor.phone].filter(Boolean).join(" "),
+      })),
+    [civilVisitors],
+  );
+  const socialOptions = useMemo(
+    () =>
+      socialVisitors.map((visitor) => ({
+        id: visitor.id,
+        label: visitorLabel(visitor),
+        keywords: [visitor.badgeNo, visitor.jobTitle, visitor.phone].filter(Boolean).join(" "),
+      })),
+    [socialVisitors],
+  );
+  const keyedOptions = useMemo(
+    () =>
+      keyedVisitors.map((visitor) => ({
+        id: visitor.id,
+        label: visitorLabel(visitor),
+        keywords: [visitor.badgeNo, visitor.jobTitle, visitor.phone].filter(Boolean).join(" "),
+      })),
+    [keyedVisitors],
   );
 
   const selectedCivil = civilVisitors.find((item) => item.id === civilVisitorId) ?? null;
@@ -479,26 +513,15 @@ export function MohwProgressPanel() {
                   清除
                 </button>
               </div>
-              <select
+              <SearchableStaffSelect
                 key={`civil-${staffSelectEpoch}-${village || "none"}`}
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={village ? civilVisitorId : ""}
-                autoComplete="off"
                 name="mohw-civil-visitor"
-                onChange={(event) => setCivilVisitorId(event.target.value)}
+                value={village ? civilVisitorId : ""}
+                options={village ? civilOptions : []}
+                onChange={setCivilVisitorId}
                 disabled={busy || loading || !village}
-              >
-                <option value="">
-                  {village ? "— 請自行選擇（預設無人）—" : "請先選里別"}
-                </option>
-                {village
-                  ? civilVisitors.map((visitor) => (
-                      <option key={visitor.id} value={visitor.id}>
-                        {visitorLabel(visitor)}
-                      </option>
-                    ))
-                  : null}
-              </select>
+                placeholder={village ? "— 請自行選擇（可搜尋）—" : "請先選里別"}
+              />
             </div>
             <div className="min-w-[8.5rem] flex-1">
               <div className="flex items-center justify-between gap-2">
@@ -512,26 +535,15 @@ export function MohwProgressPanel() {
                   清除
                 </button>
               </div>
-              <select
+              <SearchableStaffSelect
                 key={`social-${staffSelectEpoch}-${village || "none"}`}
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={village ? socialVisitorId : ""}
-                autoComplete="off"
                 name="mohw-social-visitor"
-                onChange={(event) => setSocialVisitorId(event.target.value)}
+                value={village ? socialVisitorId : ""}
+                options={village ? socialOptions : []}
+                onChange={setSocialVisitorId}
                 disabled={busy || loading || !village}
-              >
-                <option value="">
-                  {village ? "— 請自行選擇（預設無人）—" : "請先選里別"}
-                </option>
-                {village
-                  ? socialVisitors.map((visitor) => (
-                      <option key={visitor.id} value={visitor.id}>
-                        {visitorLabel(visitor)}
-                      </option>
-                    ))
-                  : null}
-              </select>
+                placeholder={village ? "— 請自行選擇（可搜尋）—" : "請先選里別"}
+              />
             </div>
             <div className="min-w-[8.5rem] flex-1">
               <div className="flex items-center justify-between gap-2">
@@ -545,26 +557,15 @@ export function MohwProgressPanel() {
                   清除
                 </button>
               </div>
-              <select
+              <SearchableStaffSelect
                 key={`keyed-${staffSelectEpoch}-${village || "none"}`}
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={village ? keyedById : ""}
-                autoComplete="off"
                 name="mohw-keyed-by"
-                onChange={(event) => setKeyedById(event.target.value)}
+                value={village ? keyedById : ""}
+                options={village ? keyedOptions : []}
+                onChange={setKeyedById}
                 disabled={busy || loading || !village}
-              >
-                <option value="">
-                  {village ? "— 請自行選擇建檔人員 —" : "請先選里別"}
-                </option>
-                {village
-                  ? keyedVisitors.map((visitor) => (
-                      <option key={visitor.id} value={visitor.id}>
-                        {visitorLabel(visitor)}
-                      </option>
-                    ))
-                  : null}
-              </select>
+                placeholder={village ? "— 請自行選擇建檔人員（可搜尋）—" : "請先選里別"}
+              />
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">

@@ -135,7 +135,8 @@ export async function GET(request: NextRequest) {
     let contextWarning: string | null = null;
 
     const visitors = await cachedRead(
-      ["desk-mohw-progress-visitors-slim-v2-ops-surname"],
+      // v4：擴大測試帳 denylist（正式寫入第四測／系統測試／核准流程…）
+      ["desk-mohw-progress-visitors-slim-v4-deny-test"],
       [GAS_READ_TAGS.deskCareFormOptions],
       async () => {
         const visitorRows = (await gasClient.visitors.list({ slim: true })) as Record<
@@ -145,7 +146,11 @@ export async function GET(request: NextRequest) {
         const mapped = visitorRows
           .map(mapDeskVisitor)
           .filter((item) => item.id);
-        const operational = filterOperationalStaffByName(mapped, (item) => item.name);
+        const operational = filterOperationalStaffByName(
+          mapped,
+          (item) => item.name,
+          (item) => item.badgeNo,
+        );
         // 已核准優先，同群再依中文姓氏排序（民政／社政下拉較好找）
         return [...operational].sort((a, b) => {
           const byStatus = Number(b.status === "已核准") - Number(a.status === "已核准");
