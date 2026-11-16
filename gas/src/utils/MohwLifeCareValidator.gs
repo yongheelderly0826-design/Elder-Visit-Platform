@@ -178,8 +178,22 @@ var MohwLifeCareValidator = (function () {
   var VISIT_WINDOW_END_MIN = 20 * 60;
   var MIN_SUCCESS_DURATION_MIN = 5;
 
+  function formatTimeForValidate_(value) {
+    if (typeof MohwLifeCareMapper !== 'undefined' && MohwLifeCareMapper.formatTime) {
+      return MohwLifeCareMapper.formatTime(value);
+    }
+    var text = lookalikeToZero(value).trim();
+    var m = text.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2}(?:\.\d+)?)?$/);
+    if (!m) return text;
+    var h = Number(m[1]);
+    var mm = Number(m[2]);
+    if (!(h >= 0 && h <= 23 && mm >= 0 && mm <= 59)) return text;
+    return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+
   function parseHhMmToMinutes_(value) {
-    var m = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    var normalized = formatTimeForValidate_(value);
+    var m = String(normalized || '').trim().match(/^(\d{2}):(\d{2})$/);
     if (!m) return null;
     var h = Number(m[1]);
     var min = Number(m[2]);
@@ -452,8 +466,12 @@ var MohwLifeCareValidator = (function () {
       if (DATE_KEYS[k2] && !isOfficialRoc(answers[k2])) {
         pushErr(errors, k2, row, DATE_CELL_MESSAGE);
       }
-      if (TIME_KEYS[k2] && !isHhMm(text)) {
-        pushErr(errors, k2, row, '時間格式不正確（請用 HH:mm）');
+      if (TIME_KEYS[k2]) {
+        // 與 TS validate（先 formatTime 再 isHhMm）對齊，避免 9:30／09:30:00 卡住稽核
+        text = formatTimeForValidate_(text);
+        if (!isHhMm(text)) {
+          pushErr(errors, k2, row, '時間格式不正確（請用 HH:mm）');
+        }
       }
       if ((k2.indexOf('other') !== -1 || k2 === 'visit_notes') && text.length > 200) {
         pushErr(errors, k2, row, '字數不可超過 200 字');

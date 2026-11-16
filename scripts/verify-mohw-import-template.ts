@@ -4,6 +4,7 @@ import {
   digitsOnly,
   formatMohwPhone,
   formatRocDate,
+  formatTime,
   isIndoorPhone,
   normalizeIndoorPhone,
   normalizeVisitorNationalId,
@@ -62,6 +63,9 @@ expect(normalizeVisitorRocDate("0115/08/19") === "115/08/19", `roc strip ${norma
 expect(normalizeVisitorRocDate("2026-10-15") === "115/10/15", `roc iso ${normalizeVisitorRocDate("2026-10-15")}`);
 expect(normalizeVisitorTime("9：5") === "09:05", `time ${normalizeVisitorTime("9：5")}`);
 expect(normalizeVisitorTime("1O:3O") === "10:30", `time O ${normalizeVisitorTime("1O:3O")}`);
+expect(normalizeVisitorTime("9:30") === "09:30", `time pad ${normalizeVisitorTime("9:30")}`);
+expect(normalizeVisitorTime("09:30:00") === "09:30", `time strip sec ${normalizeVisitorTime("09:30:00")}`);
+expect(formatTime("9:5") === "09:05", `formatTime pad ${formatTime("9:5")}`);
 expect(normalizeVisitorRocDate("115/O8/19") === "115/08/19", `roc O ${normalizeVisitorRocDate("115/O8/19")}`);
 expect(digitsOnly("O9O") === "090", `digits O ${digitsOnly("O9O")}`);
 expect(normalizeVisitorNationalId("A12O456789") === "A120456789", `id O ${normalizeVisitorNationalId("A12O456789")}`);

@@ -3531,6 +3531,85 @@ var OpsModule = (function () {
     return result;
   }
 
+  /**
+   * 重跑 Mohw 驗證並寫入 careform validation_* 快照（稽核佇列 lite 依賴此欄）。
+   * data.careform_ids: string[]
+   * data.apply: true 才寫入
+   */
+  function refreshCareformValidation(data) {
+    data = data || {};
+    var apply = data.apply === true || data.apply === 'true';
+    var wanted = {};
+    (data.careform_ids || []).forEach(function (id) {
+      var key = String(id || '').trim();
+      if (key) wanted[key] = true;
+    });
+    var ids = Object.keys(wanted);
+    if (!ids.length) {
+      var err = new Error('careform_ids 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var index = VisitRecordIndex.build();
+    var results = [];
+    ids.forEach(function (careformId) {
+      var careform = index.careformById[careformId] || {};
+      if (!careform.careform_id) {
+        results.push({ careform_id: careformId, found: false });
+        return;
+      }
+      var assignment = index.assignmentById[String(careform.assignment_id || '').trim()] || {};
+      var caseRow = index.caseById[String(assignment.case_id || '').trim()] || {};
+      if (!caseRow.case_id && careform.encoded_id) {
+        var matches = (index.cases || []).filter(function (row) {
+          return String(row.encoded_id) === String(careform.encoded_id);
+        });
+        if (matches.length === 1) caseRow = matches[0];
+      }
+      var noteBlob =
+        String(assignment.notes || '') + '|' + String(careform.notes || '');
+      var deskPaper =
+        noteBlob.indexOf('公所代填') !== -1 ||
+        noteBlob.indexOf('紙本') !== -1 ||
+        noteBlob.indexOf('desk') !== -1;
+      var answers = MohwLifeCareMapper.mergeInputs({
+        careform: careform,
+        caseRow: caseRow,
+      });
+      var validation = MohwLifeCareValidator.validateRow(answers, 2, {
+        registryNationalId: caseRow.id_number || caseRow.national_id || '',
+        allowMissingWorkerNationalId: deskPaper,
+      });
+      var lines = (validation.errorLines || []).slice(0, 12);
+      if (apply) {
+        AuditModule.persistValidationSnapshot(careformId, validation);
+      }
+      results.push({
+        careform_id: careformId,
+        found: true,
+        ok: !!validation.ok,
+        error_lines: lines,
+        written: apply,
+      });
+    });
+
+    if (apply) {
+      try {
+        ReadCache.bump();
+      } catch (eBump) {}
+    }
+
+    return {
+      dry_run: !apply,
+      requested: ids.length,
+      written: results.filter(function (r) {
+        return r.written;
+      }).length,
+      results: results,
+    };
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
@@ -3551,6 +3630,7 @@ var OpsModule = (function () {
     remediateDataQualityIssues: remediateDataQualityIssues,
     deleteCareformsByIds: deleteCareformsByIds,
     patchCareformAnswers: patchCareformAnswers,
+    refreshCareformValidation: refreshCareformValidation,
   };
 })();
 

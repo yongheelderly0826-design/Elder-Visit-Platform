@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/api/authorization";
 import { gasClient } from "@/lib/gas-client";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
+import { normalizeVisitorCareAnswers } from "@/lib/domain/mohw-life-care-export";
 import { normalizeMohwAnswersOptions } from "@/lib/domain/mohw-life-care-options";
 import { calculateMohwCareFormCompletion } from "@/lib/domain/mohw-life-care-ui";
 import { evaluateHighCare } from "@/lib/domain/high-care-rules";
@@ -75,7 +76,9 @@ export async function POST(request: NextRequest) {
   }
 
   const careFormAnswers = body.careFormAnswers
-    ? applyMohwSubmitGuards(normalizeMohwAnswersOptions(body.careFormAnswers))
+    ? normalizeVisitorCareAnswers(
+        applyMohwSubmitGuards(normalizeMohwAnswersOptions(body.careFormAnswers)),
+      )
     : undefined;
 
   const careFormCompletion = careFormAnswers

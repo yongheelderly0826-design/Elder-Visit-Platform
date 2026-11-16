@@ -360,10 +360,23 @@ export function normalizeIndoorPhone(value: string): string {
   return cleaned;
 }
 
-/** 時間固定半形冒號，時與分各兩碼。 */
+/**
+ * 時間固定半形冒號，時與分各兩碼（`HH:mm`）。
+ * 接受：`9:30`、`09:30:00`、全形冒號、O→0、Excel 日內小數。
+ */
 export function normalizeVisitorTime(input: string): string {
-  const text = sanitizeLookalikeDigits(input).trim();
-  const match = text.match(/^(\d{1,2}):(\d{1,2})$/);
+  const text = sanitizeLookalikeDigits(String(input ?? "")).trim();
+  if (!text) return text;
+
+  const numeric = Number(text);
+  if (/^0(?:\.\d+)?$/.test(text) && Number.isFinite(numeric) && numeric >= 0 && numeric < 1) {
+    // 依分鐘截取，避免 23:59:59 四捨五入成不合法的 24:00。
+    const totalMinutes = Math.min(1439, Math.floor(numeric * 1440 + 1e-8));
+    return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+  }
+
+  // 允許秒／小數秒，寫入前剝掉（Sheets／Date 常見 `09:30:00`）
+  const match = text.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2}(?:\.\d+)?)?$/);
   if (!match) return text;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
@@ -427,18 +440,7 @@ export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwL
   return next;
 }
 
-/** `HH:mm` 24h; Excel serial fractions also supported. */
+/** `HH:mm` 24h；與 normalizeVisitorTime 同一套規則（含 Excel 日內小數／剝秒）。 */
 export function formatTime(input: string) {
-  const text = String(input).trim();
-  const numeric = Number(text);
-  if (/^0(?:\.\d+)?$/.test(text) && numeric >= 0 && numeric < 1) {
-    // 依分鐘截取，避免 23:59:59 四捨五入成不合法的 24:00。
-    const totalMinutes = Math.min(1439, Math.floor(numeric * 1440 + 1e-8));
-    return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
-  }
-  const match = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (match && Number(match[1]) <= 23 && Number(match[2]) <= 59) {
-    return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
-  }
-  return text;
+  return normalizeVisitorTime(input);
 }

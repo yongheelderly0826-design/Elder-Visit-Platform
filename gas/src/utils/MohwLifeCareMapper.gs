@@ -377,20 +377,27 @@ var MohwLifeCareMapper = (function () {
     return cleaned;
   }
 
+  /**
+   * HH:mm 24h。對齊 TS normalizeVisitorTime／formatTime：
+   * pad 時、剝秒、NFKC 冒號、O→0、Excel 日內小數。
+   */
   function formatTime(input) {
     if (Object.prototype.toString.call(input) === '[object Date]') {
       return isNaN(input.getTime()) ? 'INVALID_TIME' :
         Utilities.formatDate(input, 'Asia/Taipei', 'HH:mm');
     }
     var text = String(input == null ? '' : input).trim();
+    if (!text) return '';
+    if (text.normalize) text = text.normalize('NFKC');
+    text = text.replace(/[OoＯｏ〇○]/g, '0');
     var numeric = Number(text);
-    if (/^0(?:\.\d+)?$/.test(text) && numeric >= 0 && numeric < 1) {
+    if (/^0(?:\.\d+)?$/.test(text) && isFinite(numeric) && numeric >= 0 && numeric < 1) {
       var minutes = Math.min(1439, Math.floor(numeric * 1440 + 1e-8));
       return pad_(Math.floor(minutes / 60), 2) + ':' + pad_(minutes % 60, 2);
     }
-    var match = text.match(/^(\d{1,2}):(\d{2})$/);
+    var match = text.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2}(?:\.\d+)?)?$/);
     if (match && Number(match[1]) <= 23 && Number(match[2]) <= 59) {
-      return pad_(Number(match[1]), 2) + ':' + match[2];
+      return pad_(Number(match[1]), 2) + ':' + pad_(Number(match[2]), 2);
     }
     return text;
   }
@@ -436,6 +443,7 @@ var MohwLifeCareMapper = (function () {
     buildWorkbookRows: buildWorkbookRows,
     mergeInputs: mergeInputs,
     formatRocDate: formatRocDate,
-    formatPhone: formatPhone
+    formatPhone: formatPhone,
+    formatTime: formatTime
   };
 })();

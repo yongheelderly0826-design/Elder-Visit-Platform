@@ -168,6 +168,9 @@ var ApiRouter = (function () {
     'ops.patchCareformAnswers': function (p, b) {
       return OpsModule.patchCareformAnswers(b || p);
     },
+    'ops.refreshCareformValidation': function (p, b) {
+      return OpsModule.refreshCareformValidation(b || p);
+    },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },
     'deskClerks.get': function (p) {

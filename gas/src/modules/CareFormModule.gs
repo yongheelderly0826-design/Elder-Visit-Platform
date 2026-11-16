@@ -88,6 +88,15 @@ var CareFormModule = (function () {
       next.living_city = '彰化縣';
       if (!dist || dist === '彰化' || dist === '彰化市') next.living_district = '彰化市';
     }
+    // 寫入 answers_json 前統一 HH:mm（含未遇跳過全量驗證的路徑）
+    var timeKeys = ['visit_start_time', 'visit_end_time', 'visit_time_start', 'visit_time_end'];
+    for (i = 0; i < timeKeys.length; i++) {
+      var tk = timeKeys[i];
+      if (next[tk] == null || String(next[tk]).trim() === '') continue;
+      if (typeof MohwLifeCareMapper !== 'undefined' && MohwLifeCareMapper.formatTime) {
+        next[tk] = MohwLifeCareMapper.formatTime(next[tk]);
+      }
+    }
     return next;
   }
 
