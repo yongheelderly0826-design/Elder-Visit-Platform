@@ -11,6 +11,10 @@ import {
   type DeskVisitWindow,
   type ResolvedVisitSlot,
 } from "@/lib/domain/desk-care-batch";
+import {
+  VISIT_WINDOW_LABEL,
+  isWithinVisitWindow,
+} from "@/lib/domain/mohw-submit-guard-rules";
 import { gasClient } from "@/lib/gas-client";
 
 function text(value: unknown) {
@@ -94,6 +98,12 @@ export async function auditDeskVisitTime(input: {
   }
   if ((toMinutesSafe(candidate.start) ?? 0) >= (toMinutesSafe(candidate.end) ?? 0)) {
     return { ok: false as const, message: "結束時間必須晚於開始時間。" };
+  }
+  if (!isWithinVisitWindow(candidate.start) || !isWithinVisitWindow(candidate.end)) {
+    return {
+      ok: false as const,
+      message: `訪視起迄須在衛福允許 ${VISIT_WINDOW_LABEL}（含界）。`,
+    };
   }
   if (!candidate.visitorIds.length) {
     return { ok: false as const, message: "缺少訪查員，無法稽核時段。" };

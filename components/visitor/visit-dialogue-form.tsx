@@ -59,8 +59,10 @@ import {
 import { applyMohwSubmitGuards } from "@/lib/domain/mohw-submit-guards";
 import {
   deskSuccessDurationOptions,
+  isWithinVisitWindow,
   MIN_SUCCESS_DURATION_MINUTES,
   normalizeMohwHelpSourcesExclusive,
+  VISIT_WINDOW_LABEL,
 } from "@/lib/domain/mohw-submit-guard-rules";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
@@ -757,23 +759,34 @@ export function VisitDialogueForm({
     // 未遇一律不 expand；拒訪等快速鍵也可顯式 skip。
     deskSkipMissedExpandRef.current = isOnePaperMissed || Boolean(options?.skipMissedExpand);
 
-    if (nextSubmission.visitResult !== "未遇") {
-      const localCheck = validateMohwLifeCareRow(mohwAnswers, {
-        row: 2,
-        registryNationalId: elderCase.nationalId ?? "",
-        allowMissingWorkerNationalId: useDeskFormDefaults,
-      });
-      if (!localCheck.ok) {
-        setMohwErrors(localCheck.errors);
-        setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
-        setIsSubmitting(false);
-        deskSkipMissedExpandRef.current = false;
-        const firstError = localCheck.errors[0];
-        if (firstError) {
-          openAndJumpToCareField(firstError.key, setOpenSectionTitles);
-        }
-        return;
+    // 未遇雖跳過全表驗證，起迄仍須在衛福 08:00–20:00（含界）。
+    const localCheck = validateMohwLifeCareRow(mohwAnswers, {
+      row: 2,
+      registryNationalId: elderCase.nationalId ?? "",
+      allowMissingWorkerNationalId: useDeskFormDefaults,
+    });
+    const windowOnlyErrors = localCheck.errors.filter(
+      (error) => error.code === "VISIT_TIME_WINDOW",
+    );
+    if (windowOnlyErrors.length) {
+      setMohwErrors(windowOnlyErrors);
+      setResult(`訪視時間須在 ${VISIT_WINDOW_LABEL}，請修正後再送出`);
+      setIsSubmitting(false);
+      deskSkipMissedExpandRef.current = false;
+      openAndJumpToCareField(windowOnlyErrors[0]!.key, setOpenSectionTitles);
+      return;
+    }
+
+    if (nextSubmission.visitResult !== "未遇" && !localCheck.ok) {
+      setMohwErrors(localCheck.errors);
+      setResult(`關懷表還有 ${localCheck.errors.length} 項需要修改，請看紅字說明`);
+      setIsSubmitting(false);
+      deskSkipMissedExpandRef.current = false;
+      const firstError = localCheck.errors[0];
+      if (firstError) {
+        openAndJumpToCareField(firstError.key, setOpenSectionTitles);
       }
+      return;
     }
 
     const missedPhotos =
@@ -1295,7 +1308,7 @@ export function VisitDialogueForm({
         listHref: `${listHrefBase}?${doneQuery}`,
         toastMessage:
           toastMessage ||
-          "下一筆尚無起始時間，請回清單按「開始連續 KEY」或「先填時間」。",
+          `下一筆無法自動接續（須留在 ${VISIT_WINDOW_LABEL}）。請回清單改較早起始或「先填時間」。`,
       };
     }
 
@@ -2730,6 +2743,7 @@ function CareFormInput({
           .slice(0, 5);
         const end = endTimeFromStartAndDuration(start, minutes);
         if (!end) return current;
+        // 超出窗仍寫入，讓紅字即時出現；送出會再擋。
         return { ...current, visit_start_time: start, visit_end_time: end };
       });
     }
@@ -2754,6 +2768,17 @@ function CareFormInput({
       });
     }
 
+    const startForDuration = String(
+      isStartField ? rawText : deskVisitStart || "",
+    )
+      .trim()
+      .slice(0, 5);
+    const durationOptions = deskSuccessDurationOptions([...DESK_VISIT_DURATION_OPTIONS]);
+    const outsideWindowHint =
+      rawText && !isWithinVisitWindow(rawText)
+        ? `須在衛福允許 ${VISIT_WINDOW_LABEL}（含界）`
+        : null;
+
     return (
       <div id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
         <span>
@@ -2762,26 +2787,42 @@ function CareFormInput({
         </span>
         <HalfwidthTimeInput
           value={rawText}
-          invalid={Boolean(error)}
+          invalid={Boolean(error) || Boolean(outsideWindowHint)}
           describedBy={error ? errorId : undefined}
           onChange={isStartField && deskEntry ? onDeskStartChange : onChange}
         />
+        <p className="text-xs font-normal leading-5 text-muted-foreground">
+          衛福允許時段 {VISIT_WINDOW_LABEL}（含 08:00 與 20:00）。
+        </p>
+        {outsideWindowHint && !error ? (
+          <p className="text-xs font-normal text-destructive">{outsideWindowHint}</p>
+        ) : null}
         {deskEntry && isStartField && onPatchAnswers ? (
           <div className="mt-2 space-y-1.5">
             <p className="text-xs font-normal text-muted-foreground">
-              訪視時長（成功案至少 {MIN_SUCCESS_DURATION_MINUTES} 分；勾選後自動算出結束時間）
+              訪視時長（成功案至少 {MIN_SUCCESS_DURATION_MINUTES} 分；勾選後自動算出結束時間；結束不可晚於 20:00）
             </p>
             <div className="flex flex-wrap gap-2">
-              {deskSuccessDurationOptions([...DESK_VISIT_DURATION_OPTIONS]).map((minutes) => {
+              {durationOptions.map((minutes) => {
                 const active = selectedDuration === minutes;
+                const previewEnd = endTimeFromStartAndDuration(startForDuration, minutes);
+                const endOk = previewEnd ? isWithinVisitWindow(previewEnd) : true;
                 return (
                   <button
                     key={minutes}
                     type="button"
+                    disabled={Boolean(startForDuration) && !endOk}
+                    title={
+                      startForDuration && !endOk
+                        ? `結束會是 ${previewEnd}，超出 ${VISIT_WINDOW_LABEL}`
+                        : undefined
+                    }
                     className={`h-9 min-w-[3.25rem] rounded-md border px-3 text-sm font-medium transition-colors ${
                       active
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "bg-card hover:bg-secondary"
+                        : endOk
+                          ? "bg-card hover:bg-secondary"
+                          : "cursor-not-allowed bg-muted text-muted-foreground opacity-60"
                     }`}
                     aria-pressed={active}
                     onClick={() => applyDeskDuration(minutes as DeskVisitDurationMinutes)}
@@ -2795,8 +2836,7 @@ function CareFormInput({
         ) : null}
         {deskEntry && isEndField ? (
           <p className="text-xs font-normal leading-5 text-muted-foreground">
-            由時長 {deskSuccessDurationOptions([...DESK_VISIT_DURATION_OPTIONS]).join("／")}{" "}
-            自動帶入，仍可手改（須 08:00–20:00）。
+            由時長 {durationOptions.join("／")} 自動帶入，仍可手改（須 {VISIT_WINDOW_LABEL}）。
           </p>
         ) : null}
         {errorText}
@@ -2804,7 +2844,7 @@ function CareFormInput({
     );
   }
 
-  if (field.type === "date") {
+    if (field.type === "date") {
     return (
       <div id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
         <span>

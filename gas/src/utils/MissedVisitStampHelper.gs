@@ -68,12 +68,16 @@ var MissedVisitStampHelper = (function () {
     return minutesToTime_(base + delta);
   }
 
+  var VISIT_WINDOW_START_MIN = 8 * 60;
+  var VISIT_WINDOW_END_MIN = 20 * 60;
+
+  /** 早／中偏好上限；晚班與衛福硬上限皆 20:00。 */
   function softEndForTime_(time) {
     var min = toMinutes_(time);
-    if (min == null) return '23:50';
+    if (min == null) return '20:00';
     if (min < 12 * 60) return '11:50';
     if (min < 17 * 60) return '16:50';
-    return '23:50';
+    return '20:00';
   }
 
   function resolveUniqueTime_(monthDay, preferredTime, occupied, bumpStep) {
@@ -81,7 +85,17 @@ var MissedVisitStampHelper = (function () {
     if (!monthDay || !time) return '';
     var step = bumpStep > 0 ? bumpStep : BUMP_MINUTES;
     var softEnd = softEndForTime_(time);
-    var softEndMin = toMinutes_(softEnd);
+    var hardEndMin = toMinutes_(softEnd);
+    if (hardEndMin == null || hardEndMin > VISIT_WINDOW_END_MIN) {
+      hardEndMin = VISIT_WINDOW_END_MIN;
+    }
+    var preferredMin = toMinutes_(time);
+    if (preferredMin != null && preferredMin < VISIT_WINDOW_START_MIN) {
+      time = '08:00';
+    } else if (preferredMin != null && preferredMin > hardEndMin) {
+      time = minutesToTime_(hardEndMin);
+      if (!time) return '';
+    }
     for (var attempt = 0; attempt < 72; attempt++) {
       var key = stampKey_(monthDay, time);
       if (key && !occupied[key]) return time;
@@ -89,9 +103,8 @@ var MissedVisitStampHelper = (function () {
       if (!next) return '';
       var nextMin = toMinutes_(next);
       if (nextMin == null) return '';
-      if (softEndMin != null && nextMin > softEndMin && attempt === 0) {
-        // still bump
-      }
+      // 硬上限：不可再排出 20:00（或早／中 softEnd）之後。
+      if (nextMin > hardEndMin) return '';
       time = next;
     }
     return '';

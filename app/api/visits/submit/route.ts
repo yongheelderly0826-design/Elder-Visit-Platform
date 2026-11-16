@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     notes: body.notes,
   };
 
-  // 未遇照片／GPS 暫不強制（一張紙＋三次時間備註）；desk／visitor 皆可 0 張送出。
+  // 未遇照片／GPS 暫不強制（未遇一張紙＋三次時間；住址不詳不要求三次）；desk／visitor 皆可 0 張送出。
   const validation = validateVisitSubmission(submission, {
     requireMissedGps: false,
     minMissedPhotoSlots: 0,
@@ -86,23 +86,28 @@ export async function POST(request: NextRequest) {
     : null;
 
   const isMissedVisit = submission.visitResult === "未遇";
-  const mohwValidation =
-    careFormAnswers && !isMissedVisit
-      ? validateMohwLifeCareRow(careFormAnswers, {
-          row: 2,
-          registryNationalId: body.registryNationalId ?? "",
-        })
-      : null;
+  const mohwValidation = careFormAnswers
+    ? validateMohwLifeCareRow(careFormAnswers, {
+        row: 2,
+        registryNationalId: body.registryNationalId ?? "",
+      })
+    : null;
   const highCare = careFormAnswers && !isMissedVisit ? evaluateHighCare(careFormAnswers) : null;
 
-  if (mohwValidation && !mohwValidation.ok) {
+  // 未遇：只擋時段窗外；成功案：全表驗證。
+  const blockingErrors = mohwValidation
+    ? isMissedVisit
+      ? mohwValidation.errors.filter((error) => error.code === "VISIT_TIME_WINDOW")
+      : mohwValidation.errors
+    : [];
+  if (blockingErrors.length) {
     return NextResponse.json(
       {
         error: {
           code: "MOHW_VALIDATION_ERROR",
-          message: mohwValidation.errorLines.join("；"),
-          errorLines: mohwValidation.errorLines,
-          errors: mohwValidation.errors,
+          message: blockingErrors.map((error) => error.display || error.message).join("；"),
+          errorLines: blockingErrors.map((error) => error.display || error.message),
+          errors: blockingErrors,
         },
       },
       { status: 400 },

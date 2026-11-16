@@ -541,6 +541,25 @@ var MohwLifeCareValidator = (function () {
     };
   }
 
+  /** 未遇路徑：只檢核訪視起迄是否在 08:00–20:00（含界）。 */
+  function validateVisitTimeWindow(answers, row) {
+    row = row || 2;
+    var errors = [];
+    var start = answers.visit_start_time || answers.visit_time_start;
+    var end = answers.visit_end_time || answers.visit_time_end;
+    if (hasValue(start) && !isWithinVisitWindow_(start)) {
+      pushErr(errors, 'visit_start_time', row, '訪查開始時間須在 08:00–20:00');
+    }
+    if (hasValue(end) && !isWithinVisitWindow_(end)) {
+      pushErr(errors, 'visit_end_time', row, '訪查結束時間須在 08:00–20:00');
+    }
+    return {
+      ok: errors.length === 0,
+      errors: errors,
+      errorLines: errors.map(function (e) { return e.display; })
+    };
+  }
+
   function validateBatch(rows, startRow, registryIds) {
     startRow = startRow || 2;
     var results = [];
@@ -569,6 +588,7 @@ var MohwLifeCareValidator = (function () {
   return {
     validateRow: validateRow,
     validateBatch: validateBatch,
+    validateVisitTimeWindow: validateVisitTimeWindow,
     colLetter: colLetter
   };
 })();
