@@ -92,6 +92,7 @@ import {
   addMinutesToTime,
   buildDeskCareFormPath,
   buildDeskOnePaperMissedNote,
+  buildDeskOnePaperUnknownAddressNote,
   chainDeskBatchAfterKeyed,
   deskBatchMissedStampOffsetMinutes,
   deskVisitorColumnSide,
@@ -99,6 +100,7 @@ import {
   findNextReadyDeskBatchItem,
   inferDeskVisitDurationMinutes,
   insertDeskBatchItemsAfter,
+  isUnknownAddressClosure,
   markDeskBatchItemSkipped,
   normalizeDeskVisitDateToIso,
   notesIndicateDeceased,
@@ -583,7 +585,15 @@ export function VisitDialogueForm({
     };
     let answersPatch: Partial<MohwLifeCareAnswers> = { ...options?.answersPatch };
     // 未遇／住址不詳：一律一張紙結案，不呼叫 expand-missed。
+    // 未遇＝三次時間備註；住址不詳／居住地址不詳＝一次即可。
     const isOnePaperMissed = nextSubmission.visitResult === "未遇";
+    const closingAsUnknownAddress = isUnknownAddressClosure({
+      visit_status: answersPatch.visit_status || careFormAnswers.visit_status,
+      living_address_type:
+        answersPatch.living_address_type || careFormAnswers.living_address_type,
+      living_address_note:
+        answersPatch.living_address_note || careFormAnswers.living_address_note,
+    });
     if (isOnePaperMissed) {
       const visitDateRaw =
         normalizeDeskVisitDateToIso(String(answersPatch.visit_date || careFormAnswers.visit_date || "")) ||
@@ -605,9 +615,12 @@ export function VisitDialogueForm({
         priorLiving.includes("訪視未遇") ||
         priorNotes.includes("訪視未遇") ||
         String(nextSubmission.notes || "").includes("訪視未遇");
+      const alreadyHasUnknownNote =
+        /住址不詳/.test(priorLiving) ||
+        /住址不詳/.test(priorNotes) ||
+        /住址不詳/.test(String(nextSubmission.notes || ""));
 
       if (deceasedNoted) {
-        // 已登記往生／死亡：保留人工說明，不硬塞三次未遇戳（也不另開兩張表）。
         const cleanNote =
           stripMissedVisitStamps(priorNotes) ||
           stripMissedVisitStamps(priorLiving) ||
@@ -617,11 +630,20 @@ export function VisitDialogueForm({
           ...answersPatch,
           living_address_other: cleanNote,
           visit_notes: cleanNote,
-          living_address_type:
-            answersPatch.living_address_type ||
-            careFormAnswers.living_address_type ||
-            "查無此人",
-          visit_status: answersPatch.visit_status || careFormAnswers.visit_status || "查無此人",
+          ...(closingAsUnknownAddress
+            ? {
+                visit_status: "住址不詳",
+                living_address_type: "未住戶籍地址",
+                living_address_note: "居住地址不詳",
+              }
+            : {
+                living_address_type:
+                  answersPatch.living_address_type ||
+                  careFormAnswers.living_address_type ||
+                  "查無此人",
+                visit_status:
+                  answersPatch.visit_status || careFormAnswers.visit_status || "查無此人",
+              }),
         };
         nextSubmission = {
           ...nextSubmission,
@@ -629,6 +651,40 @@ export function VisitDialogueForm({
           healthStatus: nextSubmission.healthStatus || "未遇無法評估",
           livingStatus: nextSubmission.livingStatus || "未遇無法評估",
         };
+      } else if (closingAsUnknownAddress) {
+        if (!alreadyHasUnknownNote && !alreadyHasTripleNote) {
+          const note = buildDeskOnePaperUnknownAddressNote({
+            visitDateRaw,
+            visitStartTime,
+          });
+          if (!note) {
+            setResult("請先填訪視日期與起始時間，系統會寫入一次住址不詳備註。");
+            setIsSubmitting(false);
+            return;
+          }
+          answersPatch = {
+            ...answersPatch,
+            living_address_other: note,
+            visit_notes:
+              priorNotes && !/住址不詳/.test(priorNotes) ? `${priorNotes}；${note}` : note,
+            visit_status: "住址不詳",
+            living_address_type: "未住戶籍地址",
+            living_address_note: "居住地址不詳",
+          };
+          nextSubmission = {
+            ...nextSubmission,
+            notes: [nextSubmission.notes, note].filter(Boolean).join("；"),
+            healthStatus: nextSubmission.healthStatus || "未遇無法評估",
+            livingStatus: nextSubmission.livingStatus || "未遇無法評估",
+          };
+        } else {
+          answersPatch = {
+            ...answersPatch,
+            visit_status: "住址不詳",
+            living_address_type: "未住戶籍地址",
+            living_address_note: "居住地址不詳",
+          };
+        }
       } else if (!alreadyHasTripleNote) {
         const note = await resolveOnePaperMissedNote({
           visitDateRaw,
@@ -728,7 +784,11 @@ export function VisitDialogueForm({
             .filter((item): item is MissedSlotPhoto => Boolean(item));
 
     const deskAttemptNote =
-      isDeskEntry && isOnePaperMissed ? "未遇（一張紙・備註三次時段）" : "";
+      isDeskEntry && isOnePaperMissed
+        ? closingAsUnknownAddress
+          ? "住址不詳（一張紙・一次時間）"
+          : "未遇（一張紙・備註三次時段）"
+        : "";
 
     const response = await fetch("/api/visits/submit", {
       method: "POST",
@@ -938,7 +998,8 @@ export function VisitDialogueForm({
       return;
     }
 
-    const label = kind === "unknown_address" ? "一鍵住址不詳" : "一鍵未遇";
+    const isUnknownAddress = kind === "unknown_address";
+    const label = isUnknownAddress ? "一鍵住址不詳" : "一鍵未遇";
     const priorNotes = String(careFormAnswers.visit_notes || submission.notes || "").trim();
     const priorLiving = String(careFormAnswers.living_address_other || "").trim();
     const deceasedNoted = notesIndicateDeceased(priorNotes) || notesIndicateDeceased(priorLiving);
@@ -969,8 +1030,12 @@ export function VisitDialogueForm({
           visit_end_time: visitEndTime,
           visit_notes: cleanNote,
           living_address_other: cleanNote,
-          ...(kind === "unknown_address"
-            ? { visit_status: "住址不詳" }
+          ...(isUnknownAddress
+            ? {
+                visit_status: "住址不詳",
+                living_address_type: "未住戶籍地址",
+                living_address_note: "居住地址不詳",
+              }
             : { visit_status: "查無此人", living_address_type: "查無此人" }),
         },
         deskSlotsOverride: ["夜間"],
@@ -980,17 +1045,22 @@ export function VisitDialogueForm({
       return;
     }
 
-    const note = await resolveOnePaperMissedNote({
-      visitDateRaw,
-      visitStartTime,
-    });
+    const note = isUnknownAddress
+      ? buildDeskOnePaperUnknownAddressNote({ visitDateRaw, visitStartTime })
+      : await resolveOnePaperMissedNote({ visitDateRaw, visitStartTime });
     if (!note) {
-      setResult("訪視日期無效，無法產生三次未遇備註。");
+      setResult(
+        isUnknownAddress
+          ? "訪視日期無效，無法產生住址不詳備註。"
+          : "訪視日期無效，無法產生三次未遇備註。",
+      );
       return;
     }
     if (
       !window.confirm(
-        `${label}：將以一張紙送出（三次時間寫入「居住-其他說明」與備註），並進入下一筆。確定？`,
+        isUnknownAddress
+          ? `${label}：將以一張紙送出（一次訪視時間寫入備註；不要求三次再訪），並進入下一筆。確定？`
+          : `${label}：將以一張紙送出（三次時間寫入「居住-其他說明」與備註），並進入下一筆。確定？`,
       )
     ) {
       return;
@@ -1007,11 +1077,17 @@ export function VisitDialogueForm({
         visit_start_time: visitStartTime,
         visit_end_time: visitEndTime,
         visit_notes: note,
-        // 衛福部：居住地址類型=查無此人時「居住-其他說明」必填；三次未遇時間寫此欄。
         living_address_other: note,
-        ...(kind === "unknown_address"
-          ? { visit_status: "住址不詳" }
-          : { visit_status: "查無此人", living_address_type: "查無此人" }),
+        ...(isUnknownAddress
+          ? {
+              visit_status: "住址不詳",
+              living_address_type: "未住戶籍地址",
+              living_address_note: "居住地址不詳",
+            }
+          : {
+              visit_status: "查無此人",
+              living_address_type: "查無此人",
+            }),
       },
       deskSlotsOverride: ["夜間"],
       closeAsMissedTriple: true,
@@ -1110,7 +1186,7 @@ export function VisitDialogueForm({
       toastMessage =
         input.visitResult === "拒訪"
           ? "已一鍵拒訪送出，進入下一筆"
-          : "已送出（一張紙・備註三次時段），進入下一筆";
+          : "已送出（一張紙結案），進入下一筆";
     } else if (input.visitResult === "未遇" && input.visitDateRaw) {
       try {
         const expandRes = await fetch("/api/manager/care-forms/expand-missed", {
@@ -1376,7 +1452,7 @@ export function VisitDialogueForm({
         </p>
         {isDeskEntry && !isAuditCorrection ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            一般完成一張即可。「未遇／住址不詳」不論手動勾選或快速鍵，皆一張紙結案（三次時間寫入居住-其他說明與備註），不另建補件。紙本不全請用
+            一般完成一張即可。「未遇」一張紙結案並寫入三次時間備註；「住址不詳」一張紙即可（一次時間、不要求三次再訪）。皆不另建補件。紙本不全請用
             Pass。
           </p>
         ) : null}
@@ -1841,7 +1917,7 @@ export function VisitDialogueForm({
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {isMissedVisit
-                ? `未遇改為一張紙結案：三次時間會寫入「居住-其他說明」與備註，照片與定位暫不強制。若要留存現場照，最多可選 ${missedVisitMaxSlots} 個時段上傳。`
+                ? `未遇改為一張紙結案：三次時間會寫入「居住-其他說明」與備註；「住址不詳」則一次即可、不要求三次再訪。照片與定位暫不強制。若要留存現場照，最多可選 ${missedVisitMaxSlots} 個時段上傳。`
                 : "一般訪視照片為選填；若結果改為「未遇」，同樣一張紙結案，照片非必填。"}
             </p>
             {isMissedVisit ? (
@@ -2806,7 +2882,7 @@ function CareFormInput({
           placeholder={
             isNotesField
               ? "可手改備註；若已寫往生／死亡說明，送出未遇時不會再自動補三次未遇時間戳"
-              : "查無此人時請說明原因（未遇三次時間或往生等）"
+              : "查無此人寫三次未遇時間；住址不詳寫一次時間或說明即可"
           }
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
@@ -3134,7 +3210,9 @@ function SubmissionStatus({
         <p className="text-destructive">關懷表有 {mohwErrorCount} 項需修改，請看紅字說明</p>
       )}
       {isMissedVisit && validationOk && (
-        <p className="text-muted-foreground">未遇：一張紙結案（三次時間寫入備註），可送出</p>
+        <p className="text-muted-foreground">
+          未遇／住址不詳：一張紙可送出（未遇寫三次時間；住址不詳一次即可）
+        </p>
       )}
       {result && (result.includes("需") || result.includes("失敗") ? (
         <p className="font-medium text-destructive">{result}</p>

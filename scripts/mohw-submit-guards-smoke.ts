@@ -38,7 +38,7 @@ import {
   assert.equal(next.cohabitant_relation, "");
 }
 
-// 住址不詳清居住明細後回填 未住戶籍地址＋居住地址不詳；保留 other（不要求三次戳）
+// 住址不詳清居住明細後回填必填類型／註記；保留 other
 {
   const next = normalizeMohwQualityGuards({
     visit_status: "住址不詳",
@@ -46,13 +46,13 @@ import {
     living_city: "新北市",
     living_district: "永和區",
     living_address_type: "與戶籍地址相同",
-    living_address_other: "10/28 15:30住址不詳。",
+    living_address_other: "三次未遇備註",
     household_address: "戶籍路",
   });
   assert.equal(next.living_address, "");
   assert.equal(next.living_address_type, "未住戶籍地址");
   assert.equal(next.living_address_note, "居住地址不詳");
-  assert.equal(next.living_address_other, "10/28 15:30住址不詳。");
+  assert.equal(next.living_address_other, "三次未遇備註");
   assert.equal(next.household_address, "戶籍路");
 }
 
