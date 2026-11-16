@@ -23,7 +23,8 @@ var CareFormModule = (function () {
     'cohabitant_age',
     'cohabitant_no_care_capacity_note'
   ];
-  var LIVING_DETAIL_CLEAR_KEYS_ = [
+  /** 居住地址明細（不含類型／註記）；不詳時清空（與 TS LIVING_ADDRESS_VALUE_KEYS 對齊） */
+  var LIVING_ADDRESS_VALUE_KEYS_ = [
     'living_address',
     'living_city',
     'living_district',
@@ -32,10 +33,29 @@ var CareFormModule = (function () {
     'living_lane',
     'living_alley',
     'living_number',
-    'living_floor',
-    'living_address_note',
-    'living_address_type'
+    'living_floor'
   ];
+
+  function isUnknownLivingAddress_(answers) {
+    var status = String(answers.visit_status || '').trim();
+    if (status === '住址不詳') return true;
+    var type = String(answers.living_address_type || '').trim();
+    var note = String(answers.living_address_note || '').trim();
+    return type === '未住戶籍地址' && note === '居住地址不詳';
+  }
+
+  function clearLivingAddressDetailsForUnknown_(answers) {
+    var next = Object.assign({}, answers);
+    var i;
+    for (i = 0; i < LIVING_ADDRESS_VALUE_KEYS_.length; i++) {
+      if (String(next[LIVING_ADDRESS_VALUE_KEYS_[i]] || '').trim()) {
+        next[LIVING_ADDRESS_VALUE_KEYS_[i]] = '';
+      }
+    }
+    next.living_address_type = '未住戶籍地址';
+    next.living_address_note = '居住地址不詳';
+    return next;
+  }
 
   /**
    * 無名側強制清空 date，避免 desk 兩邊預填後留下「有日無名」。
@@ -53,7 +73,7 @@ var CareFormModule = (function () {
     return next;
   }
 
-  /** 第五類正規化：無名清日＋跳過問卷清同住＋住址不詳清居住明細＋求助互斥＋縣市誤填 */
+  /** 第五類正規化：無名清日＋跳過問卷清同住＋住址不詳／居住地址不詳清居住明細＋求助互斥＋縣市誤填 */
   function applySubmitGuards_(answers) {
     var next = clearOrphanWorkerDates_(answers);
     var visitStatus = String(next.visit_status || '').trim();
@@ -65,15 +85,9 @@ var CareFormModule = (function () {
         }
       }
     }
-    if (visitStatus === '住址不詳') {
-      for (i = 0; i < LIVING_DETAIL_CLEAR_KEYS_.length; i++) {
-        if (String(next[LIVING_DETAIL_CLEAR_KEYS_[i]] || '').trim()) {
-          next[LIVING_DETAIL_CLEAR_KEYS_[i]] = '';
-        }
-      }
-      // 清居住明細後仍須保留衛福必填（與 TS applyMohwSubmitGuards 對齊）
-      next.living_address_type = '未住戶籍地址';
-      next.living_address_note = '居住地址不詳';
+    // 住址不詳／未住戶籍＋居住地址不詳：清縣市區里地址殘值，保留類型＋註記
+    if (isUnknownLivingAddress_(next)) {
+      next = clearLivingAddressDetailsForUnknown_(next);
     }
     if (visitStatus === '查無此人' && !String(next.living_address_type || '').trim()) {
       next.living_address_type = '查無此人';

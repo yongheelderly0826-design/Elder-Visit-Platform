@@ -56,6 +56,41 @@ import {
   assert.equal(next.household_address, "戶籍路");
 }
 
+// 已完成＋未住戶籍＋居住地址不詳：同樣清縣市／區／里／地址殘值（勿讓住址偷渡）
+{
+  const next = normalizeMohwQualityGuards({
+    visit_status: "已完成",
+    living_address_type: "未住戶籍地址",
+    living_address_note: "居住地址不詳",
+    living_city: "新北市",
+    living_district: "永和區",
+    living_village: "上溪里",
+    living_address: "永和路一段",
+  });
+  assert.equal(next.living_city, "");
+  assert.equal(next.living_district, "");
+  assert.equal(next.living_village, "");
+  assert.equal(next.living_address, "");
+  assert.equal(next.living_address_type, "未住戶籍地址");
+  assert.equal(next.living_address_note, "居住地址不詳");
+}
+
+// 「居住地址為」路徑不得被誤清村里
+{
+  const next = normalizeMohwQualityGuards({
+    visit_status: "已完成",
+    living_address_type: "未住戶籍地址",
+    living_address_note: "居住地址為",
+    living_city: "新北市",
+    living_district: "永和區",
+    living_village: "上溪里",
+    living_address: "永和路一段",
+  });
+  assert.equal(next.living_village, "上溪里");
+  assert.equal(next.living_address, "永和路一段");
+  assert.equal(next.living_address_note, "居住地址為");
+}
+
 // 時段／時長／矛盾
 {
   const windowIssues = collectMohwSubmitGuardIssues({

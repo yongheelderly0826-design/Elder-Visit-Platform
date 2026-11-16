@@ -181,7 +181,7 @@ function defaultOptionsForKey(key: string): string[] | undefined {
 const UI_FIELD_HINTS: Record<string, string> = {
   visit_end_time: "必填；允許時段 08:00–20:00（可勾選時長自動帶入）",
   living_address_note:
-    "若知道居住里別／地址，請選「居住地址為」並填村里；不詳才選「居住地址不詳」（可一張結案）",
+    "知道里別請選「居住地址為」並填村里；選「居住地址不詳」時勿填住址（系統會清空並鎖定縣市／區／里／地址，可一張結案）",
   living_village: "知道居住里別時必填；請與戶政村里名稱一致",
   social_worker_role: "永和社政訪查人身分一律「志工」",
 };
@@ -246,6 +246,31 @@ export function isMohwFieldVisible(field: MohwFormField, answers: MohwLifeCareAn
   if (!field.showWhen?.length) return true;
 
   return field.showWhen.every((condition) => matchesCondition(answers, condition));
+}
+
+/** 居住地址不詳／住址不詳時，縣市／區／里／地址等明細不可填（對齊 LIVING_ADDRESS_VALUE_KEYS） */
+const LIVING_ADDRESS_LOCKED_KEYS = new Set([
+  "living_address",
+  "living_city",
+  "living_district",
+  "living_village",
+  "living_neighborhood",
+  "living_lane",
+  "living_alley",
+  "living_number",
+  "living_floor",
+]);
+
+export function isMohwLivingAddressDetailLocked(
+  fieldKey: string,
+  answers: MohwLifeCareAnswers,
+): boolean {
+  if (!LIVING_ADDRESS_LOCKED_KEYS.has(fieldKey)) return false;
+  const status = String(answers.visit_status ?? "").trim();
+  if (status === "住址不詳") return true;
+  const type = String(answers.living_address_type ?? "").trim();
+  const note = String(answers.living_address_note ?? "").trim();
+  return type === "未住戶籍地址" && note === "居住地址不詳";
 }
 
 function matchesCondition(answers: MohwLifeCareAnswers, condition: MohwFieldCondition) {

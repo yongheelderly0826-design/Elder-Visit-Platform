@@ -35,6 +35,7 @@ import {
   createInitialMohwAnswers,
   isMohwFieldEffectivelyRequired,
   isMohwFieldVisible,
+  isMohwLivingAddressDetailLocked,
   mohwLifeCareSampleAnswers,
   mohwLifeCareSections,
   syncMohwConsentFromSubmission,
@@ -59,7 +60,9 @@ import {
 } from "@/lib/domain/mohw-life-care-export";
 import { applyMohwSubmitGuards } from "@/lib/domain/mohw-submit-guards";
 import {
+  clearLivingAddressDetailsForUnknown,
   deskSuccessDurationOptions,
+  isUnknownLivingAddress,
   isWithinVisitWindow,
   MIN_SUCCESS_DURATION_MINUTES,
   normalizeMohwHelpSourcesExclusive,
@@ -1741,12 +1744,17 @@ export function VisitDialogueForm({
                         deskEntry={useDeskFormDefaults}
                         deskVisitStart={String(careFormAnswers.visit_start_time ?? "")}
                         deskVisitEnd={String(careFormAnswers.visit_end_time ?? "")}
+                        locked={isMohwLivingAddressDetailLocked(field.key, careFormAnswers)}
                         onChange={(value) => {
                           if (field.key === "visit_notes") {
                             const nextNotes = String(value ?? "");
                             setSubmission((current) => ({ ...current, notes: nextNotes }));
                           }
                           setCareFormAnswers((current) => {
+                            // 住址不詳鎖定中不可改縣市／區／里／地址
+                            if (isMohwLivingAddressDetailLocked(field.key, current)) {
+                              return current;
+                            }
                             let next = { ...current, [field.key]: value };
                             // 一人獨居：關閉並清空同住者為／年齡等殘值
                             if (
@@ -1758,6 +1766,16 @@ export function VisitDialogueForm({
                             // 求助對象有／無互斥：切換旗標時清掉另一側複選與說明
                             if (field.key === "help_sources_flag") {
                               next = normalizeMohwHelpSourcesExclusive(next);
+                            }
+                            // 選住址不詳／居住地址不詳：立即清空住址明細並鎖定類型＋註記
+                            if (
+                              field.key === "visit_status" ||
+                              field.key === "living_address_type" ||
+                              field.key === "living_address_note"
+                            ) {
+                              if (isUnknownLivingAddress(next)) {
+                                next = clearLivingAddressDetailsForUnknown(next);
+                              }
                             }
                             // 電話欄一律走補前導 0，避免只改畫面、answers 仍缺 0
                             if (
@@ -1776,7 +1794,11 @@ export function VisitDialogueForm({
                           setCareFormAnswers((current) => {
                             const patch =
                               typeof patchOrFn === "function" ? patchOrFn(current) : patchOrFn;
-                            return normalizeVisitorCareAnswers({ ...current, ...patch });
+                            let next = normalizeVisitorCareAnswers({ ...current, ...patch });
+                            if (isUnknownLivingAddress(next)) {
+                              next = clearLivingAddressDetailsForUnknown(next);
+                            }
+                            return next;
                           })
                         }
                       />
@@ -2537,6 +2559,7 @@ function CareFormInput({
   deskEntry = false,
   deskVisitStart = "",
   deskVisitEnd = "",
+  locked = false,
   onChange,
   onPatchAnswers,
 }: {
@@ -2547,6 +2570,8 @@ function CareFormInput({
   deskEntry?: boolean;
   deskVisitStart?: string;
   deskVisitEnd?: string;
+  /** 居住地址不詳時鎖定縣市／區／里／地址 */
+  locked?: boolean;
   onChange: (value: MohwLifeCareAnswers[string]) => void;
   onPatchAnswers?: (
     patch: MohwLifeCareAnswers | ((current: MohwLifeCareAnswers) => MohwLifeCareAnswers),
@@ -2561,11 +2586,18 @@ function CareFormInput({
   const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
   const fieldId = careFieldDomId(field.key);
   const errorId = `${fieldId}-error`;
-  const controlClass = `h-10 rounded-md bg-card px-3 text-sm ${
-    error
-      ? "border border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
-      : "border"
+  const controlClass = `h-10 rounded-md px-3 text-sm ${
+    locked
+      ? "cursor-not-allowed border bg-muted text-muted-foreground"
+      : error
+        ? "border border-destructive bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+        : "border bg-card"
   }`;
+  const lockedHint = locked ? (
+    <p className="text-xs font-normal leading-5 text-muted-foreground">
+      居住地址不詳時勿填住址（已清空並鎖定）
+    </p>
+  ) : null;
   const isNameField =
     field.key === "name" ||
     field.mohwKey === "name" ||
@@ -2723,6 +2755,7 @@ function CareFormInput({
         <select
           className={controlClass}
           value={typeof value === "string" ? value : ""}
+          disabled={locked}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           onChange={(event) => onChange(event.target.value)}
@@ -2734,6 +2767,7 @@ function CareFormInput({
             </option>
           ))}
         </select>
+        {lockedHint}
         {errorText}
       </label>
     );
@@ -2965,10 +2999,11 @@ function CareFormInput({
         value={
           refused ? CASE_PHONE_REFUSED : nonePhone ? CASE_PHONE_NONE : phoneText
         }
-        disabled={phoneLocked}
+        disabled={phoneLocked || locked}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
+          if (locked) return;
           const next = event.target.value;
           if (isPhoneField) {
             const asMobile = normalizeTaiwanMobilePhone(next);
@@ -3041,6 +3076,7 @@ function CareFormInput({
       {phoneHint ? (
         <p className="text-xs font-normal leading-5 text-muted-foreground">{phoneHint}</p>
       ) : null}
+      {lockedHint}
       {errorText}
     </label>
   );

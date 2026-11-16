@@ -43,7 +43,8 @@ const COHABIT_KEYS = [
   "cohabitant_no_care_capacity_note",
 ] as const;
 
-const LIVING_DETAIL_KEYS = [
+/** 居住地址明細（不含類型／註記）；不詳時須清空且不可再填 */
+export const LIVING_ADDRESS_VALUE_KEYS = [
   "living_address",
   "living_city",
   "living_district",
@@ -53,9 +54,23 @@ const LIVING_DETAIL_KEYS = [
   "living_alley",
   "living_number",
   "living_floor",
-  "living_address_note",
-  "living_address_type",
 ] as const;
+
+/**
+ * 住址不詳／居住地址不詳：訪視狀態＝住址不詳，或未住戶籍＋居住地址不詳。
+ * （與 desk-care-batch.isUnknownAddressClosure 對齊）
+ */
+export function isUnknownLivingAddress(answers: {
+  visit_status?: unknown;
+  living_address_type?: unknown;
+  living_address_note?: unknown;
+}): boolean {
+  const status = String(answers.visit_status ?? "").trim();
+  if (status === "住址不詳") return true;
+  const type = String(answers.living_address_type ?? "").trim();
+  const note = String(answers.living_address_note ?? "").trim();
+  return type === "未住戶籍地址" && note === "居住地址不詳";
+}
 
 function hasVal(v: unknown): boolean {
   if (Array.isArray(v)) {
@@ -131,6 +146,17 @@ function clearKeys(
   return next;
 }
 
+/** 清空居住地址明細後回填 未住戶籍地址＋居住地址不詳（保留 living_address_other／戶籍） */
+export function clearLivingAddressDetailsForUnknown(
+  answers: MohwLifeCareAnswers,
+): MohwLifeCareAnswers {
+  return {
+    ...clearKeys(answers, LIVING_ADDRESS_VALUE_KEYS),
+    living_address_type: "未住戶籍地址",
+    living_address_note: "居住地址不詳",
+  };
+}
+
 /** 縣市誤填成「XX市」時對應到縣＋鄉鎮區（中央：居住縣市無效）。 */
 export const LIVING_CITY_AS_DISTRICT_FIX: Record<
   string,
@@ -199,7 +225,7 @@ export function normalizeMohwSocialWorkerRole(
 
 /**
  * 品質正規化（不含無名清日）：
- * 跳過問卷清同住、住址不詳清居住明細、求助對象互斥、縣市誤填修正、社政身分強制志工。
+ * 跳過問卷清同住、住址不詳／居住地址不詳清居住明細、求助對象互斥、縣市誤填修正、社政身分強制志工。
  */
 export function normalizeMohwQualityGuards(
   answers: MohwLifeCareAnswers,
@@ -211,14 +237,9 @@ export function normalizeMohwQualityGuards(
     next = clearKeys(next, COHABIT_KEYS);
   }
 
-  if (visitStatus === "住址不詳") {
-    // 清居住明細後仍須保留衛福必填：類型＝未住戶籍地址、註記＝居住地址不詳
-    next = clearKeys(next, LIVING_DETAIL_KEYS);
-    next = {
-      ...next,
-      living_address_type: "未住戶籍地址",
-      living_address_note: "居住地址不詳",
-    };
+  // 住址不詳／居住地址不詳：清縣市區里地址等殘值，保留類型＋註記
+  if (isUnknownLivingAddress(next)) {
+    next = clearLivingAddressDetailsForUnknown(next);
   }
 
   if (visitStatus === "查無此人" && !hasVal(next.living_address_type)) {

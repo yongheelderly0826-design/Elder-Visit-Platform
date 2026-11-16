@@ -1,3 +1,11 @@
+## Lesson: 居住地址不詳時清空並鎖定住址明細
+
+- **Trigger:** 選「居住地址不詳」後縣市／區／里／地址仍殘留；`visit_status=已完成`＋不詳時 submit guard 只清 `住址不詳` 狀態。
+- **Cause:** UI 僅以 `showWhen=居住地址為` 隱藏欄位、未清 answers；`normalizeMohwQualityGuards` 只看 `visit_status`。
+- **Rule:** `isUnknownLivingAddress`（狀態＝住址不詳 **或** 未住戶籍＋居住地址不詳）→ `clearLivingAddressDetailsForUnknown` 清 `LIVING_ADDRESS_VALUE_KEYS` 並回填類型／註記。表單 onChange 立即清；明細欄 `locked`。勿動「居住地址為」村里必填。
+- **Evidence:** `mohw-submit-guard-rules.ts`, `visit-dialogue-form.tsx`, `mohw-life-care-ui.ts`, `CareFormModule.gs`, `mohw-submit-guards-smoke.ts`.
+- **Added on:** 2026-11-16
+
 ## Lesson: 社政訪查人身分一律志工；結束時間必填；已知居住里必填村里
 
 - **Trigger:** 衛福匯出「社政訪查人-身分」出現「社會局/處」（如許木坤）；結束時間可空白；未住戶籍選「居住地址為」卻漏村里。

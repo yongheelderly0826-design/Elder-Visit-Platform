@@ -11,6 +11,9 @@ export {
   MIN_SUCCESS_DURATION_MINUTES,
   QUESTIONNAIRE_SKIP_STATUSES,
   LIVING_CITY_AS_DISTRICT_FIX,
+  LIVING_ADDRESS_VALUE_KEYS,
+  isUnknownLivingAddress,
+  clearLivingAddressDetailsForUnknown,
   parseHhMmToMinutes,
   minutesToHhMm,
   isWithinVisitWindow,
@@ -30,7 +33,7 @@ export {
  * 送出前正規化（寫入 answers）：
  * - 無名側清空日期
  * - 跳過問卷狀態 → 清空同住問卷殘值
- * - 住址不詳 → 清空居住地址明細後回填 未住戶籍地址＋居住地址不詳（保留戶籍、living_address_other）
+ * - 住址不詳／未住戶籍＋居住地址不詳 → 清空居住地址明細後回填類型＋註記（保留戶籍、living_address_other）
  * - 社政訪查人身分強制「志工」
  */
 export function applyMohwSubmitGuards(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
