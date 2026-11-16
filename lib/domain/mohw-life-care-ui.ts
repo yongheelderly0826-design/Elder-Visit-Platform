@@ -20,6 +20,8 @@ export type MohwFormField = GovernmentFormField & {
   showWhen?: MohwFieldCondition[];
   /** Optional display labels parallel to `options` (official tokens stay in options). */
   optionLabels?: string[];
+  /** Optional inline hint under the label (product防呆). */
+  helpText?: string;
 };
 
 export type MohwFieldCondition =
@@ -175,10 +177,23 @@ function defaultOptionsForKey(key: string): string[] | undefined {
   return defaults[key];
 }
 
+/** 欄位下方簡短防呆提示（產品規則，非衛福表頭） */
+const UI_FIELD_HINTS: Record<string, string> = {
+  visit_end_time: "必填；允許時段 08:00–20:00（可勾選時長自動帶入）",
+  living_address_note:
+    "若知道居住里別／地址，請選「居住地址為」並填村里；不詳才選「居住地址不詳」（可一張結案）",
+  living_village: "知道居住里別時必填；請與戶政村里名稱一致",
+  social_worker_role: "永和社政訪查人身分一律「志工」",
+};
+
 export function columnToMohwField(column: MohwLifeCareColumn): MohwFormField {
   const label = column.header.replace(/\s*\*+$/, "").replace(/\*$/, "");
   const official = parseOfficialAllowedValues(column.allowedValues);
-  const options = withUiExtraOptions(column.key, official);
+  // 產品：社政身分固定志工（官方允許值仍保留四類於 schema，UI 只露出志工）
+  const options =
+    column.key === "social_worker_role"
+      ? ["志工"]
+      : withUiExtraOptions(column.key, official);
   let type: GovernmentFormField["type"] = "text";
 
   if (column.inputType.includes("多選")) {
@@ -206,6 +221,7 @@ export function columnToMohwField(column: MohwLifeCareColumn): MohwFormField {
     options: options.length > 0 ? options : defaultOptionsForKey(column.key),
     optionLabels: options.length > 0 ? options.map(displayOfficialOption) : undefined,
     showWhen: CONDITIONAL_RULES[column.key],
+    helpText: UI_FIELD_HINTS[column.key] || undefined,
   };
 }
 
@@ -360,17 +376,23 @@ export const mohwLifeCareSampleAnswers: MohwLifeCareAnswers = {
   consent_personal_data: "同意",
   consent_health_db: "同意",
   consent_signature: "是",
-  social_worker_role: "社工",
-  social_worker_name: "張社工",
+  social_worker_role: "志工",
+  social_worker_name: "張志工",
   social_worker_national_id: "B223456782",
   social_worker_phone: "0933445566",
   social_worker_date: "2026-05-13",
 };
 
+/** 條件顯示欄位（有 showWhen）在可見時視為必填（對齊 CONDITIONAL_REQUIRED） */
+export function isMohwFieldEffectivelyRequired(field: MohwFormField): boolean {
+  if (field.required) return true;
+  return Boolean(field.showWhen?.length);
+}
+
 export function calculateMohwCareFormCompletion(answers: MohwLifeCareAnswers): MohwCareFormCompletion {
   const sections = mohwLifeCareSections.map((section) => {
     const visibleFields = section.fields.filter((field) => isMohwFieldVisible(field, answers));
-    const requiredFields = visibleFields.filter((field) => field.required);
+    const requiredFields = visibleFields.filter((field) => isMohwFieldEffectivelyRequired(field));
     const missingFields = requiredFields.filter((field) => !hasMohwAnswer(answers[field.key]));
 
     return {

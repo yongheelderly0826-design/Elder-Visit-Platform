@@ -101,6 +101,43 @@ import {
     visit_end_time: "09:10",
   });
   assert.equal(ok.length, 0);
+
+  const missingEnd = collectMohwSubmitGuardIssues({
+    visit_status: "查無此人",
+    visit_start_time: "09:00",
+  });
+  assert.ok(missingEnd.some((i) => i.code === "VISIT_END_REQUIRED"));
+
+  const missingVillage = collectMohwSubmitGuardIssues({
+    visit_status: "已完成",
+    visit_start_time: "09:00",
+    visit_end_time: "09:10",
+    living_address_type: "未住戶籍地址",
+    living_address_note: "居住地址為",
+    living_city: "新北市",
+    living_district: "永和區",
+  });
+  assert.ok(missingVillage.some((i) => i.code === "LIVING_VILLAGE_REQUIRED"));
+
+  const unknownAddrOk = collectMohwSubmitGuardIssues({
+    visit_status: "住址不詳",
+    visit_start_time: "09:00",
+    visit_end_time: "09:05",
+    living_address_type: "未住戶籍地址",
+    living_address_note: "居住地址不詳",
+  });
+  assert.ok(!unknownAddrOk.some((i) => i.code === "LIVING_VILLAGE_REQUIRED"));
+}
+
+// 社政身分強制志工
+{
+  const next = normalizeMohwQualityGuards({
+    social_worker_name: "許木坤",
+    social_worker_role: "社會局/處",
+    social_worker_role_other: "殘值",
+  });
+  assert.equal(next.social_worker_role, "志工");
+  assert.equal(next.social_worker_role_other, "");
 }
 
 assert.deepEqual(deskSuccessDurationOptions([1, 5, 10]), [5, 10]);

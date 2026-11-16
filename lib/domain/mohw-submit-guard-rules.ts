@@ -1,5 +1,8 @@
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 
+/** 與 visitor-registration-options.MOHW_SOCIAL_WORKER_ROLE_FORCED 同步（避免 smoke 依賴 @/ 路徑） */
+const SOCIAL_WORKER_ROLE_FORCED = "志工";
+
 /** 訪視／未遇允許時段（含界）：08:00–20:00（與 GAS MohwLifeCareValidator 一致） */
 export const VISIT_WINDOW_START_MINUTES = 8 * 60;
 export const VISIT_WINDOW_END_MINUTES = 20 * 60;
@@ -22,11 +25,13 @@ export type MohwSubmitGuardIssue = {
   key: string;
   code:
     | "VISIT_TIME_WINDOW"
+    | "VISIT_END_REQUIRED"
     | "VISIT_DURATION_MIN"
     | "STATUS_MISSED_CONFLICT"
     | "HELP_SOURCES_HAS_WHEN_NONE"
     | "HELP_SOURCES_NONE_WHEN_HAS"
-    | "INVALID_LIVING_CITY";
+    | "INVALID_LIVING_CITY"
+    | "LIVING_VILLAGE_REQUIRED";
   message: string;
 };
 
@@ -175,9 +180,26 @@ export function normalizeMohwLivingCityDistrict(
   };
 }
 
+/** 社政側任一身分欄有值 → 強制身分＝志工、清空其他說明 */
+export function normalizeMohwSocialWorkerRole(
+  answers: MohwLifeCareAnswers,
+): MohwLifeCareAnswers {
+  const hasSocial =
+    hasVal(answers.social_worker_role) ||
+    hasVal(answers.social_worker_name) ||
+    hasVal(answers.social_worker_national_id) ||
+    hasVal(answers.social_worker_phone);
+  if (!hasSocial) return answers;
+  return {
+    ...answers,
+    social_worker_role: SOCIAL_WORKER_ROLE_FORCED,
+    social_worker_role_other: "",
+  };
+}
+
 /**
  * 品質正規化（不含無名清日）：
- * 跳過問卷清同住、住址不詳清居住明細、求助對象互斥、縣市誤填修正。
+ * 跳過問卷清同住、住址不詳清居住明細、求助對象互斥、縣市誤填修正、社政身分強制志工。
  */
 export function normalizeMohwQualityGuards(
   answers: MohwLifeCareAnswers,
@@ -205,14 +227,17 @@ export function normalizeMohwQualityGuards(
 
   next = normalizeMohwHelpSourcesExclusive(next);
   next = normalizeMohwLivingCityDistrict(next);
+  next = normalizeMohwSocialWorkerRole(next);
 
   return next;
 }
 
 /**
  * 送出驗證防呆（擋送出）：
+ * - 訪查結束時間必填
  * - 已完成：時長 ≥ 5 分
  * - 訪查開始／結束須在 08:00–20:00
+ * - 未住戶籍＋居住地址為 → 村里必填（與條件必填對齊、訊息更清楚）
  * - 已完成卻備註含「訪視未遇」→ 矛盾
  */
 export function collectMohwSubmitGuardIssues(
@@ -223,6 +248,13 @@ export function collectMohwSubmitGuardIssues(
   const start = answers.visit_start_time ?? answers.visit_time_start;
   const end = answers.visit_end_time ?? answers.visit_time_end;
 
+  if (!hasVal(end)) {
+    issues.push({
+      key: "visit_end_time",
+      code: "VISIT_END_REQUIRED",
+      message: "訪查結束時間為必填",
+    });
+  }
   if (hasVal(start) && !isWithinVisitWindow(start)) {
     issues.push({
       key: "visit_start_time",
@@ -235,6 +267,20 @@ export function collectMohwSubmitGuardIssues(
       key: "visit_end_time",
       code: "VISIT_TIME_WINDOW",
       message: `訪查結束時間須在 ${VISIT_WINDOW_LABEL}`,
+    });
+  }
+
+  const livingType = String(answers.living_address_type ?? "").trim();
+  const livingNote = String(answers.living_address_note ?? "").trim();
+  if (
+    livingType === "未住戶籍地址" &&
+    livingNote === "居住地址為" &&
+    !hasVal(answers.living_village)
+  ) {
+    issues.push({
+      key: "living_village",
+      code: "LIVING_VILLAGE_REQUIRED",
+      message: "未住戶籍且知道居住地址時，居住村里為必填；若地址不詳請改選「居住地址不詳」",
     });
   }
 

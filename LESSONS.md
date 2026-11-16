@@ -1,3 +1,11 @@
+## Lesson: 社政訪查人身分一律志工；結束時間必填；已知居住里必填村里
+
+- **Trigger:** 衛福匯出「社政訪查人-身分」出現「社會局/處」（如許木坤）；結束時間可空白；未住戶籍選「居住地址為」卻漏村里。
+- **Cause:** `mapJobTitleToMohwWorkerRole` 依職稱映射；schema 結束時間 `required=false`；條件必填有村里但 UI 未標 *／缺提示。
+- **Rule:** 社政帶入／送出／匯出一律強制 `social_worker_role=志工`（清 `role_other`）。`visit_end_time` 產品必填（schema＋submit guards＋GAS；匯出表頭仍無 * 對齊官方）。`未住戶籍`＋`居住地址為` → 村里必填並給 UI hint；`居住地址不詳` 不要求村里。
+- **Evidence:** `visitor-registration-options.ts`, `mohw-submit-guard-rules.ts`, `mohw-life-care-export.ts`, `mohw-life-care-ui.ts`, `visit-dialogue-form.tsx`, `MohwLifeCareValidator.gs`, `MohwLifeCareMapper.gs`, `CareFormModule.gs`.
+- **Added on:** 2026-11-16
+
 ## Lesson: Visit times must stay inside 08:00–20:00 including auto-chain
 
 - **Trigger:** 稽核 7 筆失敗，起迄在 20:10–21:15；根因是連續 KEY／未遇戳記 +10 仍往後排，不是 HH:mm 格式。
@@ -145,7 +153,7 @@
 
 - **Trigger:** 衛福匯入範本「社政訪查人-身分」僅社會局/處、社工、志工、其他；產品曾把「電話問安」放進社政職稱，且帶入訪員時會清空另一邊。
 - **Cause:** Desk social titles mirrored extended registry labels; `applyVisitorToWorkerAnswers` cleared the opposite side for exclusive 擇一 UX.
-- **Rule:** 關懷表 `社政訪查人-身分` 仍僅官方四類；名冊職稱「電話問安」民政／社政皆可選，社政帶入→其他＋說明「電話問安」。驗證維持「至少一邊」；帶入只覆寫本邊；開表依主填＋同行填空欄。
+- **Rule:**（2026-11-16 修訂）衛福官方仍允許四類，但**永和產品關懷表／匯出社政身分一律「志工」**（名冊職稱可保留社會局/處等，不寫進身分欄）。驗證維持「至少一邊」；帶入只覆寫本邊；開表依主填＋同行填空欄。詳見上則「社政訪查人身分一律志工」。
 - **Evidence:** `lib/domain/visitor-registration-options.ts`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-31
 

@@ -11,6 +11,7 @@ import {
   type MohwVisitMeta,
 } from "@/lib/domain/mohw-life-care-form";
 import { normalizeTaiwanMobilePhone } from "@/lib/domain/phone";
+import { normalizeMohwSocialWorkerRole } from "@/lib/domain/mohw-submit-guard-rules";
 
 export type MohwLifeCareExportInput = {
   /** Preferred: already keyed by MOHW column keys. */
@@ -74,6 +75,9 @@ export function buildMohwLifeCareAnswers(input: MohwLifeCareExportInput): MohwLi
   if (answers.visit_status && typeof answers.visit_status === "string") {
     answers.visit_status = VISIT_STATUS_MAP[answers.visit_status] ?? answers.visit_status;
   }
+
+  // 匯出／驗證前：社政身分一律志工（修正歷史「社會局/處」殘值）
+  answers = normalizeMohwSocialWorkerRole(answers);
 
   return answers;
 }
@@ -437,7 +441,7 @@ export function normalizeVisitorCareAnswers(answers: MohwLifeCareAnswers): MohwL
       next[key] = normalizeVisitorNumber(value, true);
     }
   }
-  return next;
+  return normalizeMohwSocialWorkerRole(next);
 }
 
 /** `HH:mm` 24h；與 normalizeVisitorTime 同一套規則（含 Excel 日內小數／剝秒）。 */

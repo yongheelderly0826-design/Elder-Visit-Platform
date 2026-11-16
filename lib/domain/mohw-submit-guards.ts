@@ -18,6 +18,7 @@ export {
   visitDurationMinutes,
   normalizeMohwHelpSourcesExclusive,
   normalizeMohwLivingCityDistrict,
+  normalizeMohwSocialWorkerRole,
   normalizeMohwQualityGuards,
   collectMohwSubmitGuardIssues,
   collectVisitTimeWindowIssues,
@@ -30,6 +31,7 @@ export {
  * - 無名側清空日期
  * - 跳過問卷狀態 → 清空同住問卷殘值
  * - 住址不詳 → 清空居住地址明細後回填 未住戶籍地址＋居住地址不詳（保留戶籍、living_address_other）
+ * - 社政訪查人身分強制「志工」
  */
 export function applyMohwSubmitGuards(answers: MohwLifeCareAnswers): MohwLifeCareAnswers {
   return normalizeMohwQualityGuards(clearOrphanWorkerDates(answers));

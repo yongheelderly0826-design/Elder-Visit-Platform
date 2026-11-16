@@ -54,7 +54,7 @@ export const deskCivilJobTitles = [
 
 /**
  * 紙本 KEY／名冊社政職稱：衛福官方四類＋永和「電話問安」。
- * 寫入關懷表 `社政訪查人-身分` 時，電話問安對應官方「其他」＋說明「電話問安」。
+ * 寫入關懷表 `社政訪查人-身分` 時，產品規則一律對應「志工」（與職稱無關）。
  */
 export const deskSocialJobTitles = [
   "社會局/處",
@@ -63,6 +63,9 @@ export const deskSocialJobTitles = [
   "其他",
   "電話問安",
 ] as const satisfies readonly VisitorRegistrationJobTitle[];
+
+/** 永和產品：關懷表社政訪查人-身分一律「志工」 */
+export const MOHW_SOCIAL_WORKER_ROLE_FORCED = "志工";
 
 export function deskJobTitlesForWorkerGroup(
   workerGroup: VisitorRegistrationWorkerGroup,
@@ -91,15 +94,9 @@ export function mapJobTitleToMohwWorkerRole(
     return { role: "公所人員" };
   }
 
-  // 社政官方四類；電話問安（民政／社政皆可選）→ 其他＋說明
-  if (title === "社會局/處") return { role: "社會局/處" };
-  if (title === "社工") return { role: "社工" };
-  if (title === "志工") return { role: "志工" };
-  if (title === "其他") return { role: "其他", roleOther: undefined };
-  if (title === "電話問安") return { role: "其他", roleOther: "電話問安" };
-  if (title === "其他（鄰長）") return { role: "其他", roleOther: "鄰長" };
-  // 民政職稱被勾到社政欄時：保守用社會局/處
-  return { role: "社會局/處" };
+  // 產品規則：社政欄一律「志工」（名冊職稱可為社會局/處／社工／電話問安等，不影響匯出身分）
+  void title;
+  return { role: MOHW_SOCIAL_WORKER_ROLE_FORCED };
 }
 
 export type VisitorCorrectionResult = {

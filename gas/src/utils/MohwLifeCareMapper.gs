@@ -254,6 +254,17 @@ var MohwLifeCareMapper = (function () {
     if (answers.visit_status) answers.visit_status = mapVisitStatus(String(answers.visit_status).trim());
     // 匯出不依居住地址改寫戶籍村里。資料錯誤由驗證器指出，再回原始資料確認。
 
+    // 產品：社政訪查人身分一律志工（歷史社會局/處等殘值於匯出時覆寫）
+    var hasSocial =
+      String(answers.social_worker_role || '').trim() ||
+      String(answers.social_worker_name || '').trim() ||
+      String(answers.social_worker_national_id || '').trim() ||
+      String(answers.social_worker_phone || '').trim();
+    if (hasSocial) {
+      answers.social_worker_role = '志工';
+      answers.social_worker_role_other = '';
+    }
+
     return answers;
   }
 

@@ -55,11 +55,13 @@ export type MohwValidationError = {
     | "MUST_BE_BLANK"
     | "TEMPLATE_MISMATCH"
     | "VISIT_TIME_WINDOW"
+    | "VISIT_END_REQUIRED"
     | "VISIT_DURATION_MIN"
     | "STATUS_MISSED_CONFLICT"
     | "HELP_SOURCES_HAS_WHEN_NONE"
     | "HELP_SOURCES_NONE_WHEN_HAS"
-    | "INVALID_LIVING_CITY";
+    | "INVALID_LIVING_CITY"
+    | "LIVING_VILLAGE_REQUIRED";
   message: string;
   /** Manager / export message with Excel cell: `I3 身分證號碼格式不正確` */
   display: string;
@@ -134,6 +136,8 @@ const CONDITIONAL_REQUIRED: Array<{ key: string; when: Cond; message?: string }>
         { type: "equals", key: "living_address_note", value: "居住地址為" },
       ],
     },
+    message:
+      "未住戶籍且知道居住地址時，居住村里為必填；若地址不詳請改選「居住地址不詳」",
   },
   {
     key: "living_address",

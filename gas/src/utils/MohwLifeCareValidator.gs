@@ -34,7 +34,8 @@ var MohwLifeCareValidator = (function () {
     },
     {
       key: 'living_village',
-      equals: { living_address_type: '未住戶籍地址', living_address_note: '居住地址為' }
+      equals: { living_address_type: '未住戶籍地址', living_address_note: '居住地址為' },
+      msg: '未住戶籍且知道居住地址時，居住村里為必填；若地址不詳請改選「居住地址不詳」'
     },
     {
       key: 'living_address',
@@ -216,16 +217,31 @@ var MohwLifeCareValidator = (function () {
     return d;
   }
 
-  /** 第五類：08–20、成功≥5 分、已完成↔未遇戳互斥 */
+  /** 第五類：結束必填、08–20、成功≥5 分、已完成↔未遇戳互斥、已知居住地址→村里 */
   function appendSubmitGuards_(errors, answers, row) {
     var visitStatus = asString(answers.visit_status);
     var start = answers.visit_start_time || answers.visit_time_start;
     var end = answers.visit_end_time || answers.visit_time_end;
+    if (!hasValue(end)) {
+      pushErr(errors, 'visit_end_time', row, '訪查結束時間為必填');
+    }
     if (hasValue(start) && !isWithinVisitWindow_(start)) {
       pushErr(errors, 'visit_start_time', row, '訪查開始時間須在 08:00–20:00');
     }
     if (hasValue(end) && !isWithinVisitWindow_(end)) {
       pushErr(errors, 'visit_end_time', row, '訪查結束時間須在 08:00–20:00');
+    }
+    if (
+      asString(answers.living_address_type) === '未住戶籍地址' &&
+      asString(answers.living_address_note) === '居住地址為' &&
+      !hasValue(answers.living_village)
+    ) {
+      pushErr(
+        errors,
+        'living_village',
+        row,
+        '未住戶籍且知道居住地址時，居住村里為必填；若地址不詳請改選「居住地址不詳」'
+      );
     }
     if (visitStatus === '已完成') {
       var dur = visitDurationMinutes_(start, end);
@@ -541,12 +557,15 @@ var MohwLifeCareValidator = (function () {
     };
   }
 
-  /** 未遇路徑：只檢核訪視起迄是否在 08:00–20:00（含界）。 */
+  /** 未遇路徑：結束必填＋訪視起迄是否在 08:00–20:00（含界）。 */
   function validateVisitTimeWindow(answers, row) {
     row = row || 2;
     var errors = [];
     var start = answers.visit_start_time || answers.visit_time_start;
     var end = answers.visit_end_time || answers.visit_time_end;
+    if (!hasValue(end)) {
+      pushErr(errors, 'visit_end_time', row, '訪查結束時間為必填');
+    }
     if (hasValue(start) && !isWithinVisitWindow_(start)) {
       pushErr(errors, 'visit_start_time', row, '訪查開始時間須在 08:00–20:00');
     }

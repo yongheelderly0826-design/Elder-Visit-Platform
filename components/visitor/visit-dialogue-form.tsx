@@ -33,6 +33,7 @@ import {
 import {
   calculateMohwCareFormCompletion,
   createInitialMohwAnswers,
+  isMohwFieldEffectivelyRequired,
   isMohwFieldVisible,
   mohwLifeCareSampleAnswers,
   mohwLifeCareSections,
@@ -2422,14 +2423,17 @@ function defaultWorkerRole(
   currentRole: unknown,
   jobTitle?: string | null,
 ): { role: string; roleOther?: string } {
+  if (kind === "social") {
+    // 產品：社政一律志工（忽略名冊職稱與既有社會局/處殘值）
+    return mapJobTitleToMohwWorkerRole("social", jobTitle);
+  }
   if (jobTitle) {
     const mapped = mapJobTitleToMohwWorkerRole(kind, jobTitle);
     if (mapped.role) return mapped;
   }
   const existing = String(currentRole ?? "").trim();
   if (existing) return { role: existing };
-  // 社政選項含「志工」但產品用語優先「社會局/處」；民政預設公所人員
-  return { role: kind === "civil" ? "公所人員" : "社會局/處" };
+  return { role: "公所人員" };
 }
 
 /** 主填＋同行：空的民政／社政欄各帶入一位對應訪查員（兩邊可並存）。 */
@@ -2548,7 +2552,12 @@ function CareFormInput({
     patch: MohwLifeCareAnswers | ((current: MohwLifeCareAnswers) => MohwLifeCareAnswers),
   ) => void;
 }) {
-  const requiredMark = field.required ? <span className="text-destructive"> *</span> : null;
+  const requiredMark = isMohwFieldEffectivelyRequired(field) ? (
+    <span className="text-destructive"> *</span>
+  ) : null;
+  const helpText = field.helpText ? (
+    <p className="text-xs font-normal leading-5 text-muted-foreground">{field.helpText}</p>
+  ) : null;
   const isTimeField = field.mohwKey === "visit_start_time" || field.mohwKey === "visit_end_time";
   const fieldId = careFieldDomId(field.key);
   const errorId = `${fieldId}-error`;
@@ -2706,8 +2715,11 @@ function CareFormInput({
   if (field.type === "single_choice") {
     return (
       <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
-        {field.label}
-        {requiredMark}
+        <span>
+          {field.label}
+          {requiredMark}
+        </span>
+        {helpText}
         <select
           className={controlClass}
           value={typeof value === "string" ? value : ""}
@@ -2836,9 +2848,9 @@ function CareFormInput({
         ) : null}
         {deskEntry && isEndField ? (
           <p className="text-xs font-normal leading-5 text-muted-foreground">
-            由時長 {durationOptions.join("／")} 自動帶入，仍可手改（須 {VISIT_WINDOW_LABEL}）。
+            必填；可由時長 {durationOptions.join("／")} 自動帶入，仍可手改（須 {VISIT_WINDOW_LABEL}）。
           </p>
-        ) : null}
+        ) : helpText}
         {errorText}
       </div>
     );
@@ -2940,8 +2952,11 @@ function CareFormInput({
 
   return (
     <label id={fieldId} className="grid scroll-mt-28 gap-1 text-sm font-medium">
-      {field.label}
-      {requiredMark}
+      <span>
+        {field.label}
+        {requiredMark}
+      </span>
+      {helpText}
       <input
         className={controlClass}
         type="text"

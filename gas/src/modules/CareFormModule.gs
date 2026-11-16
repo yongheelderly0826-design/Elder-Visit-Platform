@@ -91,6 +91,16 @@ var CareFormModule = (function () {
       next.living_city = '彰化縣';
       if (!dist || dist === '彰化' || dist === '彰化市') next.living_district = '彰化市';
     }
+    // 產品：社政訪查人身分一律志工（修正社會局/處等殘值）
+    var hasSocial =
+      String(next.social_worker_role || '').trim() ||
+      String(next.social_worker_name || '').trim() ||
+      String(next.social_worker_national_id || '').trim() ||
+      String(next.social_worker_phone || '').trim();
+    if (hasSocial) {
+      next.social_worker_role = '志工';
+      next.social_worker_role_other = '';
+    }
     // 寫入 answers_json 前統一 HH:mm（含未遇跳過全量驗證的路徑）
     var timeKeys = ['visit_start_time', 'visit_end_time', 'visit_time_start', 'visit_time_end'];
     for (i = 0; i < timeKeys.length; i++) {
