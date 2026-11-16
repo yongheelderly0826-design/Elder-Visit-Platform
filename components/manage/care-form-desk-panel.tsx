@@ -1078,7 +1078,7 @@ export function CareFormDeskPanel({
         icon={ClipboardPen}
         eyebrow={entry === "desk" ? "里責填表入口" : "承辦後台"}
         title="關懷表建檔"
-        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；批次只填日期與第 1 起始，進表後勾選訪視時長 1／5／10 分（結束可手改），下一案起始＝上案結束＋5 分。同組時段不可衝突。未遇／住址不詳皆一張紙結案（三次時間寫入備註），不另建補件。"
+        description="先固定訪查組（民政／社政可複選，並指定主填表人），再一次勾多個案準備派案；批次只填日期與第 1 起始，進表後勾選訪視時長 1／5／10 分（結束可手改），下一案起始＝上案結束＋5 分。同組時段不可衝突。未遇一張紙＋三次時間備註；住址不詳一張紙即可（不要求三次再訪），皆不另建補件。"
       />
 
       {deskClerkLabel ? (
@@ -1480,7 +1480,8 @@ export function CareFormDeskPanel({
             <p className="text-sm font-medium">批次訪視時間（僅日期＋第 1 起始）</p>
             <p className="mt-1 text-xs text-muted-foreground">
               結束時間不在此設定。進關懷表後勾選時長 1／5／10 分自動算出結束（仍可手改）；下一案起始＝上案結束＋
-              {DESK_BATCH_TRAVEL_GAP_MINUTES} 分。單案也可按「先填時間」手動確認起迄。
+              {DESK_BATCH_TRAVEL_GAP_MINUTES} 分。衛福允許時段 08:00–20:00（含界）；連續 KEY
+              不會自動排到 20:00 之後。單案也可按「先填時間」手動確認起迄。
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <Field label="訪視日期 *">

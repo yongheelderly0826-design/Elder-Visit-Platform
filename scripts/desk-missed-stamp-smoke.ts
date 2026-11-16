@@ -5,9 +5,14 @@
 import assert from "node:assert/strict";
 import {
   buildDeskOnePaperMissedNote,
+  buildDeskOnePaperUnknownAddressNote,
+  canChainVisitStartWithinWindow,
+  chainDeskBatchAfterKeyed,
   deskBatchMissedStampOffsetMinutes,
+  isUnknownAddressClosure,
   notesIndicateDeceased,
   parseMissedVisitStamps,
+  resolveUniqueMissedStampTime,
   rewriteMissedVisitStampTimes,
   stripMissedVisitStamps,
   type DeskBatchState,
@@ -75,6 +80,84 @@ function main() {
     "社區管理員指案主已於115年9月往生；10/25 09:20訪視未遇；10/26 14:20訪視未遇；10/27 16:40訪視未遇。",
   );
   assert.equal(cleaned, "社區管理員指案主已於115年9月往生");
+
+  // 晚班硬上限 20:00：不可再 bump 出 20:10…
+  const lateOccupied = new Set(["10/28 20:00"]);
+  assert.equal(
+    resolveUniqueMissedStampTime({
+      monthDay: "10/28",
+      preferredTime: "20:00",
+      occupiedKeys: lateOccupied,
+      softEnd: "20:00",
+    }),
+    null,
+  );
+  const clampedLate = buildDeskOnePaperMissedNote({
+    visitDateRaw: "2025-10-28",
+    visitStartTime: "20:40",
+  });
+  assert.ok(clampedLate);
+  assert.match(clampedLate!, /10\/28 20:00訪視未遇/);
+
+  assert.equal(canChainVisitStartWithinWindow("19:55", 5), true);
+  assert.equal(canChainVisitStartWithinWindow("19:56", 5), false);
+  assert.equal(canChainVisitStartWithinWindow("20:10", 5), false);
+
+  const chainBatch: DeskBatchState = {
+    version: 1,
+    returnPath: "/",
+    identityKey: "x",
+    village: "豫溪里",
+    primaryVisitorId: "V1",
+    companionVisitorIds: [],
+    visitorNames: {},
+    items: [
+      {
+        caseId: "c1",
+        caseName: "a",
+        caseCode: "1",
+        assignmentId: "ASG-1",
+        status: "ready",
+        visitDate: "2025-10-28",
+        visitStartTime: "19:50",
+        visitEndTime: "20:00",
+      },
+      {
+        caseId: "c2",
+        caseName: "b",
+        caseCode: "2",
+        assignmentId: "ASG-2",
+        status: "ready",
+        visitDate: "2025-10-28",
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+  const chained = chainDeskBatchAfterKeyed(chainBatch, "ASG-1", {
+    visitDate: "2025-10-28",
+    visitStartTime: "19:50",
+    visitEndTime: "20:00",
+  });
+  const nextItem = chained.items.find((item) => item.assignmentId === "ASG-2");
+  assert.equal(nextItem?.status, "ready");
+  assert.equal(nextItem?.visitStartTime, undefined);
+
+  // 住址不詳：一次時間即可，不產三次訪視未遇戳
+  assert.equal(isUnknownAddressClosure({ visit_status: "住址不詳" }), true);
+  assert.equal(
+    isUnknownAddressClosure({
+      living_address_type: "未住戶籍地址",
+      living_address_note: "居住地址不詳",
+    }),
+    true,
+  );
+  assert.equal(isUnknownAddressClosure({ visit_status: "查無此人" }), false);
+  const unknownNote = buildDeskOnePaperUnknownAddressNote({
+    visitDateRaw: "2025-10-28",
+    visitStartTime: "15:30",
+  });
+  assert.equal(unknownNote, "10/28 15:30住址不詳。");
+  assert.ok(!unknownNote!.includes("訪視未遇"));
 
   console.log("desk missed stamp smoke passed");
 }

@@ -38,7 +38,8 @@ The **operational architecture** for 永和區落地 is:
 ## Project-Specific Rules
 
 - Prefer the existing calm, care-oriented visual language before inventing new UI patterns.
-- 未遇／住址不詳：一張關懷表結案；三次時間寫入 `living_address_other` 與備註；**暫不要求**時段照片／GPS（`missedVisitPhotosRequired=false`）。
+- 未遇：一張關懷表結案；三次時間寫入 `living_address_other` 與備註；**暫不要求**時段照片／GPS（`missedVisitPhotosRequired=false`）。
+- 住址不詳（或 `未住戶籍地址`＋`居住地址不詳`）：一張關懷表結案即可，**不要求**三次再訪／三次時間；一次訪視時間備註即可。
 - Keep demo-role accounts under `@eldervisit.org`.
 - Treat `docs/spec-v2.4.pdf` as the governing product reference when behavior is ambiguous.
 - Use `npm run typecheck`, `npm run lint`, and `npm run build` as the standard verification gate before publish work.

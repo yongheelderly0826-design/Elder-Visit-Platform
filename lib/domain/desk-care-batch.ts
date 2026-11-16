@@ -3,6 +3,23 @@ import type { MissedVisitTimeSlot } from "@/lib/domain/visits";
 
 export const DESK_BATCH_STORAGE_KEY = "elder-desk-care-batch-v1";
 
+/**
+ * 與 `mohw-submit-guard-rules` / GAS MohwLifeCareValidator 一致：08:00–20:00 含界。
+ * 此檔避免 `@/` import，方便 node smoke 直接 strip-types 執行。
+ */
+const VISIT_WINDOW_START_MINUTES = 8 * 60;
+const VISIT_WINDOW_END_MINUTES = 20 * 60;
+const VISIT_WINDOW_START_HHMM = "08:00";
+const VISIT_WINDOW_END_HHMM = "20:00";
+const VISIT_WINDOW_LABEL = "08:00–20:00";
+const MIN_SUCCESS_DURATION_MINUTES = 5;
+
+function isWithinVisitWindow(hhmm: string): boolean {
+  const mins = toMinutes(hhmm);
+  if (mins == null) return true;
+  return mins >= VISIT_WINDOW_START_MINUTES && mins <= VISIT_WINDOW_END_MINUTES;
+}
+
 /** 場生 KEY：預設每案時段長度（簽到／快速 KEY 後備）；連續 KEY 改由 1／5／10 勾選 */
 export const DESK_BATCH_SLOT_MINUTES = 10;
 /** 案與案之間預留移動時間（分鐘） */
@@ -195,6 +212,35 @@ export function nextVisitStartAfterEnd(
   return addMinutesToTime(String(end || "").trim().slice(0, 5), gapMinutes);
 }
 
+/**
+ * 下一案起始是否仍可在衛福窗內完成至少 minDuration 分（結束 ≤ 20:00）。
+ */
+export function canChainVisitStartWithinWindow(
+  nextStart: string | null | undefined,
+  minDurationMinutes: number = MIN_SUCCESS_DURATION_MINUTES,
+): boolean {
+  const startMin = toMinutes(String(nextStart || "").trim().slice(0, 5));
+  if (startMin == null) return false;
+  const dur =
+    Number.isFinite(minDurationMinutes) && minDurationMinutes > 0
+      ? Math.floor(minDurationMinutes)
+      : MIN_SUCCESS_DURATION_MINUTES;
+  if (startMin < VISIT_WINDOW_START_MINUTES) return false;
+  if (startMin > VISIT_WINDOW_END_MINUTES) return false;
+  return startMin + dur <= VISIT_WINDOW_END_MINUTES;
+}
+
+/** 將 HH:mm 夾回訪視允許窗；無效則 null。 */
+export function clampTimeToVisitWindow(time: string): string | null {
+  const normalized = normalizeMissedStampTime(time);
+  if (!normalized) return null;
+  const mins = toMinutes(normalized);
+  if (mins == null) return null;
+  if (mins < VISIT_WINDOW_START_MINUTES) return VISIT_WINDOW_START_HHMM;
+  if (mins > VISIT_WINDOW_END_MINUTES) return VISIT_WINDOW_END_HHMM;
+  return normalized;
+}
+
 /** 若起迄差恰為 1／5／10，回傳該時長；否則 null（表示手改過）。 */
 export function inferDeskVisitDurationMinutes(
   start: string,
@@ -281,6 +327,12 @@ export function buildStaggeredVisitWindows(input: {
         message: `第 ${index + 1} 筆時段超出當日 24:00，請提早第 1 筆開始時間或減少案數。`,
       };
     }
+    if (!isWithinVisitWindow(visitStartTime) || !isWithinVisitWindow(visitEndTime)) {
+      return {
+        ok: false,
+        message: `第 ${index + 1} 筆時段（${visitStartTime}–${visitEndTime}）超出衛福允許 ${VISIT_WINDOW_LABEL}，請提早第 1 筆開始時間或減少案數。`,
+      };
+    }
     slots.push({ visitDate, visitStartTime, visitEndTime });
   }
 
@@ -304,6 +356,12 @@ export function seedDeskBatchDateAndFirstStart(
   }
   if (toMinutes(start) == null) {
     return { ok: false, message: "請填寫第 1 筆開始時間。" };
+  }
+  if (!isWithinVisitWindow(start)) {
+    return {
+      ok: false,
+      message: `第 1 筆開始時間須在衛福允許 ${VISIT_WINDOW_LABEL}。`,
+    };
   }
   const readyIndex = state.items.findIndex((item) => item.status === "ready");
   if (readyIndex < 0) {
@@ -343,7 +401,10 @@ export function chainDeskBatchAfterKeyed(
   const visitDate = String(keyedTimes.visitDate || "").trim();
   const visitStartTime = String(keyedTimes.visitStartTime || "").trim().slice(0, 5);
   const visitEndTime = String(keyedTimes.visitEndTime || "").trim().slice(0, 5);
-  const nextStart = nextVisitStartAfterEnd(visitEndTime, gap);
+  const nextStartRaw = nextVisitStartAfterEnd(visitEndTime, gap);
+  const nextStart = canChainVisitStartWithinWindow(nextStartRaw)
+    ? nextStartRaw
+    : null;
 
   let marked = false;
   const items = state.items.map((item) => {
@@ -381,6 +442,25 @@ export function chainDeskBatchAfterKeyed(
               visitDate: visitDate || item.visitDate,
               visitStartTime: nextStart,
               // 下一案時長需重新勾選
+              visitEndTime: undefined,
+            }
+          : item,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  // 下一案若會超出 08:00–20:00：保留日期、清掉起始，避免自動鏈出 20:10…21:15。
+  if (nextReady && nextStartRaw && !nextStart) {
+    const nextId = nextReady.assignmentId;
+    return {
+      ...state,
+      items: items.map((item) =>
+        item.assignmentId === nextId
+          ? {
+              ...item,
+              visitDate: visitDate || item.visitDate,
+              visitStartTime: undefined,
               visitEndTime: undefined,
             }
           : item,
@@ -517,7 +597,13 @@ export function resolveNonOverlappingVisitSlot(input: {
       }
       const nextStartMin = hitEnd + travelGap;
       const nextEndMin = nextStartMin + durationMinutes;
-      if (nextStartMin >= 24 * 60 || nextEndMin > 24 * 60) {
+      // 當日 24:00 或衛福 20:00 放不下 → 改隔日上午
+      if (
+        nextStartMin >= 24 * 60 ||
+        nextEndMin > 24 * 60 ||
+        nextStartMin < VISIT_WINDOW_START_MINUTES ||
+        nextEndMin > VISIT_WINDOW_END_MINUTES
+      ) {
         break;
       }
       const nextStart = minutesToTime(nextStartMin);
@@ -850,7 +936,8 @@ export function deskBatchMissedStampOffsetMinutes(
 }
 
 /**
- * 在已占用戳記集合上，把偏好時間上修到不衝突（盡量留在 softEnd 前）。
+ * 在已占用戳記集合上，把偏好時間上修到不衝突。
+ * softEnd／hardEnd 為硬上限（預設衛福 20:00），不可再往後排出窗外時間。
  */
 export function resolveUniqueMissedStampTime(input: {
   monthDay: string;
@@ -858,6 +945,8 @@ export function resolveUniqueMissedStampTime(input: {
   occupiedKeys: Set<string>;
   bumpStepMinutes?: number;
   softEnd?: string;
+  /** 絕對上限；預設 softEnd 或 VISIT_WINDOW_END */
+  hardEnd?: string;
   maxAttempts?: number;
 }): string | null {
   const monthDay = String(input.monthDay || "").trim();
@@ -867,8 +956,23 @@ export function resolveUniqueMissedStampTime(input: {
     input.bumpStepMinutes == null || !Number.isFinite(input.bumpStepMinutes)
       ? DESK_MISS_STAMP_BUMP_MINUTES
       : Math.max(1, Math.floor(input.bumpStepMinutes));
-  const softEndMin = toMinutes(String(input.softEnd || "").trim().slice(0, 5));
+  const hardEndRaw =
+    String(input.hardEnd || input.softEnd || VISIT_WINDOW_END_HHMM)
+      .trim()
+      .slice(0, 5) || VISIT_WINDOW_END_HHMM;
+  const hardEndMin =
+    toMinutes(hardEndRaw) ?? VISIT_WINDOW_END_MINUTES;
+  const windowStartMin = VISIT_WINDOW_START_MINUTES;
   const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 72));
+
+  const preferredMin = toMinutes(time);
+  if (preferredMin != null && preferredMin < windowStartMin) {
+    time = VISIT_WINDOW_START_HHMM;
+  } else if (preferredMin != null && preferredMin > hardEndMin) {
+    const clamped = minutesToTime(hardEndMin);
+    if (!clamped) return null;
+    time = clamped;
+  }
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const key = missedVisitStampKey(monthDay, time);
@@ -877,10 +981,8 @@ export function resolveUniqueMissedStampTime(input: {
     if (!next) return null;
     const nextMin = toMinutes(next);
     if (nextMin == null) return null;
-    // softEnd 僅作偏好；超過仍繼續上修直到當日結束，避免無解。
-    if (softEndMin != null && nextMin > softEndMin && attempt > 0) {
-      // keep bumping; soft window already missed
-    }
+    // 硬上限：不可再排出 20:00（或 softEnd）之後。
+    if (nextMin > hardEndMin) return null;
     time = next;
   }
   return null;
@@ -924,9 +1026,47 @@ export function rewriteMissedVisitStampTimes(
 }
 
 /**
- * 一鍵未遇／住址不詳：一張紙，三次訪視時間寫入「居住-其他說明」與備註
+ * 是否為「住址不詳／居住地址不詳」結案（不要求三次訪視時間）。
+ * - visit_status=住址不詳
+ * - 或 living_address_type=未住戶籍地址 且 living_address_note=居住地址不詳
+ */
+export function isUnknownAddressClosure(answers: {
+  visit_status?: unknown;
+  living_address_type?: unknown;
+  living_address_note?: unknown;
+}): boolean {
+  const status = String(answers.visit_status ?? "").trim();
+  if (status === "住址不詳") return true;
+  const type = String(answers.living_address_type ?? "").trim();
+  const note = String(answers.living_address_note ?? "").trim();
+  return type === "未住戶籍地址" && note === "居住地址不詳";
+}
+
+/**
+ * 一鍵住址不詳：一張紙、**一次**訪視時間寫入備註（不產 D-2／D-1 三次戳）。
+ * 例：`10/23 16:30住址不詳。`
+ */
+export function buildDeskOnePaperUnknownAddressNote(input: {
+  visitDateRaw: string;
+  visitStartTime?: string;
+}): string | null {
+  const visitDate = normalizeDeskVisitDateToIso(input.visitDateRaw);
+  if (!visitDate) return null;
+  const monthDay = formatDeskNoteMonthDay(visitDate);
+  if (!monthDay) return null;
+  const raw = String(input.visitStartTime || "").trim().slice(0, 5);
+  const time =
+    clampTimeToVisitWindow(raw) ||
+    normalizeMissedStampTime(raw) ||
+    DESK_PAPER_MISS_WINDOWS.LATE.start;
+  return `${monthDay} ${time}住址不詳。`;
+}
+
+/**
+ * 一鍵未遇（查無此人）：一張紙，三次訪視時間寫入「居住-其他說明」與備註
  *（往前 D-2 早、D-1 中，本張 D＋當下起始）。
  * 例：`10/20 09:00訪視未遇；10/22 14:00訪視未遇；10/23 16:30訪視未遇。`
+ * 住址不詳請改用 `buildDeskOnePaperUnknownAddressNote`（一次即可）。
  *
  * `slotOffsetMinutes`：連續 KEY 分身偏移（早／中／預設晚）。
  * `occupiedStampKeys`：同訪查員既有 `M/D HH:mm`，衝突則 +bump 直到唯一。
@@ -954,18 +1094,25 @@ export function buildDeskOnePaperMissedNote(input: {
       : Math.max(1, Math.floor(input.bumpStepMinutes));
 
   const earlyPreferred =
-    addMinutesToTime(DESK_PAPER_MISS_WINDOWS.EARLY.start, offset) ||
-    DESK_PAPER_MISS_WINDOWS.EARLY.start;
+    clampTimeToVisitWindow(
+      addMinutesToTime(DESK_PAPER_MISS_WINDOWS.EARLY.start, offset) ||
+        DESK_PAPER_MISS_WINDOWS.EARLY.start,
+    ) || DESK_PAPER_MISS_WINDOWS.EARLY.start;
   const midPreferred =
-    addMinutesToTime(DESK_PAPER_MISS_WINDOWS.MID.start, offset) ||
-    DESK_PAPER_MISS_WINDOWS.MID.start;
+    clampTimeToVisitWindow(
+      addMinutesToTime(DESK_PAPER_MISS_WINDOWS.MID.start, offset) ||
+        DESK_PAPER_MISS_WINDOWS.MID.start,
+    ) || DESK_PAPER_MISS_WINDOWS.MID.start;
   const lateRaw =
     String(input.visitStartTime || "").trim().slice(0, 5) || DESK_PAPER_MISS_WINDOWS.LATE.start;
-  // 有實際晚間起始則尊重（連續 KEY 已錯開）；僅預設晚間才套 offset。
-  const latePreferred = String(input.visitStartTime || "").trim()
-    ? lateRaw
-    : addMinutesToTime(DESK_PAPER_MISS_WINDOWS.LATE.start, offset) ||
-      DESK_PAPER_MISS_WINDOWS.LATE.start;
+  // 有實際晚間起始則尊重（連續 KEY 已錯開）；僅預設晚間才套 offset。超出窗則夾回。
+  const latePreferred =
+    clampTimeToVisitWindow(
+      String(input.visitStartTime || "").trim()
+        ? lateRaw
+        : addMinutesToTime(DESK_PAPER_MISS_WINDOWS.LATE.start, offset) ||
+            DESK_PAPER_MISS_WINDOWS.LATE.start,
+    ) || DESK_PAPER_MISS_WINDOWS.LATE.start;
 
   const earlyLabel = formatDeskNoteMonthDay(earlyDate);
   const midLabel = formatDeskNoteMonthDay(midDate);

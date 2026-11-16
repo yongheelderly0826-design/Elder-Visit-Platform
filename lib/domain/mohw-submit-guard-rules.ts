@@ -1,8 +1,12 @@
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 
-/** 訪視／未遇允許時段（含界）：08:00–20:00 */
+/** 訪視／未遇允許時段（含界）：08:00–20:00（與 GAS MohwLifeCareValidator 一致） */
 export const VISIT_WINDOW_START_MINUTES = 8 * 60;
 export const VISIT_WINDOW_END_MINUTES = 20 * 60;
+export const VISIT_WINDOW_START_HHMM = "08:00";
+export const VISIT_WINDOW_END_HHMM = "20:00";
+/** 表單／錯誤訊息用 */
+export const VISIT_WINDOW_LABEL = "08:00–20:00";
 
 /** 訪視成功最短時長（分鐘） */
 export const MIN_SUCCESS_DURATION_MINUTES = 5;
@@ -78,6 +82,28 @@ export function isWithinVisitWindow(hhmm: unknown): boolean {
   const mins = parseHhMmToMinutes(hhmm);
   if (mins == null) return true;
   return mins >= VISIT_WINDOW_START_MINUTES && mins <= VISIT_WINDOW_END_MINUTES;
+}
+
+/** 起迄皆有值時，是否都在允許窗內（格式無效則視為未通過，交給格式驗證）。 */
+export function isVisitSlotWithinWindow(start: unknown, end: unknown): boolean {
+  const s = parseHhMmToMinutes(start);
+  const e = parseHhMmToMinutes(end);
+  if (s == null || e == null) return false;
+  return (
+    s >= VISIT_WINDOW_START_MINUTES &&
+    s <= VISIT_WINDOW_END_MINUTES &&
+    e >= VISIT_WINDOW_START_MINUTES &&
+    e <= VISIT_WINDOW_END_MINUTES
+  );
+}
+
+/** 僅抽出時段窗相關問題（未遇路徑也應擋送出）。 */
+export function collectVisitTimeWindowIssues(
+  answers: MohwLifeCareAnswers,
+): MohwSubmitGuardIssue[] {
+  return collectMohwSubmitGuardIssues(answers).filter(
+    (issue) => issue.code === "VISIT_TIME_WINDOW",
+  );
 }
 
 export function visitDurationMinutes(start: unknown, end: unknown): number | null {
@@ -164,7 +190,13 @@ export function normalizeMohwQualityGuards(
   }
 
   if (visitStatus === "住址不詳") {
+    // 清居住明細後仍須保留衛福必填：類型＝未住戶籍地址、註記＝居住地址不詳
     next = clearKeys(next, LIVING_DETAIL_KEYS);
+    next = {
+      ...next,
+      living_address_type: "未住戶籍地址",
+      living_address_note: "居住地址不詳",
+    };
   }
 
   if (visitStatus === "查無此人" && !hasVal(next.living_address_type)) {
@@ -195,14 +227,14 @@ export function collectMohwSubmitGuardIssues(
     issues.push({
       key: "visit_start_time",
       code: "VISIT_TIME_WINDOW",
-      message: "訪查開始時間須在 08:00–20:00",
+      message: `訪查開始時間須在 ${VISIT_WINDOW_LABEL}`,
     });
   }
   if (hasVal(end) && !isWithinVisitWindow(end)) {
     issues.push({
       key: "visit_end_time",
       code: "VISIT_TIME_WINDOW",
-      message: "訪查結束時間須在 08:00–20:00",
+      message: `訪查結束時間須在 ${VISIT_WINDOW_LABEL}`,
     });
   }
 

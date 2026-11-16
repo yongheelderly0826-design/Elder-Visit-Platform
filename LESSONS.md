@@ -1,3 +1,11 @@
+## Lesson: Visit times must stay inside 08:00–20:00 including auto-chain
+
+- **Trigger:** 稽核 7 筆失敗，起迄在 20:10–21:15；根因是連續 KEY／未遇戳記 +10 仍往後排，不是 HH:mm 格式。
+- **Cause:** `chainDeskBatchAfterKeyed`、`resolveUniqueMissedStampTime`、GAS `MissedVisitStampHelper` 把 softEnd 當偏好、可超過 20:00；未遇送出又跳過全表驗證。
+- **Rule:** 常數與驗證以 `VISIT_WINDOW_*`／GAS `08:00–20:00` 含界為準。連續 KEY 下一案若無法在窗內完成 ≥5 分則清起始並提示。未遇戳記硬上限 softEnd／20:00。未遇路徑仍擋 `VISIT_TIME_WINDOW`（client／API／GAS）。表單起迄旁明示允許時段。
+- **Evidence:** `mohw-submit-guard-rules.ts`, `desk-care-batch.ts`, `visit-dialogue-form.tsx`, `MissedVisitStampHelper.gs`, `CareFormModule.gs`, `MohwLifeCareValidator.gs`.
+- **Added on:** 2026-11-16
+
 ## Lesson: TEMP desk_clerk can KEY MOHW progress like care-forms
 
 - **Trigger:** 臨時登打（TEMP）也要能直 KEY 衛福部進度回報，不能只限承辦。
@@ -233,7 +241,7 @@
 
 - **Trigger:** Paper KEY staff need one-tap for 未遇 and 住址不詳 without creating three papers.
 - **Cause:** Old U2 expand-missed always spawned D-2／D-1 papers after first 未遇 submit.
-- **Rule:** Top desk quick buttons「一鍵未遇」「一鍵住址不詳」: require date+start; write note via `buildDeskOnePaperMissedNote` into **`living_address_other`** and `visit_notes`; `living_address_type=查無此人`（住址不詳→`visit_status=住址不詳`）; one paper + `skipMissedExpand`. **Manual 未遇／visitor 未遇 same one-paper path** (no expand). 「一鍵拒訪」: `visitResult=拒訪` / `visit_status=拒絕訪視`; note `紙本拒訪`; keep 民政／社政. 「Pass」: 不送出、標 skipped、可補 KEY。
+- **Rule:**（2026-11-16 修訂）「一鍵未遇」仍用 `buildDeskOnePaperMissedNote` 寫三次時間＋`visit_status=查無此人`。「一鍵住址不詳」改 `buildDeskOnePaperUnknownAddressNote` 寫**一次**時間＋`visit_status=住址不詳`／`未住戶籍地址`＋`居住地址不詳`；兩者皆一張紙 + `skipMissedExpand`。詳見「住址不詳 does not require three visit attempts」。「一鍵拒訪」／「Pass」規則不變。
 - **Evidence:** `lib/domain/desk-care-batch.ts`, `components/visitor/visit-dialogue-form.tsx`.
 - **Added on:** 2026-10-28
 

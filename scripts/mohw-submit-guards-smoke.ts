@@ -6,9 +6,11 @@ import assert from "node:assert/strict";
 import { clearOrphanWorkerDates } from "../lib/domain/mohw-worker-dates.ts";
 import {
   collectMohwSubmitGuardIssues,
+  collectVisitTimeWindowIssues,
   deskSuccessDurationOptions,
   MIN_SUCCESS_DURATION_MINUTES,
   normalizeMohwQualityGuards,
+  VISIT_WINDOW_LABEL,
 } from "../lib/domain/mohw-submit-guard-rules.ts";
 
 // 無名清日（既有規則仍在）
@@ -36,20 +38,21 @@ import {
   assert.equal(next.cohabitant_relation, "");
 }
 
-// 住址不詳清居住明細、保留 other
+// 住址不詳清居住明細後回填 未住戶籍地址＋居住地址不詳；保留 other（不要求三次戳）
 {
   const next = normalizeMohwQualityGuards({
     visit_status: "住址不詳",
     living_address: "永和路一段",
     living_city: "新北市",
     living_district: "永和區",
-    living_address_type: "未住戶籍地址",
-    living_address_other: "三次未遇備註",
+    living_address_type: "與戶籍地址相同",
+    living_address_other: "10/28 15:30住址不詳。",
     household_address: "戶籍路",
   });
   assert.equal(next.living_address, "");
-  assert.equal(next.living_address_type, "");
-  assert.equal(next.living_address_other, "三次未遇備註");
+  assert.equal(next.living_address_type, "未住戶籍地址");
+  assert.equal(next.living_address_note, "居住地址不詳");
+  assert.equal(next.living_address_other, "10/28 15:30住址不詳。");
   assert.equal(next.household_address, "戶籍路");
 }
 
@@ -61,6 +64,21 @@ import {
     visit_end_time: "07:40",
   });
   assert.ok(windowIssues.some((i) => i.code === "VISIT_TIME_WINDOW"));
+
+  const afterHours = collectVisitTimeWindowIssues({
+    visit_status: "查無此人",
+    visit_start_time: "20:10",
+    visit_end_time: "21:15",
+  });
+  assert.equal(afterHours.length, 2);
+  assert.ok(afterHours.every((i) => i.message.includes(VISIT_WINDOW_LABEL)));
+
+  const boundaryOk = collectVisitTimeWindowIssues({
+    visit_status: "查無此人",
+    visit_start_time: "08:00",
+    visit_end_time: "20:00",
+  });
+  assert.equal(boundaryOk.length, 0);
 
   const shortIssues = collectMohwSubmitGuardIssues({
     visit_status: "已完成",

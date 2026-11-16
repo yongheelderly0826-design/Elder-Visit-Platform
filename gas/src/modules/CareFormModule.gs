@@ -2,7 +2,7 @@ var CareFormModule = (function () {
   var SHEET = Config.SHEET_NAMES.CAREFORMS;
   var MISSED_SHEET = Config.SHEET_NAMES.MISSED;
   var MISSED_SLOTS = ['上午', '中午', '下午', '傍晚', '夜間'];
-  /** 未遇佐證照片下限；0＝暫不強制（一張紙＋三次時間寫備註）。 */
+  /** 未遇佐證照片下限；0＝暫不強制（未遇一張紙＋三次時間寫備註；住址不詳不要求三次）。 */
   var MISSED_MIN_SLOTS = 0;
 
   function get(assignmentId) {
@@ -71,6 +71,9 @@ var CareFormModule = (function () {
           next[LIVING_DETAIL_CLEAR_KEYS_[i]] = '';
         }
       }
+      // 清居住明細後仍須保留衛福必填（與 TS applyMohwSubmitGuards 對齊）
+      next.living_address_type = '未住戶籍地址';
+      next.living_address_note = '居住地址不詳';
     }
     if (visitStatus === '查無此人' && !String(next.living_address_type || '').trim()) {
       next.living_address_type = '查無此人';
@@ -388,7 +391,17 @@ var CareFormModule = (function () {
     }
 
     var submitValidation = { ok: true, errorLines: [], errors: [] };
-    if (!isMissed) {
+    if (isMissed) {
+      // 未遇跳過全表，但仍擋起迄超出衛福 08:00–20:00。
+      submitValidation = MohwLifeCareValidator.validateVisitTimeWindow(answers, data.row || 2);
+      if (!submitValidation.ok) {
+        var twerr = new Error(submitValidation.errorLines.join('；'));
+        twerr.code = 'MOHW_VALIDATION_ERROR';
+        twerr.errors = submitValidation.errors;
+        twerr.errorLines = submitValidation.errorLines;
+        throw twerr;
+      }
+    } else {
       var caseRow = caseRowForAssignment_(data.assignment_id);
       var registryNationalId = (caseRow && (caseRow.id_number || caseRow.national_id)) || '';
       var mergedAnswers = MohwLifeCareMapper.mergeInputs({
