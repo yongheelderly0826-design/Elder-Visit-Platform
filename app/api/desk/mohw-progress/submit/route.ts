@@ -103,6 +103,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 已送出（active mark）不可由 desk 進度回報覆寫；改正請走進度修正
+    const existingMarks = await gasClient.mohwProgress
+      .listMarks({ village_name: villageName })
+      .catch(() => [] as Record<string, unknown>[]);
+    const lockedCaseIds = new Set<string>();
+    const lockedEncodedIds = new Set<string>();
+    for (const mark of existingMarks) {
+      if (!normalizeMohwProgressOutcome(String(mark.outcome || ""))) continue;
+      const caseId = String(mark.case_id || "").trim();
+      const encodedId = String(mark.encoded_id || "").trim();
+      if (caseId) lockedCaseIds.add(caseId);
+      if (encodedId) lockedEncodedIds.add(encodedId);
+    }
+    const lockedAttempted = items.filter((item) => {
+      if (item.case_id && lockedCaseIds.has(item.case_id)) return true;
+      if (item.encoded_id && lockedEncodedIds.has(item.encoded_id)) return true;
+      return false;
+    });
+    if (lockedAttempted.length > 0) {
+      const sample = lockedAttempted
+        .slice(0, 5)
+        .map((item) => item.encoded_id || item.case_id)
+        .join("、");
+      const more =
+        lockedAttempted.length > 5 ? `等 ${lockedAttempted.length} 筆` : "";
+      return NextResponse.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: `以下個案已送出鎖定，請至「進度修正」改正：${sample}${more}`,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     const civilWorkerId = String(body.civilWorkerId || body.civil_worker_id || "").trim();
     const civilWorkerName = String(body.civilWorkerName || body.civil_worker_name || "").trim();
     const socialWorkerId = String(body.socialWorkerId || body.social_worker_id || "").trim();

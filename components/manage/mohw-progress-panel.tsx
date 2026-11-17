@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ClipboardCheck, Info } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,8 @@ export function MohwProgressPanel() {
   const [deskClerk, setDeskClerk] = useState<{ id: string; name: string; label: string } | null>(
     null,
   );
+  /** 管理者可見「進度修正」連結；登打帳號不顯示 */
+  const [canOpenCorrections, setCanOpenCorrections] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingCases, setLoadingCases] = useState(false);
@@ -115,7 +118,9 @@ export function MohwProgressPanel() {
         return [key, decodeURIComponent(rest.join("=") || "")];
       }),
     );
-    if (String(cookies.demo_role || "").trim() !== "desk_clerk") return;
+    const role = String(cookies.demo_role || "").trim();
+    setCanOpenCorrections(role !== "desk_clerk" && role !== "visitor");
+    if (role !== "desk_clerk") return;
     const clerkId = String(cookies.desk_clerk_id || "").trim();
     if (!clerkId) return;
     const name = String(cookies.demo_name || "").trim();
@@ -320,22 +325,23 @@ export function MohwProgressPanel() {
   const dirtyCount = useMemo(() => {
     let n = 0;
     for (const row of casesDirect) {
-      const current = outcomes[row.case_id] || "";
       const original = row.outcome || "";
-      if (current && current !== original) n += 1;
-      else if (current && !original) n += 1;
+      // 已送出鎖定列不可改，不計入本次變更
+      if (original) continue;
+      const current = outcomes[row.case_id] || "";
+      if (current) n += 1;
     }
     return n;
   }, [casesDirect, outcomes]);
 
-  /** 僅送出本次有變更的勾選；已送且未改動的不重送、不佔按鈕筆數 */
+  /** 僅送出尚未鎖定的新勾選；已送出列一律不重送 */
   const selectedForSubmit = useMemo(() => {
     return casesDirect
       .map((row) => {
+        const original = row.outcome || "";
+        if (original) return null;
         const outcome = outcomes[row.case_id] || "";
         if (!outcome) return null;
-        const original = row.outcome || "";
-        if (outcome === original) return null;
         return {
           case_id: row.case_id,
           encoded_id: row.encoded_id,
@@ -349,7 +355,8 @@ export function MohwProgressPanel() {
     }>;
   }, [casesDirect, outcomes]);
 
-  function setOutcome(caseId: string, value: MohwProgressOutcome | "") {
+  function setOutcome(caseId: string, value: MohwProgressOutcome | "", locked?: boolean) {
+    if (locked) return;
     setOutcomes((prev) => ({ ...prev, [caseId]: value }));
   }
 
@@ -357,6 +364,7 @@ export function MohwProgressPanel() {
     setOutcomes((prev) => {
       const next = { ...prev };
       for (const row of filteredDirect) {
+        if (row.outcome) continue; // 已送出鎖定
         next[row.case_id] = outcome;
       }
       return next;
@@ -687,20 +695,40 @@ export function MohwProgressPanel() {
             </div>
 
             {caseTab === "direct" && (
-              <div className="flex flex-wrap gap-2">
-                <span className="self-center text-xs text-muted-foreground">將目前列表設為：</span>
-                {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
-                  <button
-                    key={outcome}
-                    type="button"
-                    className="rounded-md border bg-background px-2 py-1 text-xs"
-                    onClick={() => applyFilterBulk(outcome)}
-                    disabled={!filteredDirect.length || busy}
-                  >
-                    {outcome}
-                  </button>
-                ))}
-              </div>
+              <>
+                <p className="text-xs text-muted-foreground">
+                  已送出狀態已鎖定；若需改正請至
+                  {canOpenCorrections ? (
+                    <Link
+                      href="/manager/mohw-progress/corrections"
+                      className="mx-0.5 text-primary underline-offset-2 hover:underline"
+                    >
+                      進度修正
+                    </Link>
+                  ) : (
+                    "進度修正"
+                  )}
+                  。
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="self-center text-xs text-muted-foreground">
+                    將目前列表尚未勾選設為：
+                  </span>
+                  {MOHW_PROGRESS_OUTCOMES.map((outcome) => (
+                    <button
+                      key={outcome}
+                      type="button"
+                      className="rounded-md border bg-background px-2 py-1 text-xs"
+                      onClick={() => applyFilterBulk(outcome)}
+                      disabled={
+                        !filteredDirect.some((row) => !row.outcome) || busy
+                      }
+                    >
+                      {outcome}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
             {caseTab === "keyed" ? (
@@ -768,6 +796,7 @@ export function MohwProgressPanel() {
                       ) : (
                         filteredDirect.map((row) => {
                           const current = outcomes[row.case_id] || "";
+                          const locked = Boolean(row.outcome);
                           const paper = formatDeskCasePaperLabel({
                             villageCode: villageCodeByName[village],
                             village,
@@ -778,12 +807,15 @@ export function MohwProgressPanel() {
                           return (
                             <div
                               key={row.case_id}
-                              className="grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0"
+                              className={`grid grid-cols-[minmax(11rem,1.4fr)_repeat(3,minmax(4.75rem,auto))] items-center gap-0 border-b px-3 py-2.5 text-sm last:border-b-0 ${
+                                locked ? "bg-muted/20" : ""
+                              }`}
                             >
                               <div className="min-w-0 pr-2">
                                 <p className="truncate font-medium">{paper.primary}</p>
                                 <p className="truncate text-xs text-muted-foreground">
                                   {paper.secondary || row.encoded_id || row.case_id}
+                                  {locked ? " · 已鎖定" : ""}
                                 </p>
                               </div>
                               {MOHW_PROGRESS_OUTCOMES.map((outcome) => {
@@ -791,19 +823,30 @@ export function MohwProgressPanel() {
                                 return (
                                   <label
                                     key={outcome}
-                                    className="flex cursor-pointer items-center justify-center py-1"
+                                    className={`flex items-center justify-center py-1 ${
+                                      locked
+                                        ? "cursor-not-allowed opacity-70"
+                                        : "cursor-pointer"
+                                    }`}
                                   >
                                     <input
                                       type="radio"
-                                      className="h-4 w-4 accent-[hsl(var(--primary))]"
+                                      className="h-4 w-4 accent-[hsl(var(--primary))] disabled:cursor-not-allowed"
                                       name={`outcome-${row.case_id}`}
                                       checked={checked}
-                                      onChange={() => setOutcome(row.case_id, outcome)}
+                                      disabled={locked || busy}
+                                      onChange={() =>
+                                        setOutcome(row.case_id, outcome, locked)
+                                      }
                                       onClick={() => {
-                                        if (checked) setOutcome(row.case_id, "");
+                                        if (locked || busy) return;
+                                        if (checked) setOutcome(row.case_id, "", locked);
                                       }}
                                     />
-                                    <span className="sr-only">{outcome}</span>
+                                    <span className="sr-only">
+                                      {outcome}
+                                      {locked ? "（已鎖定）" : ""}
+                                    </span>
                                   </label>
                                 );
                               })}

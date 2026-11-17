@@ -139,6 +139,10 @@ var MohwProgressModule = (function () {
     return patched;
   }
 
+  /**
+   * Desk 進度回報只允許「新建」active mark。
+   * 已有 active mark 時不覆寫（改正請走 patchMarks／進度修正）。
+   */
   function upsertMark_(mark) {
     var existing = SheetHelper.findByKey(MARKS, 'case_id', mark.case_id).filter(function (row) {
       return String(row.status || 'active') === 'active';
@@ -149,26 +153,14 @@ var MohwProgressModule = (function () {
       })[0];
     }
     if (existing) {
-      return SheetHelper.updateByKey(MARKS, 'mark_id', existing.mark_id, {
-        report_id: mark.report_id,
-        case_id: mark.case_id || existing.case_id,
-        encoded_id: mark.encoded_id || existing.encoded_id,
-        village_seq: mark.village_seq != null ? mark.village_seq : existing.village_seq,
-        village_name: mark.village_name || existing.village_name,
-        outcome: mark.outcome,
-        source: SOURCE,
-        civil_worker_id: mark.civil_worker_id || '',
-        civil_worker_name: mark.civil_worker_name || '',
-        social_worker_id: mark.social_worker_id || '',
-        social_worker_name: mark.social_worker_name || '',
-        keyed_by_id: mark.keyed_by_id || '',
-        keyed_by_name: mark.keyed_by_name || '',
-        audit_supervisors: mark.audit_supervisors || '',
-        reported_by: mark.reported_by,
-        reported_by_email: mark.reported_by_email,
-        reported_at: mark.reported_at,
-        status: 'active',
-      });
+      return {
+        skipped: true,
+        reason: 'locked',
+        mark_id: existing.mark_id,
+        case_id: existing.case_id,
+        encoded_id: existing.encoded_id,
+        outcome: existing.outcome,
+      };
     }
     SheetHelper.appendRow(MARKS, mark);
     return mark;
@@ -300,6 +292,12 @@ var MohwProgressModule = (function () {
           byCaseId[String(row.case_id || '')] = row;
           if (row.encoded_id) byEncoded[String(row.encoded_id)] = row;
         });
+        var lockedByCaseId = {};
+        var lockedByEncoded = {};
+        listMarks({ village_name: villageName }).forEach(function (row) {
+          if (row.case_id) lockedByCaseId[String(row.case_id)] = true;
+          if (row.encoded_id) lockedByEncoded[String(row.encoded_id)] = true;
+        });
         items.forEach(function (item) {
           item = item || {};
           var outcome = normalizeOutcome_(item.outcome);
@@ -314,11 +312,19 @@ var MohwProgressModule = (function () {
             warnings.push('找不到個案：' + String(item.case_id || item.encoded_id || ''));
             return;
           }
+          var foundCaseId = String(found.case_id || '');
+          var foundEncoded = String(found.encoded_id || '');
+          if (lockedByCaseId[foundCaseId] || lockedByEncoded[foundEncoded]) {
+            warnings.push(
+              '已送出鎖定，略過：' + (foundEncoded || foundCaseId) + '（請至進度修正）'
+            );
+            return;
+          }
           marks.push({
             mark_id: 'MPM-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10),
             report_id: reportId,
-            case_id: String(found.case_id || ''),
-            encoded_id: String(found.encoded_id || ''),
+            case_id: foundCaseId,
+            encoded_id: foundEncoded,
             village_seq: found.village_seq != null ? Number(found.village_seq) || '' : '',
             village_name: villageName,
             outcome: outcome,
@@ -339,7 +345,12 @@ var MohwProgressModule = (function () {
           if (outcome === OUTCOMES.missed) countMissed += 1;
           if (outcome === OUTCOMES.notFound) countNotFound += 1;
         });
-        if (!marks.length) throw error_('VALIDATION_ERROR', '沒有可寫入的個案狀態。');
+        if (!marks.length) {
+          throw error_(
+            'VALIDATION_ERROR',
+            '沒有可寫入的個案狀態（已送出者請至進度修正）。'
+          );
+        }
         caseCodesJson = JSON.stringify(
           marks.map(function (m) {
             return { case_id: m.case_id, encoded_id: m.encoded_id, outcome: m.outcome };
@@ -475,13 +486,23 @@ var MohwProgressModule = (function () {
       };
       SheetHelper.appendRow(REPORTS, report);
 
+      var marksWritten = 0;
       marks.forEach(function (mark) {
-        upsertMark_(mark);
+        var result = upsertMark_(mark);
+        if (result && result.skipped) {
+          warnings.push(
+            '已送出鎖定，略過：' +
+              String(result.encoded_id || result.case_id || '') +
+              '（請至進度修正）'
+          );
+          return;
+        }
+        marksWritten += 1;
       });
 
       return {
         report: report,
-        marks_written: marks.length,
+        marks_written: marksWritten,
         warnings: warnings,
         over_roster: overRoster,
         roster_total: rosterTotal,
