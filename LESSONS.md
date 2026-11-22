@@ -1,3 +1,11 @@
+## Lesson: 公開存摺補件必須活動碼＋截止日，且 TEMP 不可審
+
+- **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
+- **Cause:** 正式 `/visitor/profile` 需登入；主檔無生日可當第三因子；TEMP 權限過大。
+- **Rule:** 暫時通道 `/volunteer/passbook` 用共用活動碼＋`PASSBOOK_DEADLINE`（台北日）；第三因子用手機末四碼；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。
+- **Evidence:** `PassbookModule.gs`, `app/volunteer/passbook/*`, `app/manager/passbook/page.tsx`, `docs/tasks/2026-11-22-temp-public-passbook.md`.
+- **Added on:** 2026-11-22
+
 ## Lesson: 居住地址不詳時清空並鎖定住址明細
 
 - **Trigger:** 選「居住地址不詳」後縣市／區／里／地址仍殘留；`visit_status=已完成`＋不詳時 submit guard 只清 `住址不詳` 狀態。

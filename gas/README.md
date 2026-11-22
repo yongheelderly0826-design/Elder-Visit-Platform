@@ -45,6 +45,7 @@ clasp deploy --description "v1.0.0"
 | 匯出 | `ExportModule.gs` | 衛福部 xlsx |
 | 報表 | `ReportModule.gs` | KPI |
 | 車馬費 | `PaymentModule.gs` | 計算、鎖定 |
+| 存摺補件 | `PassbookModule.gs` | 公開補件核對／送件／審核回寫 |
 
 ## API
 

@@ -917,6 +917,51 @@ export const gasClient = {
         summary?: Record<string, unknown>;
       }>("caseProgress.replaceRosterSnapshot", { method: "POST", body }),
   },
+  passbook: {
+    verify: (body: {
+      campaign_code: string;
+      name: string;
+      id_number: string;
+      phone_last4: string;
+      client_ip?: string;
+    }) =>
+      gasFetch<{
+        ok?: boolean;
+        visitor_id?: string;
+        name?: string;
+        status?: string;
+        campaign_code?: string;
+        deadline?: string;
+        channel_open?: boolean;
+      }>("passbook.verify", { method: "POST", body }),
+    submit: (body: {
+      campaign_code: string;
+      visitor_id: string;
+      account_name: string;
+      account_number: string;
+      bank_name: string;
+      bank_code: string;
+      passbook_data_url: string;
+    }) => gasFetch<Record<string, unknown>>("passbook.submit", { method: "POST", body }),
+    list: (params?: { status?: string }) =>
+      gasFetch<Array<Record<string, unknown>>>("passbook.list", {
+        params: params as Record<string, string> | undefined,
+      }),
+    review: (body: {
+      submission_id: string;
+      decision: "已確認" | "退回";
+      reviewed_by?: string;
+      review_note?: string;
+    }) => gasFetch<Record<string, unknown>>("passbook.review", { method: "POST", body }),
+    channelStatus: (params?: { campaign_code?: string }) =>
+      gasFetch<{
+        open?: boolean;
+        deadline?: string;
+        has_campaign_configured?: boolean;
+      }>("passbook.channelStatus", {
+        params: params as Record<string, string> | undefined,
+      }),
+  },
 };
 
 export function isGasConfigured(): boolean {

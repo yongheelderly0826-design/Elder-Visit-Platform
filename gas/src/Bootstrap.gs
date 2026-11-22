@@ -101,6 +101,8 @@ function seedSettingsForClient_(spreadsheetId, cfg) {
     ['client_name', cfg.clientName, '客戶名稱'],
     ['mohw_account', '', '衛福部平台帳號'],
     ['gas_version', '1.0.0', 'GAS版本'],
+    ['PASSBOOK_CAMPAIGN_CODE', '', '公開存摺補件活動碼（暫時）'],
+    ['PASSBOOK_DEADLINE', '2026-12-30', '公開存摺補件截止日（台北日）'],
   ];
 
   if (sheet.getLastRow() <= 1) {

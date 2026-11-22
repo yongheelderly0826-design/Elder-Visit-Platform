@@ -54,6 +54,7 @@ var Config = (function () {
       MISSED: '空訪紀錄',
       AUDIT: '稽核佇列',
       PAYMENTS: '車馬費核銷',
+      PASSBOOK_SUBMISSIONS: '存摺補件',
       EXPORTS: '匯出紀錄',
       REPORTS: '報表快照',
       CONSENTS: '電子同意書',

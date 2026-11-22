@@ -31,6 +31,7 @@
 | `空訪紀錄` | `missed_visit_id` | 未遇紀錄 |
 | `稽核佇列` | `audit_id` | 覆核 |
 | `車馬費核銷` | `payment_id` | 費用 |
+| `存摺補件` | `submission_id` | 暫時公開通道之匯款存摺補件佇列 |
 | `匯出紀錄` | `export_id` | 衛福部匯出 log |
 | `報表快照` | `snapshot_id` | KPI 與每日訪視 JSON 快照 |
 | `MOHW進度回報` | `report_id` | 已直 KEY 衛福部之里別進度（人數／區間批次；不寫關懷表；含 civil/social_worker_*） |
@@ -71,12 +72,42 @@
 | status | 狀態 | enum | ✅ | 待審/已核准/停用 |
 | badge_no | 證件編號 | text | | |
 | photo_url | 照片 | url | ✅* | Drive `_訪員註冊證件照` 連結 |
-| bank_account | 匯款帳號 | text | | 車馬費用 |
+| bank_account | 匯款帳號 | text | | 車馬費用（完整帳號；公開補件確認後回寫） |
+| bank_name | 銀行名稱 | text | | ensureColumns；補件確認後可回寫 |
+| bank_code | 銀行代碼 | text | | ensureColumns |
+| bank_account_name | 戶名 | text | | ensureColumns |
 | registered_at | 建檔日 | date | | |
 | approved_at | 核准日 | date | | |
 | updated_at | 更新時間 | datetime | | |
 
 \* 現場建檔／紙本 KEY「新增訪查員」與正式註冊對齊的必填；出勤路徑仍可只帶姓名＋身分證＋手機。
+
+---
+
+## `存摺補件`
+
+暫時公開通道（`/volunteer/passbook`）送件佇列。確認後回寫 `訪查員主檔.bank_account` 等欄；退回不覆寫主檔。
+
+| 英文 key | 中文 | 型別 | 必填 | 說明 |
+|----------|------|------|------|------|
+| submission_id | 補件編號 | text | ✅ | PB-YYYYMMDD-### |
+| visitor_id | 訪查員編號 | text | ✅ | FK → 訪查員主檔 |
+| name_snapshot | 姓名快照 | text | | 送件當下 |
+| id_masked | 身分證遮罩 | text | | 例 A12****89 |
+| account_name | 帳戶名稱 | text | ✅ | 戶名 |
+| account_number | 帳戶號碼 | text | ✅ | 完整帳號 |
+| bank_name | 銀行名稱 | text | ✅ | |
+| bank_code | 銀行代碼 | text | ✅ | |
+| passbook_drive_url | 存摺照片 | url | ✅ | Drive `_訪員存摺補件` |
+| status | 狀態 | enum | ✅ | 待審／已確認／退回 |
+| submitted_at | 送件時間 | datetime | | |
+| reviewed_at | 審核時間 | datetime | | |
+| reviewed_by | 審核者 | text | | |
+| review_note | 審核備註 | text | | 退回原因 |
+| source | 來源 | text | | `public_passbook` |
+| campaign_code | 活動碼 | text | | |
+
+`_設定` 相關 key：`PASSBOOK_CAMPAIGN_CODE`、`PASSBOOK_DEADLINE`（預設 `2026-12-30`）。
 
 ---
 

@@ -111,6 +111,12 @@ var ApiRouter = (function () {
     'payments.visitBatchPreview': function () { return PaymentModule.visitBatchPreview(); },
     'payments.createVisitBatch': function (p, b) { return PaymentModule.createVisitBatch(b); },
 
+    'passbook.verify': function (p, b) { return PassbookModule.verify(b || p); },
+    'passbook.submit': function (p, b) { return PassbookModule.submit(b || p); },
+    'passbook.list': function (p) { return PassbookModule.list(p); },
+    'passbook.review': function (p, b) { return PassbookModule.review(b || p); },
+    'passbook.channelStatus': function (p) { return PassbookModule.channelStatus(p); },
+
     'ops.clearVisitTestData': function (p, b) {
       return OpsModule.clearVisitTestData(b || p);
     },
