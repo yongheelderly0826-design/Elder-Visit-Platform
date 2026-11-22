@@ -18,9 +18,18 @@ export function taipeiDateText(date = new Date()) {
   }).format(date);
 }
 
-export function isPassbookChannelOpenLocally(campaignCode: string) {
+/** Taipei calendar date is on/before deadline. */
+export function isPassbookDeadlineOpenLocally(date = new Date()) {
+  return taipeiDateText(date) <= getPassbookDeadlineFromEnv();
+}
+
+/**
+ * Channel open when deadline not passed.
+ * If PASSBOOK_CAMPAIGN_CODE is set, campaignCode must match; if empty/unset, open.
+ */
+export function isPassbookChannelOpenLocally(campaignCode?: string) {
+  if (!isPassbookDeadlineOpenLocally()) return false;
   const expected = getPassbookCampaignCodeFromEnv();
-  if (!expected) return false;
-  if (String(campaignCode || "").trim() !== expected) return false;
-  return taipeiDateText() <= getPassbookDeadlineFromEnv();
+  if (!expected) return true;
+  return String(campaignCode || "").trim() === expected;
 }

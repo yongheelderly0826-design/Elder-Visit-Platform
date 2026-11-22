@@ -6,6 +6,7 @@ import {
   getPassbookCampaignCodeFromEnv,
   getPassbookDeadlineFromEnv,
   isPassbookChannelOpenLocally,
+  isPassbookDeadlineOpenLocally,
 } from "@/lib/passbook/campaign";
 import {
   PASSBOOK_GENERIC_ERROR,
@@ -24,22 +25,31 @@ export async function POST(request: NextRequest) {
     phone_last4?: string;
   };
 
-  const campaignCode = String(body.campaignCode ?? body.campaign_code ?? "").trim();
+  const envCode = getPassbookCampaignCodeFromEnv();
+  let campaignCode = String(body.campaignCode ?? body.campaign_code ?? "").trim();
+  // Open mode: no campaign code required; optional alias still accepted.
+  if (!campaignCode && envCode) campaignCode = envCode;
+
   const name = String(body.name ?? "").trim();
   const idNumber = extractTaiwanId(body.idNumber ?? body.id_number ?? "");
   const phoneLast4 = String(body.phoneLast4 ?? body.phone_last4 ?? "")
     .replace(/\D/g, "")
     .slice(-4);
 
-  if (!campaignCode || !name || !idNumber || phoneLast4.length !== 4) {
+  if (!name || !idNumber || phoneLast4.length !== 4) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
       { status: 403 },
     );
   }
 
-  // Fast local reject when env is configured (GAS remains authoritative when available).
-  const envCode = getPassbookCampaignCodeFromEnv();
+  // Fast local reject: deadline always; code only when env configures one.
+  if (!isPassbookDeadlineOpenLocally()) {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
+      { status: 403 },
+    );
+  }
   if (envCode && !isPassbookChannelOpenLocally(campaignCode)) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
@@ -80,6 +90,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const sessionCampaign =
+      String(result.campaign_code ?? campaignCode ?? "open").trim() || "open";
+
     const response = NextResponse.json({
       data: {
         visitorId: result.visitor_id,
@@ -89,7 +102,7 @@ export async function POST(request: NextRequest) {
     });
     return setPassbookSessionCookie(response, {
       visitorId: String(result.visitor_id),
-      campaignCode,
+      campaignCode: sessionCampaign,
       name: String(result.name ?? name),
     });
   } catch (error) {

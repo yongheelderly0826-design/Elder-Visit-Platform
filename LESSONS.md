@@ -2,7 +2,7 @@
 
 - **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
 - **Cause:** 正式 `/visitor/profile` 需登入；主檔無生日可當第三因子；TEMP 權限過大。
-- **Rule:** 暫時通道 `/volunteer/passbook` 用共用活動碼＋`PASSBOOK_DEADLINE`（台北日）；第三因子用手機末四碼；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。
+- **Rule:** 暫時通道 `/volunteer/passbook`：`PASSBOOK_CAMPAIGN_CODE` 空白則不需活動碼、直接身分核對（姓名／身分證／手機末四碼）；仍以 `PASSBOOK_DEADLINE`（台北日，預設 2026-12-30）關閉；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。
 - **Evidence:** `PassbookModule.gs`, `app/volunteer/passbook/*`, `app/manager/passbook/page.tsx`, `docs/tasks/2026-11-22-temp-public-passbook.md`.
 - **Added on:** 2026-11-22
 

@@ -101,7 +101,7 @@ function seedSettingsForClient_(spreadsheetId, cfg) {
     ['client_name', cfg.clientName, '客戶名稱'],
     ['mohw_account', '', '衛福部平台帳號'],
     ['gas_version', '1.0.0', 'GAS版本'],
-    ['PASSBOOK_CAMPAIGN_CODE', '', '公開存摺補件活動碼（暫時）'],
+    ['PASSBOOK_CAMPAIGN_CODE', '', '公開存摺補件活動碼（空白＝不需活動碼，僅看截止日）'],
     ['PASSBOOK_DEADLINE', '2026-12-30', '公開存摺補件截止日（台北日）'],
   ];
 
@@ -127,4 +127,44 @@ function showConfig() {
   var props = PropertiesService.getScriptProperties().getProperties();
   Logger.log(JSON.stringify(props, null, 2));
   return props;
+}
+
+/**
+ * 清空公開存摺補件活動碼（改為直接開表單，僅看截止日）
+ * clasp run clearPassbookCampaignCode
+ */
+function clearPassbookCampaignCode() {
+  PropertiesService.getScriptProperties().deleteProperty('PASSBOOK_CAMPAIGN_CODE');
+  var sheet = SheetHelper.getSheet(Config.SHEET_NAMES.SETTINGS);
+  SheetHelper.ensureColumns(Config.SHEET_NAMES.SETTINGS, ['key', 'value', 'description']);
+  var data = sheet.getDataRange().getValues();
+  var foundCampaign = false;
+  var foundDeadline = false;
+  for (var i = 1; i < data.length; i++) {
+    var key = String(data[i][0] || '').trim();
+    if (key === 'PASSBOOK_CAMPAIGN_CODE') {
+      sheet.getRange(i + 1, 2).setValue('');
+      sheet.getRange(i + 1, 3).setValue('公開存摺補件活動碼（空白＝不需活動碼，僅看截止日）');
+      foundCampaign = true;
+    }
+    if (key === 'PASSBOOK_DEADLINE') {
+      if (!String(data[i][1] || '').trim()) {
+        sheet.getRange(i + 1, 2).setValue('2026-12-30');
+      }
+      foundDeadline = true;
+    }
+  }
+  if (!foundCampaign) {
+    sheet.appendRow([
+      'PASSBOOK_CAMPAIGN_CODE',
+      '',
+      '公開存摺補件活動碼（空白＝不需活動碼，僅看截止日）',
+    ]);
+  }
+  if (!foundDeadline) {
+    sheet.appendRow(['PASSBOOK_DEADLINE', '2026-12-30', '公開存摺補件截止日（台北日）']);
+  }
+  var status = PassbookModule.channelStatus({});
+  Logger.log(JSON.stringify(status));
+  return status;
 }

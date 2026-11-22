@@ -9,7 +9,7 @@ import {
 } from "@/lib/client/passbook-image";
 import { findTaiwanBankByCode, matchTaiwanBanks } from "@/lib/domain/taiwan-banks";
 
-type Step = "code" | "verify" | "form" | "success" | "closed";
+type Step = "verify" | "form" | "success" | "closed";
 
 type MeData = {
   authenticated?: boolean;
@@ -25,8 +25,9 @@ export function PassbookSubmitPanel({
 }: {
   initialCampaignCode?: string;
 }) {
-  const [step, setStep] = useState<Step>(initialCampaignCode ? "verify" : "code");
-  const [campaignCode, setCampaignCode] = useState(initialCampaignCode);
+  // Campaign code is optional alias only; entry always starts at identity verify.
+  const [campaignCode] = useState(initialCampaignCode);
+  const [step, setStep] = useState<Step>("verify");
   const [name, setName] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [phoneLast4, setPhoneLast4] = useState("");
@@ -54,6 +55,7 @@ export function PassbookSubmitPanel({
         const response = await fetch("/api/volunteer/passbook/me", { cache: "no-store" });
         const json = (await response.json()) as { data?: MeData };
         if (cancelled || !json.data) return;
+        if (json.data.deadline) setDeadline(json.data.deadline);
         if (json.data.closed) {
           setStep("closed");
           return;
@@ -61,8 +63,6 @@ export function PassbookSubmitPanel({
         if (json.data.authenticated && json.data.visitorId) {
           setSessionName(json.data.name ?? "");
           setAccountName((current) => current || json.data?.name || "");
-          if (json.data.campaignCode) setCampaignCode(json.data.campaignCode);
-          if (json.data.deadline) setDeadline(json.data.deadline);
           setStep("form");
         }
       } catch {
@@ -108,7 +108,7 @@ export function PassbookSubmitPanel({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          campaignCode: campaignCode.trim(),
+          ...(campaignCode.trim() ? { campaignCode: campaignCode.trim() } : {}),
           name: name.trim(),
           idNumber: idNumber.trim(),
           phoneLast4: phoneLast4.trim(),
@@ -215,49 +215,9 @@ export function PassbookSubmitPanel({
           </CalmCard>
         )}
 
-        {step === "code" && (
-          <CalmCard>
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!campaignCode.trim()) {
-                  setMessage("請輸入活動碼。");
-                  return;
-                }
-                setMessage(null);
-                setStep("verify");
-              }}
-            >
-              <Field label="活動碼">
-                <input
-                  className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm"
-                  value={campaignCode}
-                  onChange={(event) => setCampaignCode(event.target.value)}
-                  placeholder="請輸入承辦提供的活動碼"
-                  autoComplete="off"
-                />
-              </Field>
-              <Button type="submit" className="w-full">
-                下一步
-              </Button>
-            </form>
-          </CalmCard>
-        )}
-
         {step === "verify" && (
           <CalmCard>
             <form className="space-y-4" onSubmit={handleVerify}>
-              {!initialCampaignCode && (
-                <Field label="活動碼">
-                  <input
-                    className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm"
-                    value={campaignCode}
-                    onChange={(event) => setCampaignCode(event.target.value)}
-                    autoComplete="off"
-                  />
-                </Field>
-              )}
               <Field label="姓名">
                 <input
                   className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm"

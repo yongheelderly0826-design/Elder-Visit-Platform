@@ -23,8 +23,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const envConfigured = Boolean(process.env.PASSBOOK_CAMPAIGN_CODE);
-  if (envConfigured && !isPassbookChannelOpenLocally(session.campaignCode)) {
+  if (!isPassbookChannelOpenLocally(session.campaignCode)) {
     const response = NextResponse.json(
       { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
       { status: 403 },

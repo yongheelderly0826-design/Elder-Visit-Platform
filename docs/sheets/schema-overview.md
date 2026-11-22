@@ -107,7 +107,7 @@
 | source | 來源 | text | | `public_passbook` |
 | campaign_code | 活動碼 | text | | |
 
-`_設定` 相關 key：`PASSBOOK_CAMPAIGN_CODE`、`PASSBOOK_DEADLINE`（預設 `2026-12-30`）。
+`_設定` 相關 key：`PASSBOOK_CAMPAIGN_CODE`（空白＝不需活動碼）、`PASSBOOK_DEADLINE`（預設 `2026-12-30`）。
 
 ---
 

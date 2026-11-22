@@ -19,7 +19,9 @@ function decodePayload(raw: string | undefined): PassbookSessionPayload | null {
   try {
     const json = Buffer.from(raw, "base64url").toString("utf8");
     const parsed = JSON.parse(json) as PassbookSessionPayload;
-    if (!parsed?.visitorId || !parsed?.campaignCode || !parsed?.exp) return null;
+    if (!parsed?.visitorId || typeof parsed.campaignCode !== "string" || !parsed?.exp) {
+      return null;
+    }
     if (Date.now() > parsed.exp) return null;
     return parsed;
   } catch {

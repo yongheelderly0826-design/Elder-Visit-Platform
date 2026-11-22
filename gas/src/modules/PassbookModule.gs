@@ -99,12 +99,13 @@ var PassbookModule = (function () {
   }
 
   function channelOpen_(campaignCode) {
-    var expected = campaignCode_();
-    if (!expected) return false;
-    if (String(campaignCode || '').trim() !== expected) return false;
     var today = taipeiDateText_();
     var deadline = deadlineDate_();
-    return today <= deadline;
+    if (today > deadline) return false;
+    // Empty / unset PASSBOOK_CAMPAIGN_CODE → open channel (deadline only).
+    var expected = campaignCode_();
+    if (!expected) return true;
+    return String(campaignCode || '').trim() === expected;
   }
 
   function ensureSchema_() {
@@ -197,12 +198,15 @@ var PassbookModule = (function () {
   }
 
   /**
-   * 公開核對：活動碼 + 姓名 + 身分證 + 手機末四碼
+   * 公開核對：姓名 + 身分證 + 手機末四碼
+   * （活動碼僅在 PASSBOOK_CAMPAIGN_CODE 有設定時才檢查；未設定則開放）
    */
   function verify(data) {
     ensureSchema_();
     data = data || {};
+    var expected = campaignCode_();
     var campaignCode = String(data.campaign_code || '').trim();
+    if (!campaignCode && expected) campaignCode = expected;
     var name = String(data.name || '').trim();
     var idNumber = extractTaiwanId_(data.id_number);
     var phoneLast4 = String(data.phone_last4 || '').replace(/\D/g, '').slice(-4);
@@ -232,7 +236,7 @@ var PassbookModule = (function () {
       visitor_id: visitor.visitor_id,
       name: visitor.name || '',
       status: visitor.status || '',
-      campaign_code: campaignCode,
+      campaign_code: campaignCode || expected || 'open',
       deadline: deadlineDate_(),
       channel_open: true,
     };
@@ -296,7 +300,7 @@ var PassbookModule = (function () {
       reviewed_by: '',
       review_note: '',
       source: 'public_passbook',
-      campaign_code: campaignCode,
+      campaign_code: campaignCode || 'open',
     };
 
     if (existingPending) {

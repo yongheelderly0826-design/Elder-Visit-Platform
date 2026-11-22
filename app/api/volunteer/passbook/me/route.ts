@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   getPassbookDeadlineFromEnv,
   isPassbookChannelOpenLocally,
+  isPassbookDeadlineOpenLocally,
 } from "@/lib/passbook/campaign";
 import {
   clearPassbookSessionCookie,
@@ -12,24 +13,29 @@ import {
 } from "@/lib/passbook/session";
 
 export async function GET(request: NextRequest) {
+  const deadline = getPassbookDeadlineFromEnv();
+  const deadlineOpen = isPassbookDeadlineOpenLocally();
+
   const session = readPassbookSession(
     request.cookies.get(PASSBOOK_SESSION_COOKIE)?.value,
   );
 
   if (!session) {
-    return NextResponse.json({ data: { authenticated: false } });
+    return NextResponse.json({
+      data: {
+        authenticated: false,
+        deadline,
+        closed: !deadlineOpen,
+      },
+    });
   }
 
-  if (!isPassbookChannelOpenLocally(session.campaignCode)) {
-    // If env not set, still trust session until submit hits GAS.
-    const envConfigured = Boolean(process.env.PASSBOOK_CAMPAIGN_CODE);
-    if (envConfigured) {
-      const response = NextResponse.json({
-        data: { authenticated: false, closed: true },
-        error: { message: PASSBOOK_GENERIC_ERROR },
-      });
-      return clearPassbookSessionCookie(response);
-    }
+  if (!deadlineOpen || !isPassbookChannelOpenLocally(session.campaignCode)) {
+    const response = NextResponse.json({
+      data: { authenticated: false, closed: true, deadline },
+      error: { message: PASSBOOK_GENERIC_ERROR },
+    });
+    return clearPassbookSessionCookie(response);
   }
 
   return NextResponse.json({
@@ -38,8 +44,9 @@ export async function GET(request: NextRequest) {
       visitorId: session.visitorId,
       name: session.name,
       campaignCode: session.campaignCode,
-      deadline: getPassbookDeadlineFromEnv(),
+      deadline,
       expiresAt: session.exp,
+      closed: false,
     },
   });
 }
