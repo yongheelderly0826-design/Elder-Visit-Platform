@@ -927,6 +927,11 @@ export const gasClient = {
       national_id?: string;
       bucket?: string;
       seq?: string;
+      has_careform?: string;
+      has_direct_mark?: string;
+      roster_status?: string;
+      skip_roster?: string;
+      system_only?: string;
     }) =>
       gasFetch<Record<string, unknown>>("caseProgress.getCaseDetail", {
         params: params as Record<string, string>,

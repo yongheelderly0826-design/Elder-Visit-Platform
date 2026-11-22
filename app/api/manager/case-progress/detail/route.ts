@@ -104,6 +104,11 @@ export async function GET(request: NextRequest) {
   const caseId = String(request.nextUrl.searchParams.get("case_id") ?? "").trim();
   const bucket = String(request.nextUrl.searchParams.get("bucket") ?? "").trim();
   const seq = String(request.nextUrl.searchParams.get("seq") ?? "").trim();
+  const hasCareform = request.nextUrl.searchParams.get("has_careform");
+  const hasDirectMark = request.nextUrl.searchParams.get("has_direct_mark");
+  const rosterStatus = request.nextUrl.searchParams.get("roster_status");
+  const skipRoster = request.nextUrl.searchParams.get("skip_roster");
+  const systemOnly = request.nextUrl.searchParams.get("system_only");
 
   if (!caseId && !(bucket && seq)) {
     return NextResponse.json(
@@ -123,14 +128,23 @@ export async function GET(request: NextRequest) {
       ...(caseId ? { case_id: caseId } : {}),
       ...(!caseId && bucket ? { bucket } : {}),
       ...(!caseId && seq ? { seq } : {}),
+      ...(hasCareform != null ? { has_careform: hasCareform } : {}),
+      ...(hasDirectMark != null ? { has_direct_mark: hasDirectMark } : {}),
+      ...(rosterStatus != null ? { roster_status: rosterStatus } : {}),
+      ...(skipRoster != null ? { skip_roster: skipRoster } : {}),
+      ...(systemOnly != null ? { system_only: systemOnly } : {}),
     });
     const elapsed = Date.now() - t0;
+    const gasTiming =
+      raw && typeof raw === "object" && "_timing" in raw
+        ? (raw as { _timing?: Record<string, number> })._timing
+        : undefined;
     console.info(
-      `[case-progress/detail] ${elapsed}ms case_id=${caseId || "-"} bucket=${bucket || "-"} seq=${seq || "-"}`,
+      `[case-progress/detail] ${elapsed}ms case_id=${caseId || "-"} bucket=${bucket || "-"} seq=${seq || "-"} gas=${JSON.stringify(gasTiming ?? {})}`,
     );
     return NextResponse.json({
       data: mapPayload(raw),
-      meta: { elapsed_ms: elapsed },
+      meta: { elapsed_ms: elapsed, gas_timing: gasTiming ?? null },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法載入個案詳情";

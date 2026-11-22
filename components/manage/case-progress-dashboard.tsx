@@ -136,11 +136,20 @@ async function fetchCaseDetail(params: {
   case_id?: string;
   bucket?: string;
   seq?: number;
+  has_careform?: boolean;
+  has_direct_mark?: boolean;
+  roster_status?: string;
+  system_only?: boolean;
 }): Promise<CaseProgressCaseDetail> {
   const qs = new URLSearchParams();
   if (params.case_id) qs.set("case_id", params.case_id);
   if (!params.case_id && params.bucket) qs.set("bucket", params.bucket);
   if (!params.case_id && params.seq) qs.set("seq", String(params.seq));
+  if (params.has_careform != null) qs.set("has_careform", params.has_careform ? "1" : "0");
+  if (params.has_direct_mark != null) qs.set("has_direct_mark", params.has_direct_mark ? "1" : "0");
+  if (params.roster_status != null) qs.set("roster_status", params.roster_status);
+  qs.set("skip_roster", "1");
+  if (params.system_only) qs.set("system_only", "1");
   const response = await fetch(`/api/manager/case-progress/detail?${qs.toString()}`);
   const json = (await response.json()) as {
     data?: CaseProgressCaseDetail;
@@ -468,12 +477,19 @@ export function CaseProgressDashboard() {
     setDetailError(null);
     setDetailLoading(true);
     const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const hints = {
+      has_careform: row.has_careform,
+      has_direct_mark: row.has_direct_mark,
+      roster_status: row.roster_status,
+      system_only: Boolean(row.case_id && !row.roster_status),
+    };
     try {
       const payload = row.case_id
-        ? await fetchCaseDetail({ case_id: row.case_id })
+        ? await fetchCaseDetail({ case_id: row.case_id, ...hints })
         : await fetchCaseDetail({
             bucket: selectedBucket ?? undefined,
             seq: row.seq,
+            ...hints,
           });
       setDetail(payload);
       const elapsed = Math.round(

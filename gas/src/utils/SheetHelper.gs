@@ -3,25 +3,37 @@
  */
 
 var SheetHelper = (function () {
+  var ssCache_ = null;
+  var sheetCache_ = {};
+  var headerCache_ = {};
+
   function getSpreadsheet() {
+    if (ssCache_) return ssCache_;
     var id = Config.SPREADSHEET_ID();
     if (!id) {
       throw new Error('SPREADSHEET_ID not configured');
     }
-    return SpreadsheetApp.openById(id);
+    ssCache_ = SpreadsheetApp.openById(id);
+    return ssCache_;
   }
 
   function getSheet(name) {
+    if (sheetCache_[name]) return sheetCache_[name];
     var ss = getSpreadsheet();
     var sheet = ss.getSheetByName(name);
     if (!sheet) {
       throw new Error('Sheet not found: ' + name);
     }
+    sheetCache_[name] = sheet;
     return sheet;
   }
 
   function getHeaders(sheet) {
-    return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var cacheKey = sheet.getSheetId ? String(sheet.getSheetId()) : sheet.getName();
+    if (headerCache_[cacheKey]) return headerCache_[cacheKey].slice();
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    headerCache_[cacheKey] = headers;
+    return headers.slice();
   }
 
   function rowsToObjects(sheet) {

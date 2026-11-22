@@ -248,7 +248,40 @@ var CaseProgressModule = (function () {
     return null;
   }
 
-  /** 單案：派案→關懷表→訪查員，不建全量 VisitRecordIndex。 */
+  /** 精簡訪查員對照（name／組別），可進 ReadCache；只讀需要欄。 */
+  function visitorLiteMap_() {
+    var cacheKey = ReadCache.key('cpVisLite');
+    var cached = ReadCache.getJson(cacheKey);
+    if (cached) return cached;
+    var sheet = SheetHelper.getSheet(Config.SHEET_NAMES.VISITORS);
+    var headers = SheetHelper.getHeaders(sheet).map(String);
+    var idIdx = headers.indexOf('visitor_id');
+    var nameIdx = headers.indexOf('name');
+    var groupIdx = headers.indexOf('volunteer_group');
+    if (groupIdx < 0) groupIdx = headers.indexOf('worker_group');
+    var map = {};
+    var lastRow = sheet.getLastRow();
+    if (idIdx >= 0 && lastRow >= 2) {
+      var ids = sheet.getRange(2, idIdx + 1, lastRow - 1, 1).getValues();
+      var names =
+        nameIdx >= 0 ? sheet.getRange(2, nameIdx + 1, lastRow - 1, 1).getValues() : null;
+      var groups =
+        groupIdx >= 0 ? sheet.getRange(2, groupIdx + 1, lastRow - 1, 1).getValues() : null;
+      for (var i = 0; i < ids.length; i++) {
+        var vid = String(ids[i][0] || '').trim();
+        if (!vid) continue;
+        map[vid] = {
+          visitor_id: vid,
+          name: names ? String(names[i][0] || '').trim() : '',
+          volunteer_group: groups ? String(groups[i][0] || '').trim() : '',
+        };
+      }
+    }
+    ReadCache.putJson(cacheKey, map);
+    return map;
+  }
+
+  /** 單案：派案→關懷表；訪查員走精簡快取，避免每案 TextFinder。 */
   function loadCareformBundleForCase_(caseId) {
     var id = String(caseId || '').trim();
     var pairs = [];
@@ -278,10 +311,12 @@ var CaseProgressModule = (function () {
       return at < bt ? -1 : at > bt ? 1 : 0;
     });
 
-    Object.keys(visitorIds).forEach(function (vid) {
-      var visitor = SheetHelper.findFirstByKeyFast(Config.SHEET_NAMES.VISITORS, 'visitor_id', vid);
-      if (visitor) visitorById[vid] = visitor;
-    });
+    if (Object.keys(visitorIds).length) {
+      var lite = visitorLiteMap_();
+      Object.keys(visitorIds).forEach(function (vid) {
+        if (lite[vid]) visitorById[vid] = lite[vid];
+      });
+    }
 
     return { pairs: pairs, visitorById: visitorById };
   }
@@ -435,6 +470,21 @@ var CaseProgressModule = (function () {
       throw bad;
     }
 
+    function flagFalse_(v) {
+      return v === false || v === 'false' || v === 0 || v === '0';
+    }
+    function flagTrue_(v) {
+      return v === true || v === 'true' || v === 1 || v === '1';
+    }
+
+    // 名單列 hint：略過不必要的試算表讀取（每個 TextFinder ~0.5–1.4s）
+    var skipCareforms = flagFalse_(params.has_careform);
+    var skipMarks = flagFalse_(params.has_direct_mark);
+    var skipRosterLookup = flagTrue_(params.skip_roster);
+    var rosterStatusHint =
+      params.roster_status != null ? String(params.roster_status) : '';
+    var hintSystemOnly = flagTrue_(params.system_only);
+
     var tCase = Date.now();
     var caseRow = null;
     if (caseId) {
@@ -451,8 +501,22 @@ var CaseProgressModule = (function () {
     }
 
     var tRoster = Date.now();
-    var roster = nationalId ? findRosterById_(nationalId) : null;
-    timings.roster_ms = Date.now() - tRoster;
+    var roster = null;
+    if (skipRosterLookup) {
+      timings.roster_ms = 0;
+      timings.roster_skipped = 1;
+      if (!hintSystemOnly) {
+        roster = {
+          national_id: nationalId,
+          name: (indexRow && indexRow.name) || '',
+          village: (indexRow && indexRow.village) || '',
+          roster_status: rosterStatusHint,
+        };
+      }
+    } else {
+      roster = nationalId ? findRosterById_(nationalId) : null;
+      timings.roster_ms = Date.now() - tRoster;
+    }
     if (!caseRow && !roster && indexRow) {
       roster = {
         national_id: indexRow.national_id,
@@ -468,22 +532,42 @@ var CaseProgressModule = (function () {
       throw nf;
     }
 
-    var tRelated = Date.now();
-    var deskLogs = caseId ? deskLogsForCase_(caseId) : [];
-    var marks = caseId ? marksForCase_(caseId) : [];
-    var bundle = caseId
-      ? loadCareformBundleForCase_(caseId)
-      : { pairs: [], visitorById: {} };
-    timings.related_ms = Date.now() - tRelated;
+    var tMarks = Date.now();
+    var marks = [];
+    if (caseId && !skipMarks) {
+      marks = marksForCase_(caseId);
+      timings.marks_ms = Date.now() - tMarks;
+    } else {
+      timings.marks_ms = 0;
+      timings.marks_skipped = skipMarks ? 1 : 0;
+    }
+
+    var tBundle = Date.now();
+    var bundle = { pairs: [], visitorById: {} };
+    if (caseId && !skipCareforms) {
+      bundle = loadCareformBundleForCase_(caseId);
+      timings.bundle_ms = Date.now() - tBundle;
+    } else {
+      timings.bundle_ms = 0;
+      timings.bundle_skipped = skipCareforms ? 1 : 0;
+    }
+
+    // desk log 全表 TextFinder ~1s；詳情改以訪查員 lite 對照 KEY 者，略過以換速度
+    var deskLogs = [];
+    timings.desk_ms = 0;
+    timings.desk_skipped = 1;
+    timings.related_ms = (timings.marks_ms || 0) + (timings.desk_ms || 0) + (timings.bundle_ms || 0);
 
     var careforms = bundle.pairs.map(function (pair) {
       return mapCareformDetail_(pair, bundle.visitorById, deskLogs);
     });
 
-    var hasCareform = careforms.some(function (cf) {
-      return VisitRecordIndex.ELIGIBLE[String(cf.status || '')];
-    });
-    var hasMark = marks.length > 0;
+    var hasCareform = skipCareforms
+      ? false
+      : careforms.some(function (cf) {
+          return VisitRecordIndex.ELIGIBLE[String(cf.status || '')];
+        });
+    var hasMark = skipMarks ? false : marks.length > 0;
     var visitStatus = caseRow ? String(caseRow.visit_status || '') : '';
     var village = caseRow
       ? String(caseRow.visit_village || caseRow.household_village || '').trim()
@@ -562,6 +646,8 @@ var CaseProgressModule = (function () {
     };
 
     timings.total_ms = Date.now() - t0;
+    // 供前端／API meta 觀測；不含 PII
+    payload._timing = timings;
     Logger.log(
       '[caseProgress.getCaseDetail] token=%s totalMs=%s caseMs=%s rosterMs=%s relatedMs=%s indexMs=%s careforms=%s marks=%s',
       cacheToken || '(none)',
@@ -575,7 +661,13 @@ var CaseProgressModule = (function () {
     );
 
     if (cacheToken) {
-      ReadCache.putJson(ReadCache.key('cpD:' + cacheToken), payload);
+      // 快取不帶 _timing，避免誤判為新鮮計算
+      var toCache = {};
+      Object.keys(payload).forEach(function (k) {
+        if (k === '_timing') return;
+        toCache[k] = payload[k];
+      });
+      ReadCache.putJson(ReadCache.key('cpD:' + cacheToken), toCache);
     }
 
     return payload;

@@ -1,8 +1,8 @@
 ## Lesson: getCaseDetail 禁止 VisitRecordIndex.build 全表掃描
 
 - **Trigger:** `/manager/case-progress` 點列詳情卡 3–5 秒「載入中」。
-- **Cause:** 單案查詢卻 `VisitRecordIndex.build()` 讀名冊／派案／關懷表／稽核／訪查員全表，再掃清冊／marks／desk logs。
-- **Rule:** 單案用 `SheetHelper.findFirstByKeyFast`／`findRowsByKeyFast`（TextFinder）依 case_id／assignment_id 取列；結果可進 `ReadCache`（~25s）；UI 先用 listBucket 列做 preview。全量 index 僅留給 summary／export。
+- **Cause:** 單案查詢卻 `VisitRecordIndex.build()` 讀名冊／派案／關懷表／稽核／訪查員全表，再掃清冊／marks／desk logs；每個 TextFinder 仍約 0.5–1.4s。
+- **Rule:** 單案用 `find*ByKeyFast`；名單列帶 `has_careform`／`has_direct_mark`／`skip_roster` hint 略過無關表；訪查員用 `cpVisLite` ReadCache；詳情暫略 desk log 以換速度；結果 `cpD:` ReadCache ~25s；UI 先 preview 名單列。全量 index 僅留給 summary／export。
 - **Evidence:** `CaseProgressModule.getCaseDetail`, `SheetHelper.find*ByKeyFast`, `case-progress-dashboard.tsx`.
 - **Added on:** 2026-11-23
 
