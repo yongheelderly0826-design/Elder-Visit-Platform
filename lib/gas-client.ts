@@ -892,6 +892,31 @@ export const gasClient = {
         params: params as Record<string, string> | undefined,
       }),
   },
+  caseProgress: {
+    summary: (params?: {
+      village_name?: string;
+      force_refresh?: string;
+      include_samples?: string;
+      sample_limit?: string;
+    }) =>
+      gasFetch<Record<string, unknown>>("caseProgress.summary", {
+        params: params as Record<string, string> | undefined,
+      }),
+    rosterMeta: () => gasFetch<Record<string, unknown>>("caseProgress.rosterMeta"),
+    replaceRosterSnapshot: (body: {
+      snapshot_id?: string;
+      rows: Array<Record<string, unknown>>;
+      append?: boolean;
+      refresh_summary?: boolean;
+      village_name?: string;
+    }) =>
+      gasFetch<{
+        snapshot_id?: string;
+        written?: number;
+        append?: boolean;
+        summary?: Record<string, unknown>;
+      }>("caseProgress.replaceRosterSnapshot", { method: "POST", body }),
+  },
 };
 
 export function isGasConfigured(): boolean {

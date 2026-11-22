@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BarChart3, ClipboardCheck, RefreshCw, Wrench } from "lucide-react";
+import { BarChart3, ClipboardCheck, ContactRound, RefreshCw, Wrench } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import type {
@@ -134,6 +134,13 @@ export function MohwProgressDashboard() {
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           {loading ? "載入中…" : "重新整理"}
         </Button>
+        <Link
+          href="/manager/case-progress"
+          className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted/40"
+        >
+          <ContactRound className="mr-2 h-4 w-4" />
+          個案進度儀表板
+        </Link>
         <Link
           href="/desk/mohw-progress"
           className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted/40"

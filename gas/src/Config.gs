@@ -61,6 +61,8 @@ var Config = (function () {
       DESK_KEY_LOGS: '紙本登打紀錄',
       MOHW_PROGRESS_REPORTS: 'MOHW進度回報',
       MOHW_PROGRESS_MARKS: 'MOHW進度個案標記',
+      ROSTER_SNAPSHOT: '清冊快照',
+      CASE_PROGRESS_CACHE: '個案進度快取',
       LOG: '_操作日誌',
     },
   };

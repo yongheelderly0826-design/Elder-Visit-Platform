@@ -140,6 +140,18 @@ var SheetHelper = (function () {
       '紙本登打紀錄': ['log_id', 'clerk_id', 'display_name', 'assignment_id', 'careform_id', 'case_id', 'case_label', 'visit_result', 'visit_date', 'keyed_at', 'counts_as_piece', 'created_at'],
       'MOHW進度回報': ['report_id', 'village_name', 'village_code', 'mode', 'count_done', 'count_missed', 'count_not_found', 'count_total', 'roster_total', 'over_roster', 'range_text', 'case_codes_json', 'source', 'civil_worker_id', 'civil_worker_name', 'social_worker_id', 'social_worker_name', 'keyed_by_id', 'keyed_by_name', 'audit_supervisors', 'reported_by', 'reported_by_email', 'reported_at', 'notes', 'status'],
       'MOHW進度個案標記': ['mark_id', 'report_id', 'case_id', 'encoded_id', 'village_seq', 'village_name', 'outcome', 'source', 'civil_worker_id', 'civil_worker_name', 'social_worker_id', 'social_worker_name', 'keyed_by_id', 'keyed_by_name', 'audit_supervisors', 'reported_by', 'reported_by_email', 'reported_at', 'status'],
+      '清冊快照': [
+        'snapshot_id',
+        'national_id',
+        'name',
+        'village',
+        'roster_status',
+        'living_address',
+        'living_note',
+        'completed_at',
+        'imported_at',
+      ],
+      '個案進度快取': ['cache_id', 'payload_json', 'roster_snapshot_id', 'computed_at', 'row_count'],
       '_操作日誌': ['log_id', 'action', 'sheet', 'record_id', 'actor', 'timestamp', 'detail'],
     };
 

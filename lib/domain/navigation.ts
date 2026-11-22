@@ -45,6 +45,7 @@ export type NavKey =
   | "mohwProgress"
   | "mohwProgressDashboard"
   | "mohwProgressCorrections"
+  | "caseProgress"
   | "villageAdmins"
   | "dailyVisits"
   | "audit"
@@ -207,6 +208,15 @@ export const navItems: NavItem[] = [
     label: "衛福部進度儀表板",
     href: "/manager/mohw-progress",
     icon: BarChart3,
+    requiredCapabilities: ["visits.read"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
+    group: "operations",
+  },
+  {
+    key: "caseProgress",
+    label: "個案進度儀表板",
+    href: "/manager/case-progress",
+    icon: ContactRound,
     requiredCapabilities: ["visits.read"],
     allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",

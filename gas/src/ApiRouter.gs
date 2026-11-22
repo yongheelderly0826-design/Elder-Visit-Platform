@@ -193,6 +193,11 @@ var ApiRouter = (function () {
     'mohwProgress.patchMarks': function (p, b) { return MohwProgressModule.patchMarks(b || p); },
     'mohwProgress.listCaseContext': function (p) { return MohwProgressModule.listCaseContext(p); },
     'mohwProgress.summary': function (p) { return MohwProgressModule.summary(p); },
+    'caseProgress.summary': function (p) { return CaseProgressModule.summary(p); },
+    'caseProgress.rosterMeta': function (p) { return CaseProgressModule.rosterMeta(p); },
+    'caseProgress.replaceRosterSnapshot': function (p, b) {
+      return CaseProgressModule.replaceRosterSnapshot(b || p);
+    },
   };
 
   function dispatch(action, params, body) {
