@@ -2,11 +2,25 @@
  * 個案視角進度＋清冊全量對照。
  * 「有紀錄」= eligible 關懷表 ∪ 直 KEY mark；兩者分開標示。
  * 清冊狀態來自「清冊快照」表（需先匯入）。
+ * 分桶全量名單：summary 重算時寫入「個案進度分桶索引」，listBucket 分頁讀取。
  */
 var CaseProgressModule = (function () {
   var ROSTER = Config.SHEET_NAMES.ROSTER_SNAPSHOT;
   var CACHE = Config.SHEET_NAMES.CASE_PROGRESS_CACHE;
+  var INDEX = Config.SHEET_NAMES.CASE_PROGRESS_BUCKET_INDEX;
   var MARKS = Config.SHEET_NAMES.MOHW_PROGRESS_MARKS;
+
+  var BUCKET_KEYS = [
+    'A_roster_result_careform',
+    'B_roster_result_direct',
+    'C_roster_result_no_trace',
+    'D_careform_roster_pending',
+    'E_both_pending_with_mark',
+    'E_both_pending',
+    'F_roster_only_pending',
+    'F_roster_only_result',
+    'F_system_only',
+  ];
 
   var ROSTER_HEADERS = [
     'snapshot_id',
@@ -22,9 +36,25 @@ var CaseProgressModule = (function () {
 
   var CACHE_HEADERS = ['cache_id', 'payload_json', 'roster_snapshot_id', 'computed_at', 'row_count'];
 
+  var INDEX_HEADERS = [
+    'bucket',
+    'seq',
+    'case_id',
+    'national_id',
+    'name',
+    'village',
+    'visit_status',
+    'roster_status',
+    'channel',
+    'mark_outcome',
+    'has_careform',
+    'has_direct_mark',
+  ];
+
   function ensureSchema_() {
     SheetHelper.ensureSheet(ROSTER, ROSTER_HEADERS);
     SheetHelper.ensureSheet(CACHE, CACHE_HEADERS);
+    SheetHelper.ensureSheet(INDEX, INDEX_HEADERS);
   }
 
   function normId_(v) {
@@ -62,11 +92,83 @@ var CaseProgressModule = (function () {
     return isPendingStatus_(visitStatus);
   }
 
+  function emptyBuckets_() {
+    return {
+      A_roster_result_careform: 0,
+      B_roster_result_direct: 0,
+      C_roster_result_no_trace: 0,
+      D_careform_roster_pending: 0,
+      E_both_pending_with_mark: 0,
+      E_both_pending: 0,
+      F_roster_only_pending: 0,
+      F_roster_only_result: 0,
+      F_system_only: 0,
+    };
+  }
+
+  function toIndexRow_(bucket, seq, sample, rawName, rawId) {
+    return {
+      bucket: bucket,
+      seq: seq,
+      case_id: sample.case_id || '',
+      national_id: normId_(rawId),
+      name: String(rawName || '').trim(),
+      village: sample.village || '',
+      visit_status: sample.visit_status || '',
+      roster_status: sample.roster_status || '',
+      channel: sample.channel || '',
+      mark_outcome: sample.mark_outcome || '',
+      has_careform: sample.has_careform ? 'Y' : 'N',
+      has_direct_mark: sample.has_direct_mark ? 'Y' : 'N',
+    };
+  }
+
+  function maskIndexRow_(row) {
+    return {
+      case_id: String(row.case_id || ''),
+      name_masked: maskName_(row.name),
+      id_masked: maskId_(row.national_id),
+      village: String(row.village || ''),
+      visit_status: String(row.visit_status || ''),
+      has_careform: String(row.has_careform || '') === 'Y',
+      has_direct_mark: String(row.has_direct_mark || '') === 'Y',
+      mark_outcome: String(row.mark_outcome || ''),
+      roster_status: String(row.roster_status || ''),
+      channel: String(row.channel || ''),
+    };
+  }
+
+  function saveBucketIndex_(rows) {
+    ensureSchema_();
+    var sheet = SheetHelper.getSheet(INDEX);
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.deleteRows(2, lastRow - 1);
+    }
+    rows = rows || [];
+    if (!rows.length) return 0;
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var chunk = 500;
+    for (var i = 0; i < rows.length; i += chunk) {
+      var slice = rows.slice(i, i + chunk);
+      var values = slice.map(function (obj) {
+        return headers.map(function (h) {
+          return obj[h] !== undefined ? obj[h] : '';
+        });
+      });
+      // getRange(row, column, numRows, numColumns)
+      sheet.getRange(2 + i, 1, values.length, headers.length).setValues(values);
+    }
+    return rows.length;
+  }
+
   function buildLiveSummary_(params) {
     params = params || {};
     var villageFilter = String(params.village_name || '').trim();
     var includeSamples = String(params.include_samples || 'true') !== 'false';
     var sampleLimit = Math.min(Math.max(parseInt(params.sample_limit, 10) || 30, 5), 100);
+    var writeIndex = String(params.write_index || 'true') !== 'false';
 
     ensureSchema_();
     var index = VisitRecordIndex.build();
@@ -102,24 +204,24 @@ var CaseProgressModule = (function () {
       mark_but_unvisited: 0,
       careform_but_unvisited: 0,
     };
-    var buckets = {
-      A_roster_result_careform: 0,
-      B_roster_result_direct: 0,
-      C_roster_result_no_trace: 0,
-      D_careform_roster_pending: 0,
-      E_both_pending_with_mark: 0,
-      E_both_pending: 0,
-      F_roster_only_pending: 0,
-      F_roster_only_result: 0,
-      F_system_only: 0,
-    };
+    var buckets = emptyBuckets_();
     var rosterStatusCross = {};
     var samplesByBucket = {};
+    var indexRows = [];
+
     function pushSample(bucket, item) {
       if (!includeSamples) return;
       if (!samplesByBucket[bucket]) samplesByBucket[bucket] = [];
       if (samplesByBucket[bucket].length >= sampleLimit) return;
       samplesByBucket[bucket].push(item);
+    }
+
+    function pushBucket(bucket, sample, rawName, rawId) {
+      buckets[bucket] += 1;
+      if (writeIndex) {
+        indexRows.push(toIndexRow_(bucket, buckets[bucket], sample, rawName, rawId));
+      }
+      pushSample(bucket, sample);
     }
 
     var seenRosterIds = {};
@@ -170,8 +272,7 @@ var CaseProgressModule = (function () {
       };
 
       if (!roster) {
-        buckets.F_system_only += 1;
-        pushSample('F_system_only', sample);
+        pushBucket('F_system_only', sample, caseRow.name, nid);
         return;
       }
 
@@ -189,23 +290,17 @@ var CaseProgressModule = (function () {
       var rosterPending = !rosterResult;
 
       if (rosterResult && hasCareform) {
-        buckets.A_roster_result_careform += 1;
-        pushSample('A_roster_result_careform', sample);
+        pushBucket('A_roster_result_careform', sample, caseRow.name, nid);
       } else if (rosterResult && hasMark) {
-        buckets.B_roster_result_direct += 1;
-        pushSample('B_roster_result_direct', sample);
+        pushBucket('B_roster_result_direct', sample, caseRow.name, nid);
       } else if (rosterResult && !hasCareform && !hasMark) {
-        buckets.C_roster_result_no_trace += 1;
-        pushSample('C_roster_result_no_trace', sample);
+        pushBucket('C_roster_result_no_trace', sample, caseRow.name, nid);
       } else if (rosterPending && hasCareform) {
-        buckets.D_careform_roster_pending += 1;
-        pushSample('D_careform_roster_pending', sample);
+        pushBucket('D_careform_roster_pending', sample, caseRow.name, nid);
       } else if (rosterPending && hasMark) {
-        buckets.E_both_pending_with_mark += 1;
-        pushSample('E_both_pending_with_mark', sample);
+        pushBucket('E_both_pending_with_mark', sample, caseRow.name, nid);
       } else {
-        buckets.E_both_pending += 1;
-        pushSample('E_both_pending', sample);
+        pushBucket('E_both_pending', sample, caseRow.name, nid);
       }
     });
 
@@ -227,11 +322,9 @@ var CaseProgressModule = (function () {
         channel: '僅清冊',
       };
       if (rosterHasResult_(roster.roster_status)) {
-        buckets.F_roster_only_result += 1;
-        pushSample('F_roster_only_result', sample);
+        pushBucket('F_roster_only_result', sample, roster.name, nid);
       } else {
-        buckets.F_roster_only_pending += 1;
-        pushSample('F_roster_only_pending', sample);
+        pushBucket('F_roster_only_pending', sample, roster.name, nid);
       }
     });
 
@@ -281,7 +374,9 @@ var CaseProgressModule = (function () {
         '「直 KEY」= 本平台 MOHW 進度標記（proxy），不代表衛福後台一定已 KEY 成功。',
         '「已 KEY 關懷表」= 關懷表狀態為已提交／已稽核。',
         '「有紀錄」= 關懷表 ∪ 直 KEY（兩者皆分別標示）。',
+        '點選分桶可開啟全量名單（分頁）；大桶來自分桶索引，請於強制重算後使用。',
       ],
+      _index_rows: indexRows,
     };
   }
 
@@ -321,9 +416,60 @@ var CaseProgressModule = (function () {
       }
     }
     var live = buildLiveSummary_(params);
+    var indexRows = live._index_rows || [];
+    delete live._index_rows;
+    saveBucketIndex_(indexRows);
+    live.bucket_index_rows = indexRows.length;
     saveCache_(live);
     live.from_cache = false;
     return live;
+  }
+
+  function listBucket(params) {
+    params = params || {};
+    ensureSchema_();
+    var bucket = String(params.bucket || '').trim();
+    if (BUCKET_KEYS.indexOf(bucket) === -1) {
+      var err = new Error('Unknown bucket: ' + bucket);
+      err.code = 'VALIDATION_ERROR';
+      throw err;
+    }
+
+    var page = Math.max(parseInt(params.page, 10) || 1, 1);
+    var pageSize = Math.min(Math.max(parseInt(params.page_size, 10) || 50, 1), 100);
+    var villageFilter = String(params.village || params.village_name || '').trim();
+
+    var all = SheetHelper.rowsToObjects(SheetHelper.getSheet(INDEX)).filter(function (row) {
+      if (String(row.bucket || '') !== bucket) return false;
+      if (!villageFilter) return true;
+      return String(row.village || '').trim() === villageFilter;
+    });
+
+    // Stable order by seq
+    all.sort(function (a, b) {
+      return (Number(a.seq) || 0) - (Number(b.seq) || 0);
+    });
+
+    var total = all.length;
+    var totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+    if (totalPages > 0 && page > totalPages) page = totalPages;
+    var start = (page - 1) * pageSize;
+    var slice = all.slice(start, start + pageSize).map(maskIndexRow_);
+
+    return {
+      bucket: bucket,
+      page: page,
+      page_size: pageSize,
+      total: total,
+      total_pages: totalPages,
+      village_filter: villageFilter || null,
+      index_ready: total > 0 || SheetHelper.getSheet(INDEX).getLastRow() > 1,
+      rows: slice,
+      notes:
+        total === 0
+          ? ['此分桶目前無索引列。若摘要人數非 0，請按「強制重算」重建分桶索引後再試。']
+          : [],
+    };
   }
 
   function replaceRosterSnapshot(body) {
@@ -389,6 +535,7 @@ var CaseProgressModule = (function () {
 
   return {
     summary: summary,
+    listBucket: listBucket,
     replaceRosterSnapshot: replaceRosterSnapshot,
     rosterMeta: rosterMeta,
   };

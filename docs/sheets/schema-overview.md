@@ -38,6 +38,7 @@
 | `MOHW進度個案標記` | `mark_id` | 個案層進度標記（編碼／區間模式；latest wins；含 civil/social_worker_*） |
 | `清冊快照` | `national_id` | 衛福清冊全量快照（供個案進度儀表板對照；含 roster_status） |
 | `個案進度快取` | `cache_id` | 個案視角 summary JSON 快取（避免每次全量 join 逾時） |
+| `個案進度分桶索引` | `bucket`+`seq` | summary 重算時寫入；供 A–F 分桶全量名單分頁（勿當業務主檔） |
 | `_操作日誌` | `log_id` | 系統 log |
 
 ---

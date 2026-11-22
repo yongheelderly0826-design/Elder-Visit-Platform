@@ -200,6 +200,7 @@ var ApiRouter = (function () {
     'mohwProgress.listCaseContext': function (p) { return MohwProgressModule.listCaseContext(p); },
     'mohwProgress.summary': function (p) { return MohwProgressModule.summary(p); },
     'caseProgress.summary': function (p) { return CaseProgressModule.summary(p); },
+    'caseProgress.listBucket': function (p) { return CaseProgressModule.listBucket(p); },
     'caseProgress.rosterMeta': function (p) { return CaseProgressModule.rosterMeta(p); },
     'caseProgress.replaceRosterSnapshot': function (p, b) {
       return CaseProgressModule.replaceRosterSnapshot(b || p);

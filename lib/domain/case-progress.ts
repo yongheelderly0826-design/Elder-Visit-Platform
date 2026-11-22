@@ -47,6 +47,18 @@ export type CaseProgressSample = {
   channel: string;
 };
 
+export type CaseProgressBucketListPayload = {
+  bucket: keyof CaseProgressBuckets | string;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  village_filter?: string | null;
+  index_ready?: boolean;
+  rows: CaseProgressSample[];
+  notes?: string[];
+};
+
 export type CaseProgressRosterMeta = {
   loaded: boolean;
   snapshot_id: string | null;

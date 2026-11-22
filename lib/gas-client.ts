@@ -902,6 +902,26 @@ export const gasClient = {
       gasFetch<Record<string, unknown>>("caseProgress.summary", {
         params: params as Record<string, string> | undefined,
       }),
+    listBucket: (params: {
+      bucket: string;
+      page?: string;
+      page_size?: string;
+      village?: string;
+      village_name?: string;
+    }) =>
+      gasFetch<{
+        bucket?: string;
+        page?: number;
+        page_size?: number;
+        total?: number;
+        total_pages?: number;
+        village_filter?: string | null;
+        index_ready?: boolean;
+        rows?: Array<Record<string, unknown>>;
+        notes?: string[];
+      }>("caseProgress.listBucket", {
+        params: params as Record<string, string>,
+      }),
     rosterMeta: () => gasFetch<Record<string, unknown>>("caseProgress.rosterMeta"),
     replaceRosterSnapshot: (body: {
       snapshot_id?: string;

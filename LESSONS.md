@@ -1,3 +1,11 @@
+## Lesson: 清冊分桶全量名單用索引表分頁，勿每次 live join
+
+- **Trigger:** 個案進度 A–F 桶（尤其 F 僅清冊待訪 ~9k）點開只能看 sample_limit 抽樣，無法開全量。
+- **Cause:** summary 為避 GAS 逾時只回傳每桶 ≤40 抽樣；前端只渲染 `samples_by_bucket`。
+- **Rule:** 強制重算時寫入「個案進度分桶索引」；`caseProgress.listBucket` 依 bucket＋page 回遮罩列。大桶禁止即時全量 join。部署後需至少一次強制重算才有索引。
+- **Evidence:** `CaseProgressModule.gs`, `case-progress-dashboard.tsx`, `/api/manager/case-progress/bucket`.
+- **Added on:** 2026-11-22
+
 ## Lesson: 公開存摺補件必須活動碼＋截止日，且 TEMP 不可審
 
 - **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
