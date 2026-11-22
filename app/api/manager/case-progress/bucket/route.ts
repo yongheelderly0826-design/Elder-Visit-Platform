@@ -19,6 +19,7 @@ function asNumber(v: unknown, fallback = 0) {
 function mapRow(raw: Record<string, unknown>): CaseProgressSample {
   return {
     case_id: String(raw.case_id ?? ""),
+    seq: Number(raw.seq) || 0,
     name_masked: String(raw.name_masked ?? "—"),
     id_masked: String(raw.id_masked ?? "—"),
     village: String(raw.village ?? ""),

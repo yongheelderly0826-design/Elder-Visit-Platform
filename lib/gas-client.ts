@@ -922,6 +922,15 @@ export const gasClient = {
       }>("caseProgress.listBucket", {
         params: params as Record<string, string>,
       }),
+    getCaseDetail: (params: {
+      case_id?: string;
+      national_id?: string;
+      bucket?: string;
+      seq?: string;
+    }) =>
+      gasFetch<Record<string, unknown>>("caseProgress.getCaseDetail", {
+        params: params as Record<string, string>,
+      }),
     rosterMeta: () => gasFetch<Record<string, unknown>>("caseProgress.rosterMeta"),
     replaceRosterSnapshot: (body: {
       snapshot_id?: string;

@@ -126,6 +126,7 @@ var CaseProgressModule = (function () {
   function maskIndexRow_(row) {
     return {
       case_id: String(row.case_id || ''),
+      seq: Number(row.seq) || 0,
       name_masked: maskName_(row.name),
       id_masked: maskId_(row.national_id),
       village: String(row.village || ''),
@@ -135,6 +136,333 @@ var CaseProgressModule = (function () {
       mark_outcome: String(row.mark_outcome || ''),
       roster_status: String(row.roster_status || ''),
       channel: String(row.channel || ''),
+    };
+  }
+
+  function parseAnswers_(raw) {
+    if (!raw) return {};
+    try {
+      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function visitorSide_(visitor) {
+    var group = String((visitor && (visitor.volunteer_group || visitor.worker_group)) || '')
+      .trim()
+      .toLowerCase();
+    if (group.indexOf('social') !== -1 || group.indexOf('社政') !== -1) return 'social';
+    if (group.indexOf('civil') !== -1 || group.indexOf('民政') !== -1) return 'civil';
+    var id = String((visitor && visitor.visitor_id) || '').toUpperCase();
+    if (id.indexOf('-SOC-') !== -1) return 'social';
+    if (id.indexOf('-CIV-') !== -1) return 'civil';
+    return '';
+  }
+
+  function sideLabel_(side) {
+    if (side === 'social') return '社政';
+    if (side === 'civil') return '民政';
+    return '';
+  }
+
+  function findIndexRow_(bucket, seq) {
+    ensureSchema_();
+    var wantBucket = String(bucket || '').trim();
+    var wantSeq = Number(seq) || 0;
+    if (!wantBucket || !wantSeq) return null;
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(INDEX));
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i].bucket || '') === wantBucket && (Number(rows[i].seq) || 0) === wantSeq) {
+        return rows[i];
+      }
+    }
+    return null;
+  }
+
+  function findRosterById_(nid) {
+    ensureSchema_();
+    var want = normId_(nid);
+    if (!want) return null;
+    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(ROSTER));
+    for (var i = 0; i < rows.length; i++) {
+      if (normId_(rows[i].national_id) === want) return rows[i];
+    }
+    return null;
+  }
+
+  function findCaseByNationalId_(index, nid) {
+    var want = normId_(nid);
+    if (!want) return null;
+    for (var i = 0; i < index.cases.length; i++) {
+      if (normId_(index.cases[i].id_number) === want) return index.cases[i];
+    }
+    return null;
+  }
+
+  function allCareformsForCase_(index, caseId) {
+    var found = [];
+    (index.assignmentsByCase[String(caseId || '').trim()] || []).forEach(function (assignment) {
+      (index.careformsByAssignment[String(assignment.assignment_id || '').trim()] || []).forEach(
+        function (careform) {
+          found.push({ careform: careform, assignment: assignment });
+        }
+      );
+    });
+    found.sort(function (a, b) {
+      var at = String(a.careform.submitted_at || a.careform.audited_at || '');
+      var bt = String(b.careform.submitted_at || b.careform.audited_at || '');
+      return at < bt ? -1 : at > bt ? 1 : 0;
+    });
+    return found;
+  }
+
+  function deskLogsForCase_(caseId) {
+    var id = String(caseId || '').trim();
+    if (!id) return [];
+    return SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.DESK_KEY_LOGS)).filter(
+      function (row) {
+        return String(row.case_id || '').trim() === id;
+      }
+    );
+  }
+
+  function marksForCase_(caseId) {
+    var id = String(caseId || '').trim();
+    if (!id) return [];
+    return SheetHelper.rowsToObjects(SheetHelper.getSheet(MARKS)).filter(function (row) {
+      if (String(row.case_id || '').trim() !== id) return false;
+      return String(row.status || 'active') === 'active';
+    });
+  }
+
+  function mapCareformDetail_(index, pair, deskLogs) {
+    var careform = pair.careform;
+    var assignment = pair.assignment;
+    var answers = parseAnswers_(careform.answers_json);
+    var visitorId = String(careform.visitor_id || assignment.visitor_id || '').trim();
+    var visitor = (index.visitorById && index.visitorById[visitorId]) || {};
+    var visitorName = String(visitor.name || '').trim();
+    var side = visitorSide_(visitor);
+    var careformId = String(careform.careform_id || '').trim();
+
+    var deskMatch = null;
+    for (var i = 0; i < deskLogs.length; i++) {
+      if (String(deskLogs[i].careform_id || '').trim() === careformId) {
+        deskMatch = deskLogs[i];
+        break;
+      }
+    }
+
+    var keyedBy = '';
+    var keyedSource = '';
+    if (deskMatch) {
+      keyedBy =
+        String(deskMatch.display_name || '').trim() ||
+        String(deskMatch.clerk_id || '').trim() ||
+        'TEMP';
+      keyedSource = 'desk_temp';
+    } else if (visitorName) {
+      keyedBy = visitorName;
+      keyedSource = 'visitor';
+    } else if (visitorId) {
+      keyedBy = visitorId;
+      keyedSource = 'visitor';
+    }
+
+    return {
+      careform_id: careformId,
+      status: String(careform.status || ''),
+      submitted_at: String(careform.submitted_at || '') || null,
+      audited_at: String(careform.audited_at || '') || null,
+      visit_result: String(careform.visit_result || answers.visit_status || '') || null,
+      visit_date: String(answers.visit_date || '') || null,
+      visit_start_time: String(answers.visit_start_time || answers.visit_time_start || '') || null,
+      visit_end_time: String(answers.visit_end_time || answers.visit_time_end || '') || null,
+      keyed_by_name: keyedBy || null,
+      keyed_source: keyedSource || null,
+      keyed_clerk_id: deskMatch ? String(deskMatch.clerk_id || '') || null : null,
+      visitor_side: side || null,
+      visitor_side_label: sideLabel_(side) || null,
+      civil_worker_name: String(answers.civil_worker_name || '').trim() || null,
+      social_worker_name: String(answers.social_worker_name || '').trim() || null,
+      civil_worker_date: String(answers.civil_worker_date || '').trim() || null,
+      social_worker_date: String(answers.social_worker_date || '').trim() || null,
+    };
+  }
+
+  function mapMarkDetail_(row) {
+    return {
+      mark_id: String(row.mark_id || ''),
+      outcome: String(row.outcome || ''),
+      source: String(row.source || '') || null,
+      civil_worker_id: String(row.civil_worker_id || '') || null,
+      civil_worker_name: String(row.civil_worker_name || '') || null,
+      social_worker_id: String(row.social_worker_id || '') || null,
+      social_worker_name: String(row.social_worker_name || '') || null,
+      keyed_by_id: String(row.keyed_by_id || '') || null,
+      keyed_by_name: String(row.keyed_by_name || '') || null,
+      reported_at: String(row.reported_at || '') || null,
+      reported_by: String(row.reported_by || '') || null,
+      village_name: String(row.village_name || '') || null,
+    };
+  }
+
+  function mapDeskLogDetail_(row) {
+    return {
+      log_id: String(row.log_id || ''),
+      clerk_id: String(row.clerk_id || '') || null,
+      display_name: String(row.display_name || '') || null,
+      careform_id: String(row.careform_id || '') || null,
+      visit_result: String(row.visit_result || '') || null,
+      visit_date: String(row.visit_date || '') || null,
+      keyed_at: String(row.keyed_at || row.created_at || '') || null,
+    };
+  }
+
+  function getCaseDetail(params) {
+    params = params || {};
+    ensureSchema_();
+
+    var caseId = String(params.case_id || '').trim();
+    var nationalId = normId_(params.national_id);
+    var bucket = String(params.bucket || '').trim();
+    var seq = Number(params.seq) || 0;
+    var notes = [];
+    var indexRow = null;
+
+    if (!caseId && !nationalId && bucket && seq) {
+      indexRow = findIndexRow_(bucket, seq);
+      if (!indexRow) {
+        var missing = new Error('找不到分桶索引列');
+        missing.code = 'NOT_FOUND';
+        throw missing;
+      }
+      caseId = String(indexRow.case_id || '').trim();
+      nationalId = normId_(indexRow.national_id);
+    }
+
+    if (!caseId && !nationalId) {
+      var bad = new Error('請提供 case_id、national_id，或 bucket+seq');
+      bad.code = 'VALIDATION_ERROR';
+      throw bad;
+    }
+
+    var index = VisitRecordIndex.build();
+    var caseRow = null;
+    if (caseId && index.caseById[caseId]) {
+      caseRow = index.caseById[caseId];
+    } else if (nationalId) {
+      caseRow = findCaseByNationalId_(index, nationalId);
+      if (caseRow) caseId = String(caseRow.case_id || '').trim();
+    }
+
+    if (caseRow && !nationalId) {
+      nationalId = normId_(caseRow.id_number);
+    }
+
+    var roster = nationalId ? findRosterById_(nationalId) : null;
+    if (!caseRow && !roster && indexRow) {
+      roster = {
+        national_id: indexRow.national_id,
+        name: indexRow.name,
+        village: indexRow.village,
+        roster_status: indexRow.roster_status,
+      };
+    }
+
+    if (!caseRow && !roster) {
+      var nf = new Error('找不到個案或清冊列');
+      nf.code = 'NOT_FOUND';
+      throw nf;
+    }
+
+    var deskLogs = caseId ? deskLogsForCase_(caseId) : [];
+    var marks = caseId ? marksForCase_(caseId) : [];
+    var careformPairs = caseId ? allCareformsForCase_(index, caseId) : [];
+    var careforms = careformPairs.map(function (pair) {
+      return mapCareformDetail_(index, pair, deskLogs);
+    });
+
+    var hasCareform = careforms.some(function (cf) {
+      return VisitRecordIndex.ELIGIBLE[String(cf.status || '')];
+    });
+    var hasMark = marks.length > 0;
+    var visitStatus = caseRow ? String(caseRow.visit_status || '') : '';
+    var village = caseRow
+      ? String(caseRow.visit_village || caseRow.household_village || '').trim()
+      : String((roster && roster.village) || (indexRow && indexRow.village) || '').trim();
+    var rosterStatus = roster
+      ? String(roster.roster_status || '')
+      : indexRow
+        ? String(indexRow.roster_status || '')
+        : '';
+    var channel = '';
+    if (caseRow) {
+      channel =
+        hasCareform && hasMark
+          ? '關懷表+直KEY'
+          : hasCareform
+            ? '已KEY關懷表'
+            : hasMark
+              ? '直KEY'
+              : '無痕跡';
+    } else {
+      channel = '僅清冊';
+      notes.push('系統無名冊／無關懷表（僅清冊快照列）。');
+    }
+
+    if (caseRow && !roster) {
+      notes.push('清冊快照無此身分證對應列。');
+    }
+    if (caseRow && !hasCareform && hasMark) {
+      notes.push('僅有直 KEY 標記、尚無（或無 eligible）關懷表。');
+    }
+    if (caseRow && !hasCareform && !hasMark) {
+      notes.push('系統尚無關懷表與直 KEY 痕跡。');
+    }
+
+    var rawName = caseRow
+      ? String(caseRow.name || '')
+      : String((roster && roster.name) || (indexRow && indexRow.name) || '');
+
+    var civilName = '';
+    var socialName = '';
+    careforms.forEach(function (cf) {
+      if (!civilName && cf.civil_worker_name) civilName = cf.civil_worker_name;
+      if (!socialName && cf.social_worker_name) socialName = cf.social_worker_name;
+    });
+    marks.forEach(function (m) {
+      var mapped = mapMarkDetail_(m);
+      if (!civilName && mapped.civil_worker_name) civilName = mapped.civil_worker_name;
+      if (!socialName && mapped.social_worker_name) socialName = mapped.social_worker_name;
+    });
+
+    return {
+      case_id: caseId || '',
+      name_masked: maskName_(rawName),
+      id_masked: maskId_(nationalId),
+      village: village,
+      visit_status: visitStatus,
+      roster_status: rosterStatus,
+      channel: channel,
+      has_careform: hasCareform,
+      has_direct_mark: hasMark,
+      roster_only: !caseRow,
+      system_only: Boolean(caseRow && !roster),
+      civil_worker_name: civilName || null,
+      social_worker_name: socialName || null,
+      careforms: careforms,
+      marks: marks.map(mapMarkDetail_),
+      desk_logs: deskLogs
+        .slice()
+        .sort(function (a, b) {
+          var at = String(a.keyed_at || a.created_at || '');
+          var bt = String(b.keyed_at || b.created_at || '');
+          return at < bt ? -1 : at > bt ? 1 : 0;
+        })
+        .map(mapDeskLogDetail_),
+      notes: notes,
     };
   }
 
@@ -374,7 +702,7 @@ var CaseProgressModule = (function () {
         '「直 KEY」= 本平台 MOHW 進度標記（proxy），不代表衛福後台一定已 KEY 成功。',
         '「已 KEY 關懷表」= 關懷表狀態為已提交／已稽核。',
         '「有紀錄」= 關懷表 ∪ 直 KEY（兩者皆分別標示）。',
-        '點選分桶可開啟全量名單（分頁）；大桶來自分桶索引，請於強制重算後使用。',
+        '點選分桶可開啟全量名單（分頁）；再點列可看訪視／KEY 詳情。大桶來自分桶索引，請於強制重算後使用。',
       ],
       _index_rows: indexRows,
     };
@@ -536,6 +864,7 @@ var CaseProgressModule = (function () {
   return {
     summary: summary,
     listBucket: listBucket,
+    getCaseDetail: getCaseDetail,
     replaceRosterSnapshot: replaceRosterSnapshot,
     rosterMeta: rosterMeta,
   };

@@ -2,18 +2,30 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, ContactRound, Download, RefreshCw } from "lucide-react";
+import { BarChart3, ContactRound, Download, RefreshCw, X } from "lucide-react";
 import { PageIntro } from "@/components/ui/page-intro";
 import { Button } from "@/components/ui/button";
 import {
   CASE_PROGRESS_BUCKET_LABELS,
   type CaseProgressBucketListPayload,
   type CaseProgressBuckets,
+  type CaseProgressCaseDetail,
   type CaseProgressSample,
   type CaseProgressSummaryPayload,
 } from "@/lib/domain/case-progress";
 
 const PAGE_SIZE = 50;
+
+function dash(value: string | null | undefined) {
+  const s = String(value ?? "").trim();
+  return s || "—";
+}
+
+function keyedSourceLabel(source: string | null | undefined) {
+  if (source === "desk_temp") return "桌面 TEMP 登打";
+  if (source === "visitor") return "訪查員";
+  return source ? source : "—";
+}
 
 function Card({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
@@ -120,6 +132,221 @@ async function fetchBucketPage(
   return json.data;
 }
 
+async function fetchCaseDetail(params: {
+  case_id?: string;
+  bucket?: string;
+  seq?: number;
+}): Promise<CaseProgressCaseDetail> {
+  const qs = new URLSearchParams();
+  if (params.case_id) qs.set("case_id", params.case_id);
+  if (!params.case_id && params.bucket) qs.set("bucket", params.bucket);
+  if (!params.case_id && params.seq) qs.set("seq", String(params.seq));
+  const response = await fetch(`/api/manager/case-progress/detail?${qs.toString()}`);
+  const json = (await response.json()) as {
+    data?: CaseProgressCaseDetail;
+    error?: { message?: string };
+  };
+  if (!response.ok) {
+    throw new Error(json.error?.message ?? "無法載入個案詳情");
+  }
+  if (!json.data) throw new Error("無法載入個案詳情");
+  return json.data;
+}
+
+function CaseDetailModal({
+  detail,
+  loading,
+  error,
+  onClose,
+}: {
+  detail: CaseProgressCaseDetail | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="個案訪視詳情"
+      onClick={onClose}
+    >
+      <section
+        className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border bg-card shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b p-4">
+          <div>
+            <p className="text-sm font-medium text-primary">個案訪視詳情</p>
+            <h2 className="mt-1 text-lg font-semibold">
+              {detail ? `${detail.name_masked} · ${detail.id_masked}` : loading ? "載入中…" : "個案"}
+            </h2>
+            {detail ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dash(detail.village)} · {dash(detail.channel)}
+                {detail.case_id ? ` · ${detail.case_id}` : ""}
+              </p>
+            ) : null}
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+            關閉
+          </Button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm">
+          {loading ? <p className="text-muted-foreground">載入個案詳情中…</p> : null}
+          {error ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
+              {error}
+            </p>
+          ) : null}
+
+          {detail ? (
+            <>
+              {(detail.notes ?? []).length > 0 ? (
+                <div className="space-y-1 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-muted-foreground">
+                  {detail.notes.map((note) => (
+                    <p key={note}>{note}</p>
+                  ))}
+                </div>
+              ) : null}
+
+              <section className="space-y-2">
+                <h3 className="font-semibold">基本資料</h3>
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">系統訪視狀態</dt>
+                    <dd>{dash(detail.visit_status)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">清冊狀態</dt>
+                    <dd>{dash(detail.roster_status)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">通道</dt>
+                    <dd>{dash(detail.channel)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">里</dt>
+                    <dd>{dash(detail.village)}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="font-semibold">訪視側（社政／民政）</h3>
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border px-3 py-2">
+                    <dt className="text-xs text-muted-foreground">民政</dt>
+                    <dd className="mt-1 font-medium">{dash(detail.civil_worker_name)}</dd>
+                  </div>
+                  <div className="rounded-md border px-3 py-2">
+                    <dt className="text-xs text-muted-foreground">社政</dt>
+                    <dd className="mt-1 font-medium">{dash(detail.social_worker_name)}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="font-semibold">關懷表（{detail.careforms.length}）</h3>
+                {detail.careforms.length === 0 ? (
+                  <p className="text-muted-foreground">無關懷表</p>
+                ) : (
+                  <div className="space-y-2">
+                    {detail.careforms.map((cf) => (
+                      <div key={cf.careform_id || `${cf.status}-${cf.submitted_at}`} className="rounded-md border px-3 py-2 space-y-1">
+                        <p className="font-medium">
+                          {dash(cf.status)}
+                          {cf.visit_result ? ` · ${cf.visit_result}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          送出 {dash(cf.submitted_at)}
+                          {cf.audited_at ? ` · 稽核 ${cf.audited_at}` : ""}
+                        </p>
+                        <p>
+                          KEY 者：{dash(cf.keyed_by_name)}
+                          {cf.keyed_clerk_id ? `（${cf.keyed_clerk_id}）` : ""}
+                          {" · "}
+                          {keyedSourceLabel(cf.keyed_source)}
+                          {cf.visitor_side_label ? ` · ${cf.visitor_side_label}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          訪視日時 {dash(cf.visit_date)}{" "}
+                          {cf.visit_start_time || cf.visit_end_time
+                            ? `${dash(cf.visit_start_time)}–${dash(cf.visit_end_time)}`
+                            : ""}
+                        </p>
+                        <p className="text-xs">
+                          表內民政 {dash(cf.civil_worker_name)}
+                          {cf.civil_worker_date ? `（${cf.civil_worker_date}）` : ""}
+                          {" · "}
+                          表內社政 {dash(cf.social_worker_name)}
+                          {cf.social_worker_date ? `（${cf.social_worker_date}）` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="font-semibold">直 KEY 標記（{detail.marks.length}）</h3>
+                {detail.marks.length === 0 ? (
+                  <p className="text-muted-foreground">無直 KEY 標記</p>
+                ) : (
+                  <div className="space-y-2">
+                    {detail.marks.map((mark) => (
+                      <div key={mark.mark_id || `${mark.outcome}-${mark.reported_at}`} className="rounded-md border px-3 py-2 space-y-1">
+                        <p className="font-medium">{dash(mark.outcome)}</p>
+                        <p>
+                          民政 {dash(mark.civil_worker_name)}
+                          {" · "}
+                          社政 {dash(mark.social_worker_name)}
+                        </p>
+                        <p>
+                          KEY 者 {dash(mark.keyed_by_name)}
+                          {mark.keyed_by_id ? `（${mark.keyed_by_id}）` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          回報 {dash(mark.reported_at)}
+                          {mark.reported_by ? ` · ${mark.reported_by}` : ""}
+                          {mark.source ? ` · ${mark.source}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {detail.desk_logs.length > 0 ? (
+                <section className="space-y-2">
+                  <h3 className="font-semibold">桌面 TEMP 登打紀錄（{detail.desk_logs.length}）</h3>
+                  <div className="space-y-2">
+                    {detail.desk_logs.map((log) => (
+                      <div key={log.log_id || `${log.clerk_id}-${log.keyed_at}`} className="rounded-md border px-3 py-2 text-xs space-y-1">
+                        <p>
+                          {dash(log.display_name)}
+                          {log.clerk_id ? `（${log.clerk_id}）` : ""}
+                          {log.visit_result ? ` · ${log.visit_result}` : ""}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {dash(log.visit_date)} · KEY 於 {dash(log.keyed_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function CaseProgressDashboard() {
   const [data, setData] = useState<CaseProgressSummaryPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +359,10 @@ export function CaseProgressDashboard() {
   const [bucketLoading, setBucketLoading] = useState(false);
   const [bucketMessage, setBucketMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState<CaseProgressCaseDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const loadBucket = useCallback(async (bucket: keyof CaseProgressBuckets, page: number) => {
     setBucketLoading(true);
@@ -198,6 +429,26 @@ export function CaseProgressDashboard() {
   const listTotal = bucketList?.total ?? 0;
   const totalPages = bucketList?.total_pages ?? 0;
 
+  async function openCaseDetail(row: CaseProgressSample) {
+    setDetailOpen(true);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const payload = row.case_id
+        ? await fetchCaseDetail({ case_id: row.case_id })
+        : await fetchCaseDetail({
+            bucket: selectedBucket ?? undefined,
+            seq: row.seq,
+          });
+      setDetail(payload);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : "無法載入個案詳情");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
   async function exportAllCsv() {
     if (!selectedBucket) return;
     setExporting(true);
@@ -229,7 +480,7 @@ export function CaseProgressDashboard() {
         icon={ContactRound}
         eyebrow="個案視角"
         title="個案進度儀表板"
-        description="以個案為母體：已 KEY 關懷表與直 KEY 分別標示；並對照清冊全量分桶（A–F）。點選分桶可開啟全量名單（分頁、遮罩）。里別進度請看衛福部進度儀表板。"
+        description="以個案為母體：已 KEY 關懷表與直 KEY 分別標示；並對照清冊全量分桶（A–F）。點選分桶可開啟全量名單（分頁、遮罩）；再點列可看訪視／KEY 詳情。里別進度請看衛福部進度儀表板。"
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -364,7 +615,7 @@ export function CaseProgressDashboard() {
                   {selectedBucket
                     ? ` · 摘要 ${selectedCount.toLocaleString()} 人 · 索引 ${listTotal.toLocaleString()} 人`
                     : ""}
-                  {` · 每頁 ${PAGE_SIZE} 筆`}
+                  {` · 每頁 ${PAGE_SIZE} 筆 · 點列開詳情`}
                 </p>
               </div>
               <Button
@@ -409,7 +660,11 @@ export function CaseProgressDashboard() {
                     </thead>
                     <tbody>
                       {(bucketList?.rows ?? []).map((row, idx) => (
-                        <tr key={`${row.case_id}-${row.id_masked}-${idx}`} className="border-t">
+                        <tr
+                          key={`${row.case_id}-${row.seq ?? idx}-${row.id_masked}-${idx}`}
+                          className="border-t cursor-pointer hover:bg-muted/30"
+                          onClick={() => void openCaseDetail(row)}
+                        >
                           <td className="px-3 py-2">{row.name_masked}</td>
                           <td className="px-3 py-2 font-mono text-xs">{row.id_masked}</td>
                           <td className="px-3 py-2">{row.village || "—"}</td>
@@ -464,6 +719,19 @@ export function CaseProgressDashboard() {
           </section>
         </>
       )}
+
+      {detailOpen ? (
+        <CaseDetailModal
+          detail={detail}
+          loading={detailLoading}
+          error={detailError}
+          onClose={() => {
+            setDetailOpen(false);
+            setDetail(null);
+            setDetailError(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

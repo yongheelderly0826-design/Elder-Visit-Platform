@@ -36,6 +36,8 @@ export type CaseProgressBuckets = {
 
 export type CaseProgressSample = {
   case_id: string;
+  /** 分桶索引序號；無 case_id 時用 bucket+seq 開詳情 */
+  seq?: number;
   name_masked: string;
   id_masked: string;
   village: string;
@@ -45,6 +47,71 @@ export type CaseProgressSample = {
   mark_outcome: string;
   roster_status: string;
   channel: string;
+};
+
+export type CaseProgressCareformDetail = {
+  careform_id: string;
+  status: string;
+  submitted_at: string | null;
+  audited_at: string | null;
+  visit_result: string | null;
+  visit_date: string | null;
+  visit_start_time: string | null;
+  visit_end_time: string | null;
+  keyed_by_name: string | null;
+  keyed_source: "visitor" | "desk_temp" | string | null;
+  keyed_clerk_id: string | null;
+  visitor_side: "civil" | "social" | string | null;
+  visitor_side_label: string | null;
+  civil_worker_name: string | null;
+  social_worker_name: string | null;
+  civil_worker_date: string | null;
+  social_worker_date: string | null;
+};
+
+export type CaseProgressMarkDetail = {
+  mark_id: string;
+  outcome: string;
+  source: string | null;
+  civil_worker_id: string | null;
+  civil_worker_name: string | null;
+  social_worker_id: string | null;
+  social_worker_name: string | null;
+  keyed_by_id: string | null;
+  keyed_by_name: string | null;
+  reported_at: string | null;
+  reported_by: string | null;
+  village_name: string | null;
+};
+
+export type CaseProgressDeskLogDetail = {
+  log_id: string;
+  clerk_id: string | null;
+  display_name: string | null;
+  careform_id: string | null;
+  visit_result: string | null;
+  visit_date: string | null;
+  keyed_at: string | null;
+};
+
+export type CaseProgressCaseDetail = {
+  case_id: string;
+  name_masked: string;
+  id_masked: string;
+  village: string;
+  visit_status: string;
+  roster_status: string;
+  channel: string;
+  has_careform: boolean;
+  has_direct_mark: boolean;
+  roster_only: boolean;
+  system_only: boolean;
+  civil_worker_name: string | null;
+  social_worker_name: string | null;
+  careforms: CaseProgressCareformDetail[];
+  marks: CaseProgressMarkDetail[];
+  desk_logs: CaseProgressDeskLogDetail[];
+  notes: string[];
 };
 
 export type CaseProgressBucketListPayload = {

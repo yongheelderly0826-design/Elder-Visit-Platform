@@ -6,6 +6,14 @@
 - **Evidence:** `CaseProgressModule.gs`, `case-progress-dashboard.tsx`, `/api/manager/case-progress/bucket`.
 - **Added on:** 2026-11-22
 
+## Lesson: 分桶列詳情用 case_id 或 bucket+seq，勿回完整身分證
+
+- **Trigger:** 主管要從分桶名單點列看誰訪、誰 KEY，但僅清冊列沒有 case_id，且 UI 只有遮罩證號。
+- **Cause:** 前端不能帶完整 national_id；roster-only 需另一個查詢鍵。
+- **Rule:** `caseProgress.getCaseDetail` 接受 `case_id` 或 `bucket+seq`；回傳遮罩基本資料、關懷表 KEY 者（訪查員／desk TEMP）、直 KEY 社政／民政欄。listBucket 需回 `seq`。
+- **Evidence:** `CaseProgressModule.getCaseDetail`, `/api/manager/case-progress/detail`, case-progress detail modal.
+- **Added on:** 2026-11-23
+
 ## Lesson: 公開存摺補件必須活動碼＋截止日，且 TEMP 不可審
 
 - **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
