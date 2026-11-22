@@ -31,6 +31,14 @@ export function middleware(request: NextRequest) {
     pathname === "/api/attendance/me" ||
     pathname === "/api/attendance/clock" ||
     pathname === "/api/attendance/badge-qr";
+  // 暫時公開存摺補件：活動碼＋身分核對，不需登入（審核頁仍受保護）
+  const isPublicPassbook =
+    pathname === "/passbook" ||
+    pathname === "/volunteer/passbook" ||
+    pathname.startsWith("/volunteer/passbook/") ||
+    pathname === "/api/volunteer/passbook/verify" ||
+    pathname === "/api/volunteer/passbook/me" ||
+    pathname === "/api/volunteer/passbook/submit";
   const isAsset = pathname.startsWith("/_next/") || pathname.startsWith("/favicon");
 
   if (
@@ -40,6 +48,7 @@ export function middleware(request: NextRequest) {
     isPublicBadgeRoute ||
     isPublicBadgeApi ||
     isPublicVolunteerClock ||
+    isPublicPassbook ||
     isAsset
   ) {
     return NextResponse.next();
