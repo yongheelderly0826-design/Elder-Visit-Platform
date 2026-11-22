@@ -204,9 +204,7 @@ var PassbookModule = (function () {
   function verify(data) {
     ensureSchema_();
     data = data || {};
-    var expected = campaignCode_();
     var campaignCode = String(data.campaign_code || '').trim();
-    if (!campaignCode && expected) campaignCode = expected;
     var name = String(data.name || '').trim();
     var idNumber = extractTaiwanId_(data.id_number);
     var phoneLast4 = String(data.phone_last4 || '').replace(/\D/g, '').slice(-4);
@@ -236,7 +234,7 @@ var PassbookModule = (function () {
       visitor_id: visitor.visitor_id,
       name: visitor.name || '',
       status: visitor.status || '',
-      campaign_code: campaignCode || expected || 'open',
+      campaign_code: campaignCode || 'open',
       deadline: deadlineDate_(),
       channel_open: true,
     };

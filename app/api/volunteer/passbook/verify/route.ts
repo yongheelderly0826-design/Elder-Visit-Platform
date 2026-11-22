@@ -3,10 +3,8 @@ import { NextResponse } from "next/server";
 import { extractTaiwanId } from "@/lib/domain/volunteer-attendance";
 import { GasApiError, gasClient } from "@/lib/gas-client";
 import {
-  getPassbookCampaignCodeFromEnv,
   getPassbookDeadlineFromEnv,
   isPassbookChannelOpenLocally,
-  isPassbookDeadlineOpenLocally,
 } from "@/lib/passbook/campaign";
 import {
   PASSBOOK_GENERIC_ERROR,
@@ -25,11 +23,7 @@ export async function POST(request: NextRequest) {
     phone_last4?: string;
   };
 
-  const envCode = getPassbookCampaignCodeFromEnv();
-  let campaignCode = String(body.campaignCode ?? body.campaign_code ?? "").trim();
-  // Open mode: no campaign code required; optional alias still accepted.
-  if (!campaignCode && envCode) campaignCode = envCode;
-
+  const campaignCode = String(body.campaignCode ?? body.campaign_code ?? "").trim();
   const name = String(body.name ?? "").trim();
   const idNumber = extractTaiwanId(body.idNumber ?? body.id_number ?? "");
   const phoneLast4 = String(body.phoneLast4 ?? body.phone_last4 ?? "")
@@ -44,13 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Fast local reject: deadline always; code only when env configures one.
-  if (!isPassbookDeadlineOpenLocally()) {
-    return NextResponse.json(
-      { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
-      { status: 403 },
-    );
-  }
-  if (envCode && !isPassbookChannelOpenLocally(campaignCode)) {
+  if (!isPassbookChannelOpenLocally(campaignCode)) {
     return NextResponse.json(
       { error: { code: "FORBIDDEN", message: PASSBOOK_GENERIC_ERROR } },
       { status: 403 },
