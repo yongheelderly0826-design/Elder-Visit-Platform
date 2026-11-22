@@ -118,12 +118,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const t0 = Date.now();
     const raw = await gasClient.caseProgress.getCaseDetail({
       ...(caseId ? { case_id: caseId } : {}),
       ...(!caseId && bucket ? { bucket } : {}),
       ...(!caseId && seq ? { seq } : {}),
     });
-    return NextResponse.json({ data: mapPayload(raw) });
+    const elapsed = Date.now() - t0;
+    console.info(
+      `[case-progress/detail] ${elapsed}ms case_id=${caseId || "-"} bucket=${bucket || "-"} seq=${seq || "-"}`,
+    );
+    return NextResponse.json({
+      data: mapPayload(raw),
+      meta: { elapsed_ms: elapsed },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法載入個案詳情";
     const notFound = /找不到|NOT_FOUND/i.test(message);

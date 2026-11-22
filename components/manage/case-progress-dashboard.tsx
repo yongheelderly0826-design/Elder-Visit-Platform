@@ -153,6 +153,28 @@ async function fetchCaseDetail(params: {
   return json.data;
 }
 
+function previewFromSample(row: CaseProgressSample): CaseProgressCaseDetail {
+  return {
+    case_id: row.case_id || "",
+    name_masked: row.name_masked,
+    id_masked: row.id_masked,
+    village: row.village,
+    visit_status: row.visit_status,
+    roster_status: row.roster_status,
+    channel: row.channel,
+    has_careform: row.has_careform,
+    has_direct_mark: row.has_direct_mark,
+    roster_only: !row.case_id,
+    system_only: Boolean(row.case_id && !row.roster_status),
+    civil_worker_name: null,
+    social_worker_name: null,
+    careforms: [],
+    marks: [],
+    desk_logs: [],
+    notes: [],
+  };
+}
+
 function CaseDetailModal({
   detail,
   loading,
@@ -196,7 +218,10 @@ function CaseDetailModal({
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm">
-          {loading ? <p className="text-muted-foreground">載入個案詳情中…</p> : null}
+          {loading && detail ? (
+            <p className="text-muted-foreground">正在補齊關懷表／直 KEY 明細…</p>
+          ) : null}
+          {loading && !detail ? <p className="text-muted-foreground">載入個案詳情中…</p> : null}
           {error ? (
             <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
               {error}
@@ -250,8 +275,12 @@ function CaseDetailModal({
               </section>
 
               <section className="space-y-2">
-                <h3 className="font-semibold">關懷表（{detail.careforms.length}）</h3>
-                {detail.careforms.length === 0 ? (
+                <h3 className="font-semibold">
+                  關懷表{loading ? "" : `（${detail.careforms.length}）`}
+                </h3>
+                {loading && detail.careforms.length === 0 ? (
+                  <p className="text-muted-foreground">載入中…</p>
+                ) : detail.careforms.length === 0 ? (
                   <p className="text-muted-foreground">無關懷表</p>
                 ) : (
                   <div className="space-y-2">
@@ -292,8 +321,12 @@ function CaseDetailModal({
               </section>
 
               <section className="space-y-2">
-                <h3 className="font-semibold">直 KEY 標記（{detail.marks.length}）</h3>
-                {detail.marks.length === 0 ? (
+                <h3 className="font-semibold">
+                  直 KEY 標記{loading ? "" : `（${detail.marks.length}）`}
+                </h3>
+                {loading && detail.marks.length === 0 ? (
+                  <p className="text-muted-foreground">載入中…</p>
+                ) : detail.marks.length === 0 ? (
                   <p className="text-muted-foreground">無直 KEY 標記</p>
                 ) : (
                   <div className="space-y-2">
@@ -431,9 +464,10 @@ export function CaseProgressDashboard() {
 
   async function openCaseDetail(row: CaseProgressSample) {
     setDetailOpen(true);
-    setDetail(null);
+    setDetail(previewFromSample(row));
     setDetailError(null);
     setDetailLoading(true);
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     try {
       const payload = row.case_id
         ? await fetchCaseDetail({ case_id: row.case_id })
@@ -442,6 +476,10 @@ export function CaseProgressDashboard() {
             seq: row.seq,
           });
       setDetail(payload);
+      const elapsed = Math.round(
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0,
+      );
+      console.info(`[case-progress detail] ${elapsed}ms case_id=${row.case_id || "-"}`);
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : "無法載入個案詳情");
     } finally {

@@ -167,81 +167,145 @@ var CaseProgressModule = (function () {
   }
 
   function findIndexRow_(bucket, seq) {
-    ensureSchema_();
     var wantBucket = String(bucket || '').trim();
     var wantSeq = Number(seq) || 0;
     if (!wantBucket || !wantSeq) return null;
-    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(INDEX));
-    for (var i = 0; i < rows.length; i++) {
-      if (String(rows[i].bucket || '') === wantBucket && (Number(rows[i].seq) || 0) === wantSeq) {
-        return rows[i];
-      }
+    var sheet = SheetHelper.getSheet(INDEX);
+    var headers = SheetHelper.getHeaders(sheet).map(String);
+    var bucketIdx = headers.indexOf('bucket');
+    var seqIdx = headers.indexOf('seq');
+    if (bucketIdx < 0 || seqIdx < 0) return null;
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    // 只讀兩欄定位列號，避免全列物件化
+    var bucketCol = sheet.getRange(2, bucketIdx + 1, lastRow - 1, 1).getValues();
+    var seqCol = sheet.getRange(2, seqIdx + 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < bucketCol.length; i++) {
+      if (String(bucketCol[i][0] || '') !== wantBucket) continue;
+      if ((Number(seqCol[i][0]) || 0) !== wantSeq) continue;
+      var values = sheet.getRange(i + 2, 1, 1, headers.length).getValues()[0];
+      var obj = {};
+      headers.forEach(function (h, j) {
+        obj[h] = values[j];
+      });
+      return obj;
     }
     return null;
   }
 
   function findRosterById_(nid) {
-    ensureSchema_();
     var want = normId_(nid);
     if (!want) return null;
-    var rows = SheetHelper.rowsToObjects(SheetHelper.getSheet(ROSTER));
-    for (var i = 0; i < rows.length; i++) {
-      if (normId_(rows[i].national_id) === want) return rows[i];
+    var hit = SheetHelper.findFirstByKeyFast(ROSTER, 'national_id', want);
+    if (hit) return hit;
+    // 格式差異（空白／連字號）時退回只掃身分證欄
+    var sheet = SheetHelper.getSheet(ROSTER);
+    var headers = SheetHelper.getHeaders(sheet).map(String);
+    var idIdx = headers.indexOf('national_id');
+    if (idIdx < 0) return null;
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    var col = sheet.getRange(2, idIdx + 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < col.length; i++) {
+      if (normId_(col[i][0]) !== want) continue;
+      var values = sheet.getRange(i + 2, 1, 1, headers.length).getValues()[0];
+      var obj = {};
+      headers.forEach(function (h, j) {
+        obj[h] = values[j];
+      });
+      return obj;
     }
     return null;
   }
 
-  function findCaseByNationalId_(index, nid) {
+  function findCaseById_(caseId) {
+    var id = String(caseId || '').trim();
+    if (!id) return null;
+    return SheetHelper.findFirstByKeyFast(Config.SHEET_NAMES.CASES, 'case_id', id);
+  }
+
+  function findCaseByNationalIdFast_(nid) {
     var want = normId_(nid);
     if (!want) return null;
-    for (var i = 0; i < index.cases.length; i++) {
-      if (normId_(index.cases[i].id_number) === want) return index.cases[i];
+    var hit = SheetHelper.findFirstByKeyFast(Config.SHEET_NAMES.CASES, 'id_number', want);
+    if (hit) return hit;
+    var sheet = SheetHelper.getSheet(Config.SHEET_NAMES.CASES);
+    var headers = SheetHelper.getHeaders(sheet).map(String);
+    var idIdx = headers.indexOf('id_number');
+    if (idIdx < 0) return null;
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    var col = sheet.getRange(2, idIdx + 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < col.length; i++) {
+      if (normId_(col[i][0]) !== want) continue;
+      var values = sheet.getRange(i + 2, 1, 1, headers.length).getValues()[0];
+      var obj = {};
+      headers.forEach(function (h, j) {
+        obj[h] = values[j];
+      });
+      return obj;
     }
     return null;
   }
 
-  function allCareformsForCase_(index, caseId) {
-    var found = [];
-    (index.assignmentsByCase[String(caseId || '').trim()] || []).forEach(function (assignment) {
-      (index.careformsByAssignment[String(assignment.assignment_id || '').trim()] || []).forEach(
-        function (careform) {
-          found.push({ careform: careform, assignment: assignment });
-        }
+  /** 單案：派案→關懷表→訪查員，不建全量 VisitRecordIndex。 */
+  function loadCareformBundleForCase_(caseId) {
+    var id = String(caseId || '').trim();
+    var pairs = [];
+    var visitorById = {};
+    if (!id) return { pairs: pairs, visitorById: visitorById };
+
+    var assignments = SheetHelper.findRowsByKeyFast(Config.SHEET_NAMES.ASSIGNMENTS, 'case_id', id);
+    var visitorIds = {};
+    assignments.forEach(function (assignment) {
+      var aid = String(assignment.assignment_id || '').trim();
+      if (!aid) return;
+      var careforms = SheetHelper.findRowsByKeyFast(
+        Config.SHEET_NAMES.CAREFORMS,
+        'assignment_id',
+        aid
       );
+      careforms.forEach(function (careform) {
+        pairs.push({ careform: careform, assignment: assignment });
+        var vid = String(careform.visitor_id || assignment.visitor_id || '').trim();
+        if (vid) visitorIds[vid] = true;
+      });
     });
-    found.sort(function (a, b) {
+
+    pairs.sort(function (a, b) {
       var at = String(a.careform.submitted_at || a.careform.audited_at || '');
       var bt = String(b.careform.submitted_at || b.careform.audited_at || '');
       return at < bt ? -1 : at > bt ? 1 : 0;
     });
-    return found;
+
+    Object.keys(visitorIds).forEach(function (vid) {
+      var visitor = SheetHelper.findFirstByKeyFast(Config.SHEET_NAMES.VISITORS, 'visitor_id', vid);
+      if (visitor) visitorById[vid] = visitor;
+    });
+
+    return { pairs: pairs, visitorById: visitorById };
   }
 
   function deskLogsForCase_(caseId) {
     var id = String(caseId || '').trim();
     if (!id) return [];
-    return SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.DESK_KEY_LOGS)).filter(
-      function (row) {
-        return String(row.case_id || '').trim() === id;
-      }
-    );
+    return SheetHelper.findRowsByKeyFast(Config.SHEET_NAMES.DESK_KEY_LOGS, 'case_id', id);
   }
 
   function marksForCase_(caseId) {
     var id = String(caseId || '').trim();
     if (!id) return [];
-    return SheetHelper.rowsToObjects(SheetHelper.getSheet(MARKS)).filter(function (row) {
-      if (String(row.case_id || '').trim() !== id) return false;
+    return SheetHelper.findRowsByKeyFast(MARKS, 'case_id', id).filter(function (row) {
       return String(row.status || 'active') === 'active';
     });
   }
 
-  function mapCareformDetail_(index, pair, deskLogs) {
+  function mapCareformDetail_(pair, visitorById, deskLogs) {
     var careform = pair.careform;
     var assignment = pair.assignment;
     var answers = parseAnswers_(careform.answers_json);
     var visitorId = String(careform.visitor_id || assignment.visitor_id || '').trim();
-    var visitor = (index.visitorById && index.visitorById[visitorId]) || {};
+    var visitor = (visitorById && visitorById[visitorId]) || {};
     var visitorName = String(visitor.name || '').trim();
     var side = visitorSide_(visitor);
     var careformId = String(careform.careform_id || '').trim();
@@ -322,7 +386,8 @@ var CaseProgressModule = (function () {
 
   function getCaseDetail(params) {
     params = params || {};
-    ensureSchema_();
+    var t0 = Date.now();
+    var timings = {};
 
     var caseId = String(params.case_id || '').trim();
     var nationalId = normId_(params.national_id);
@@ -331,8 +396,30 @@ var CaseProgressModule = (function () {
     var notes = [];
     var indexRow = null;
 
+    var cacheToken = caseId
+      ? 'id:' + caseId
+      : nationalId
+        ? 'nid:' + nationalId
+        : bucket && seq
+          ? 'b:' + bucket + ':' + seq
+          : '';
+    if (cacheToken) {
+      var cacheKey = ReadCache.key('cpD:' + cacheToken);
+      var cached = ReadCache.getJson(cacheKey);
+      if (cached && cached.case_id !== undefined) {
+        Logger.log(
+          '[caseProgress.getCaseDetail] cacheHit token=%s totalMs=%s',
+          cacheToken,
+          Date.now() - t0
+        );
+        return cached;
+      }
+    }
+
     if (!caseId && !nationalId && bucket && seq) {
+      var tIndex = Date.now();
       indexRow = findIndexRow_(bucket, seq);
+      timings.index_ms = Date.now() - tIndex;
       if (!indexRow) {
         var missing = new Error('找不到分桶索引列');
         missing.code = 'NOT_FOUND';
@@ -348,20 +435,24 @@ var CaseProgressModule = (function () {
       throw bad;
     }
 
-    var index = VisitRecordIndex.build();
+    var tCase = Date.now();
     var caseRow = null;
-    if (caseId && index.caseById[caseId]) {
-      caseRow = index.caseById[caseId];
-    } else if (nationalId) {
-      caseRow = findCaseByNationalId_(index, nationalId);
+    if (caseId) {
+      caseRow = findCaseById_(caseId);
+    }
+    if (!caseRow && nationalId) {
+      caseRow = findCaseByNationalIdFast_(nationalId);
       if (caseRow) caseId = String(caseRow.case_id || '').trim();
     }
+    timings.case_ms = Date.now() - tCase;
 
     if (caseRow && !nationalId) {
       nationalId = normId_(caseRow.id_number);
     }
 
+    var tRoster = Date.now();
     var roster = nationalId ? findRosterById_(nationalId) : null;
+    timings.roster_ms = Date.now() - tRoster;
     if (!caseRow && !roster && indexRow) {
       roster = {
         national_id: indexRow.national_id,
@@ -377,11 +468,16 @@ var CaseProgressModule = (function () {
       throw nf;
     }
 
+    var tRelated = Date.now();
     var deskLogs = caseId ? deskLogsForCase_(caseId) : [];
     var marks = caseId ? marksForCase_(caseId) : [];
-    var careformPairs = caseId ? allCareformsForCase_(index, caseId) : [];
-    var careforms = careformPairs.map(function (pair) {
-      return mapCareformDetail_(index, pair, deskLogs);
+    var bundle = caseId
+      ? loadCareformBundleForCase_(caseId)
+      : { pairs: [], visitorById: {} };
+    timings.related_ms = Date.now() - tRelated;
+
+    var careforms = bundle.pairs.map(function (pair) {
+      return mapCareformDetail_(pair, bundle.visitorById, deskLogs);
     });
 
     var hasCareform = careforms.some(function (cf) {
@@ -438,7 +534,7 @@ var CaseProgressModule = (function () {
       if (!socialName && mapped.social_worker_name) socialName = mapped.social_worker_name;
     });
 
-    return {
+    var payload = {
       case_id: caseId || '',
       name_masked: maskName_(rawName),
       id_masked: maskId_(nationalId),
@@ -464,6 +560,25 @@ var CaseProgressModule = (function () {
         .map(mapDeskLogDetail_),
       notes: notes,
     };
+
+    timings.total_ms = Date.now() - t0;
+    Logger.log(
+      '[caseProgress.getCaseDetail] token=%s totalMs=%s caseMs=%s rosterMs=%s relatedMs=%s indexMs=%s careforms=%s marks=%s',
+      cacheToken || '(none)',
+      timings.total_ms,
+      timings.case_ms || 0,
+      timings.roster_ms || 0,
+      timings.related_ms || 0,
+      timings.index_ms || 0,
+      careforms.length,
+      marks.length
+    );
+
+    if (cacheToken) {
+      ReadCache.putJson(ReadCache.key('cpD:' + cacheToken), payload);
+    }
+
+    return payload;
   }
 
   function saveBucketIndex_(rows) {

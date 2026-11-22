@@ -1,3 +1,11 @@
+## Lesson: getCaseDetail 禁止 VisitRecordIndex.build 全表掃描
+
+- **Trigger:** `/manager/case-progress` 點列詳情卡 3–5 秒「載入中」。
+- **Cause:** 單案查詢卻 `VisitRecordIndex.build()` 讀名冊／派案／關懷表／稽核／訪查員全表，再掃清冊／marks／desk logs。
+- **Rule:** 單案用 `SheetHelper.findFirstByKeyFast`／`findRowsByKeyFast`（TextFinder）依 case_id／assignment_id 取列；結果可進 `ReadCache`（~25s）；UI 先用 listBucket 列做 preview。全量 index 僅留給 summary／export。
+- **Evidence:** `CaseProgressModule.getCaseDetail`, `SheetHelper.find*ByKeyFast`, `case-progress-dashboard.tsx`.
+- **Added on:** 2026-11-23
+
 ## Lesson: 清冊分桶全量名單用索引表分頁，勿每次 live join
 
 - **Trigger:** 個案進度 A–F 桶（尤其 F 僅清冊待訪 ~9k）點開只能看 sample_limit 抽樣，無法開全量。

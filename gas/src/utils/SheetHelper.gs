@@ -75,6 +75,57 @@ var SheetHelper = (function () {
     });
   }
 
+  function rowObjectFromValues_(headers, values) {
+    var obj = {};
+    headers.forEach(function (h, i) {
+      obj[h] = values[i];
+    });
+    return obj;
+  }
+
+  /**
+   * TextFinder 精準比對（整格），避免 getDataRange 全表進記憶體。
+   * 單案查詢／小結果集比 findByKey 快一個數量級。
+   */
+  function findRowsByKeyFast(sheetName, keyField, keyValue) {
+    var sheet = getSheet(sheetName);
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return [];
+    var headers = getHeaders(sheet).map(String);
+    var keyIdx = headers.indexOf(String(keyField));
+    if (keyIdx === -1) return [];
+    var want = String(keyValue == null ? '' : keyValue);
+    if (!want) return [];
+    var range = sheet.getRange(2, keyIdx + 1, lastRow - 1, 1);
+    var matches = range.createTextFinder(want).matchEntireCell(true).findAll();
+    if (!matches || !matches.length) return [];
+    var out = [];
+    for (var i = 0; i < matches.length; i++) {
+      var rowNum = matches[i].getRow();
+      var values = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+      out.push(rowObjectFromValues_(headers, values));
+    }
+    return out;
+  }
+
+  function findFirstByKeyFast(sheetName, keyField, keyValue) {
+    var sheet = getSheet(sheetName);
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return null;
+    var headers = getHeaders(sheet).map(String);
+    var keyIdx = headers.indexOf(String(keyField));
+    if (keyIdx === -1) return null;
+    var want = String(keyValue == null ? '' : keyValue);
+    if (!want) return null;
+    var range = sheet.getRange(2, keyIdx + 1, lastRow - 1, 1);
+    var cell = range.createTextFinder(want).matchEntireCell(true).findNext();
+    if (!cell) return null;
+    var values = sheet.getRange(cell.getRow(), 1, 1, headers.length).getValues()[0];
+    return rowObjectFromValues_(headers, values);
+  }
+
   /**
    * 依 key 更新第一筆符合的列；patch 合併進現有物件後寫回。
    */
@@ -291,6 +342,8 @@ var SheetHelper = (function () {
     appendRow: appendRow,
     appendRows: appendRows,
     findByKey: findByKey,
+    findRowsByKeyFast: findRowsByKeyFast,
+    findFirstByKeyFast: findFirstByKeyFast,
     updateByKey: updateByKey,
     deleteByKey: deleteByKey,
     clearDataRows: clearDataRows,
