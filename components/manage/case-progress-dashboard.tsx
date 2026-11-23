@@ -24,6 +24,7 @@ function dash(value: string | null | undefined) {
 function keyedSourceLabel(source: string | null | undefined) {
   if (source === "desk_temp") return "桌面 TEMP 登打";
   if (source === "visitor") return "訪查員";
+  if (source === "direct_mark") return "直 KEY 回報";
   return source ? source : "—";
 }
 
@@ -177,6 +178,10 @@ function previewFromSample(row: CaseProgressSample): CaseProgressCaseDetail {
     system_only: Boolean(row.case_id && !row.roster_status),
     civil_worker_name: null,
     social_worker_name: null,
+    builder_name: null,
+    builder_source: null,
+    builder_clerk_id: null,
+    builder_at: null,
     careforms: [],
     marks: [],
     desk_logs: [],
@@ -270,6 +275,20 @@ function CaseDetailModal({
               </section>
 
               <section className="space-y-2">
+                <h3 className="font-semibold">建檔人員</h3>
+                <div className="rounded-md border px-3 py-2">
+                  <p className="font-medium">
+                    {loading && !detail.builder_name ? "載入中…" : dash(detail.builder_name)}
+                    {detail.builder_clerk_id ? `（${detail.builder_clerk_id}）` : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {detail.builder_source ? keyedSourceLabel(detail.builder_source) : "尚無建檔／KEY 紀錄"}
+                    {detail.builder_at ? ` · ${detail.builder_at}` : ""}
+                  </p>
+                </div>
+              </section>
+
+              <section className="space-y-2">
                 <h3 className="font-semibold">訪視側（社政／民政）</h3>
                 <dl className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-md border px-3 py-2">
@@ -304,7 +323,7 @@ function CaseDetailModal({
                           {cf.audited_at ? ` · 稽核 ${cf.audited_at}` : ""}
                         </p>
                         <p>
-                          KEY 者：{dash(cf.keyed_by_name)}
+                          建檔／KEY：{dash(cf.keyed_by_name)}
                           {cf.keyed_clerk_id ? `（${cf.keyed_clerk_id}）` : ""}
                           {" · "}
                           {keyedSourceLabel(cf.keyed_source)}

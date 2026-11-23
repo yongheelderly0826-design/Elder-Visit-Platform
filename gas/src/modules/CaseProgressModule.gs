@@ -552,10 +552,16 @@ var CaseProgressModule = (function () {
       timings.bundle_skipped = skipCareforms ? 1 : 0;
     }
 
-    // desk log 全表 TextFinder ~1s；詳情改以訪查員 lite 對照 KEY 者，略過以換速度
+    // 建檔人員：以 case_id TextFinder 讀紙本登打紀錄（非全表）；無關懷表時略過
+    var tDesk = Date.now();
     var deskLogs = [];
-    timings.desk_ms = 0;
-    timings.desk_skipped = 1;
+    if (caseId && !skipCareforms) {
+      deskLogs = deskLogsForCase_(caseId);
+      timings.desk_ms = Date.now() - tDesk;
+    } else {
+      timings.desk_ms = 0;
+      timings.desk_skipped = 1;
+    }
     timings.related_ms = (timings.marks_ms || 0) + (timings.desk_ms || 0) + (timings.bundle_ms || 0);
 
     var careforms = bundle.pairs.map(function (pair) {
@@ -618,6 +624,48 @@ var CaseProgressModule = (function () {
       if (!socialName && mapped.social_worker_name) socialName = mapped.social_worker_name;
     });
 
+    // 建檔人員彙總：優先桌面 TEMP 登打 → 關懷表 KEY 者 → 直 KEY keyed_by
+    var builderName = '';
+    var builderSource = '';
+    var builderClerkId = '';
+    var builderAt = '';
+    var sortedDesk = deskLogs.slice().sort(function (a, b) {
+      var at = String(a.keyed_at || a.created_at || '');
+      var bt = String(b.keyed_at || b.created_at || '');
+      return at < bt ? 1 : at > bt ? -1 : 0; // newest first
+    });
+    if (sortedDesk.length) {
+      builderName =
+        String(sortedDesk[0].display_name || '').trim() ||
+        String(sortedDesk[0].clerk_id || '').trim() ||
+        'TEMP';
+      builderSource = 'desk_temp';
+      builderClerkId = String(sortedDesk[0].clerk_id || '').trim();
+      builderAt = String(sortedDesk[0].keyed_at || sortedDesk[0].created_at || '').trim();
+    } else {
+      for (var ci = 0; ci < careforms.length; ci++) {
+        if (careforms[ci].keyed_by_name) {
+          builderName = careforms[ci].keyed_by_name;
+          builderSource = careforms[ci].keyed_source || 'visitor';
+          builderClerkId = careforms[ci].keyed_clerk_id || '';
+          builderAt = careforms[ci].submitted_at || '';
+          break;
+        }
+      }
+    }
+    if (!builderName) {
+      for (var mi = 0; mi < marks.length; mi++) {
+        var mk = mapMarkDetail_(marks[mi]);
+        if (mk.keyed_by_name) {
+          builderName = mk.keyed_by_name;
+          builderSource = 'direct_mark';
+          builderClerkId = mk.keyed_by_id || '';
+          builderAt = mk.reported_at || '';
+          break;
+        }
+      }
+    }
+
     var payload = {
       case_id: caseId || '',
       name_masked: maskName_(rawName),
@@ -632,16 +680,13 @@ var CaseProgressModule = (function () {
       system_only: Boolean(caseRow && !roster),
       civil_worker_name: civilName || null,
       social_worker_name: socialName || null,
+      builder_name: builderName || null,
+      builder_source: builderSource || null,
+      builder_clerk_id: builderClerkId || null,
+      builder_at: builderAt || null,
       careforms: careforms,
       marks: marks.map(mapMarkDetail_),
-      desk_logs: deskLogs
-        .slice()
-        .sort(function (a, b) {
-          var at = String(a.keyed_at || a.created_at || '');
-          var bt = String(b.keyed_at || b.created_at || '');
-          return at < bt ? -1 : at > bt ? 1 : 0;
-        })
-        .map(mapDeskLogDetail_),
+      desk_logs: sortedDesk.map(mapDeskLogDetail_),
       notes: notes,
     };
 

@@ -108,6 +108,11 @@ export type CaseProgressCaseDetail = {
   system_only: boolean;
   civil_worker_name: string | null;
   social_worker_name: string | null;
+  /** 建檔／KEY 人員（優先桌面 TEMP → 關懷表 KEY → 直 KEY） */
+  builder_name: string | null;
+  builder_source: string | null;
+  builder_clerk_id: string | null;
+  builder_at: string | null;
   careforms: CaseProgressCareformDetail[];
   marks: CaseProgressMarkDetail[];
   desk_logs: CaseProgressDeskLogDetail[];
