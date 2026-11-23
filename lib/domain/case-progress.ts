@@ -38,6 +38,10 @@ export type CaseProgressSample = {
   case_id: string;
   /** 分桶索引序號；無 case_id 時用 bucket+seq 開詳情 */
   seq?: number;
+  /** 承辦完整姓名（舊索引可能空白，可回退 name_masked） */
+  name: string;
+  /** 承辦完整身分證（舊索引可能空白，可回退 id_masked） */
+  national_id: string;
   name_masked: string;
   id_masked: string;
   village: string;
@@ -46,6 +50,9 @@ export type CaseProgressSample = {
   has_direct_mark: boolean;
   mark_outcome: string;
   roster_status: string;
+  civil_worker_name: string;
+  social_worker_name: string;
+  builder_name: string;
   channel: string;
 };
 

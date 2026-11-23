@@ -79,17 +79,45 @@ function escapeCsvCell(value: string) {
   return value;
 }
 
+function displayName(row: CaseProgressSample) {
+  return row.name?.trim() || row.name_masked || "—";
+}
+
+function displayNationalId(row: CaseProgressSample) {
+  return row.national_id?.trim() || row.id_masked || "—";
+}
+
+function displayStaff(value: string | null | undefined) {
+  const s = String(value ?? "").trim();
+  return s || "—";
+}
+
 function rowsToCsv(rows: CaseProgressSample[]) {
-  const header = ["姓名", "身分證", "里", "系統狀態", "清冊狀態", "通道", "直KEY結果", "個案編號"];
+  const header = [
+    "姓名",
+    "身分證",
+    "里",
+    "系統狀態",
+    "清冊狀態",
+    "社政訪員",
+    "民政訪員",
+    "建檔人員",
+    "通道",
+    "直KEY結果",
+    "個案編號",
+  ];
   const lines = [
     header.join(","),
     ...rows.map((row) =>
       [
-        row.name_masked,
-        row.id_masked,
+        displayName(row),
+        displayNationalId(row),
         row.village || "",
         row.visit_status || "",
         row.roster_status || "",
+        row.social_worker_name || "",
+        row.civil_worker_name || "",
+        row.builder_name || "",
         row.channel || "",
         row.mark_outcome || "",
         row.case_id || "",
@@ -166,8 +194,8 @@ async function fetchCaseDetail(params: {
 function previewFromSample(row: CaseProgressSample): CaseProgressCaseDetail {
   return {
     case_id: row.case_id || "",
-    name_masked: row.name_masked,
-    id_masked: row.id_masked,
+    name_masked: displayName(row),
+    id_masked: displayNationalId(row),
     village: row.village,
     visit_status: row.visit_status,
     roster_status: row.roster_status,
@@ -176,9 +204,9 @@ function previewFromSample(row: CaseProgressSample): CaseProgressCaseDetail {
     has_direct_mark: row.has_direct_mark,
     roster_only: !row.case_id,
     system_only: Boolean(row.case_id && !row.roster_status),
-    civil_worker_name: null,
-    social_worker_name: null,
-    builder_name: null,
+    civil_worker_name: row.civil_worker_name?.trim() || null,
+    social_worker_name: row.social_worker_name?.trim() || null,
+    builder_name: row.builder_name?.trim() || null,
     builder_source: null,
     builder_clerk_id: null,
     builder_at: null,
@@ -682,7 +710,7 @@ export function CaseProgressDashboard() {
           <section className="rounded-lg border bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="font-semibold">分桶全量名單（遮罩）</h2>
+                <h2 className="font-semibold">分桶全量名單</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {selectedBucket ? CASE_PROGRESS_BUCKET_LABELS[selectedBucket] : "請選擇分桶"}
                   {selectedBucket
@@ -699,7 +727,7 @@ export function CaseProgressDashboard() {
                 onClick={() => void exportAllCsv()}
               >
                 <Download className="mr-2 h-4 w-4" />
-                {exporting ? "匯出中…" : "匯出 CSV（遮罩）"}
+                {exporting ? "匯出中…" : "匯出 CSV"}
               </Button>
             </div>
 
@@ -719,7 +747,7 @@ export function CaseProgressDashboard() {
             ) : (
               <>
                 <div className="overflow-x-auto rounded-md border">
-                  <table className="min-w-[48rem] w-full text-sm">
+                  <table className="min-w-[64rem] w-full text-sm">
                     <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium">姓名</th>
@@ -727,6 +755,9 @@ export function CaseProgressDashboard() {
                         <th className="px-3 py-2 font-medium">里</th>
                         <th className="px-3 py-2 font-medium">系統狀態</th>
                         <th className="px-3 py-2 font-medium">清冊狀態</th>
+                        <th className="px-3 py-2 font-medium">社政訪員</th>
+                        <th className="px-3 py-2 font-medium">民政訪員</th>
+                        <th className="px-3 py-2 font-medium">建檔人員</th>
                         <th className="px-3 py-2 font-medium">通道</th>
                         <th className="px-3 py-2 font-medium">直 KEY 結果</th>
                       </tr>
@@ -734,15 +765,18 @@ export function CaseProgressDashboard() {
                     <tbody>
                       {(bucketList?.rows ?? []).map((row, idx) => (
                         <tr
-                          key={`${row.case_id}-${row.seq ?? idx}-${row.id_masked}-${idx}`}
+                          key={`${row.case_id}-${row.seq ?? idx}-${displayNationalId(row)}-${idx}`}
                           className="border-t cursor-pointer hover:bg-muted/30"
                           onClick={() => void openCaseDetail(row)}
                         >
-                          <td className="px-3 py-2">{row.name_masked}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{row.id_masked}</td>
+                          <td className="px-3 py-2">{displayName(row)}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{displayNationalId(row)}</td>
                           <td className="px-3 py-2">{row.village || "—"}</td>
                           <td className="px-3 py-2">{row.visit_status || "—"}</td>
                           <td className="px-3 py-2">{row.roster_status || "—"}</td>
+                          <td className="px-3 py-2">{displayStaff(row.social_worker_name)}</td>
+                          <td className="px-3 py-2">{displayStaff(row.civil_worker_name)}</td>
+                          <td className="px-3 py-2">{displayStaff(row.builder_name)}</td>
                           <td className="px-3 py-2">{row.channel}</td>
                           <td className="px-3 py-2">{row.mark_outcome || "—"}</td>
                         </tr>

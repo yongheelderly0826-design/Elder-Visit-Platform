@@ -45,6 +45,9 @@ var CaseProgressModule = (function () {
     'village',
     'visit_status',
     'roster_status',
+    'civil_worker_name',
+    'social_worker_name',
+    'builder_name',
     'channel',
     'mark_outcome',
     'has_careform',
@@ -116,6 +119,9 @@ var CaseProgressModule = (function () {
       village: sample.village || '',
       visit_status: sample.visit_status || '',
       roster_status: sample.roster_status || '',
+      civil_worker_name: sample.civil_worker_name || '',
+      social_worker_name: sample.social_worker_name || '',
+      builder_name: sample.builder_name || '',
       channel: sample.channel || '',
       mark_outcome: sample.mark_outcome || '',
       has_careform: sample.has_careform ? 'Y' : 'N',
@@ -123,19 +129,66 @@ var CaseProgressModule = (function () {
     };
   }
 
-  function maskIndexRow_(row) {
+  /** 承辦名單：姓名／身分證全顯示（此頁僅 visits.read 管理者） */
+  function mapIndexRow_(row) {
+    var name = String(row.name || '').trim();
+    var nid = normId_(row.national_id);
     return {
       case_id: String(row.case_id || ''),
       seq: Number(row.seq) || 0,
-      name_masked: maskName_(row.name),
-      id_masked: maskId_(row.national_id),
+      name: name,
+      national_id: nid,
+      name_masked: maskName_(name),
+      id_masked: maskId_(nid),
       village: String(row.village || ''),
       visit_status: String(row.visit_status || ''),
       has_careform: String(row.has_careform || '') === 'Y',
       has_direct_mark: String(row.has_direct_mark || '') === 'Y',
       mark_outcome: String(row.mark_outcome || ''),
       roster_status: String(row.roster_status || ''),
+      civil_worker_name: String(row.civil_worker_name || ''),
+      social_worker_name: String(row.social_worker_name || ''),
+      builder_name: String(row.builder_name || ''),
       channel: String(row.channel || ''),
+    };
+  }
+
+  function resolveStaffForCase_(index, caseId, mark, hasCareform, deskByCase) {
+    var civil = '';
+    var social = '';
+    var builder = '';
+    var desk = deskByCase && deskByCase[caseId] ? deskByCase[caseId] : null;
+
+    if (hasCareform) {
+      var cf = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
+      if (cf) {
+        var answers = parseAnswers_(cf.answers_json);
+        civil = String(answers.civil_worker_name || '').trim();
+        social = String(answers.social_worker_name || '').trim();
+        var vid = String(cf.visitor_id || '').trim();
+        var visitor = (index.visitorById && index.visitorById[vid]) || {};
+        builder = String(visitor.name || '').trim() || vid;
+      }
+    }
+
+    if (desk) {
+      builder =
+        String(desk.display_name || '').trim() ||
+        String(desk.clerk_id || '').trim() ||
+        builder ||
+        'TEMP';
+    }
+
+    if (mark) {
+      if (!civil) civil = String(mark.civil_worker_name || '').trim();
+      if (!social) social = String(mark.social_worker_name || '').trim();
+      if (!builder) builder = String(mark.keyed_by_name || '').trim();
+    }
+
+    return {
+      civil_worker_name: civil,
+      social_worker_name: social,
+      builder_name: builder,
     };
   }
 
@@ -762,6 +815,22 @@ var CaseProgressModule = (function () {
       markByCase[caseId] = row;
     });
 
+    // 建檔人員：紙本登打最新一筆（依 keyed_at）
+    var deskByCase = {};
+    try {
+      SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.DESK_KEY_LOGS)).forEach(function (row) {
+        var caseId = String(row.case_id || '').trim();
+        if (!caseId) return;
+        var prev = deskByCase[caseId];
+        var at = String(row.keyed_at || row.created_at || '');
+        if (!prev || at >= String(prev.keyed_at || prev.created_at || '')) {
+          deskByCase[caseId] = row;
+        }
+      });
+    } catch (eDesk) {
+      deskByCase = {};
+    }
+
     var rosterRows = SheetHelper.rowsToObjects(SheetHelper.getSheet(ROSTER));
     var rosterById = {};
     var snapshotId = '';
@@ -838,8 +907,11 @@ var CaseProgressModule = (function () {
       var roster = nid ? rosterById[nid] : null;
       if (nid && roster) seenRosterIds[nid] = true;
 
+      var staff = resolveStaffForCase_(index, caseId, mark, hasCareform, deskByCase);
       var sample = {
         case_id: caseId,
+        name: String(caseRow.name || '').trim(),
+        national_id: nid,
         name_masked: maskName_(caseRow.name),
         id_masked: maskId_(nid),
         village: village,
@@ -848,6 +920,9 @@ var CaseProgressModule = (function () {
         has_direct_mark: hasMark,
         mark_outcome: mark ? String(mark.outcome || '') : '',
         roster_status: roster ? String(roster.roster_status || '') : '',
+        civil_worker_name: staff.civil_worker_name,
+        social_worker_name: staff.social_worker_name,
+        builder_name: staff.builder_name,
         channel: hasCareform && hasMark ? '關懷表+直KEY' : hasCareform ? '已KEY關懷表' : hasMark ? '直KEY' : '無痕跡',
       };
 
@@ -891,12 +966,17 @@ var CaseProgressModule = (function () {
       if (villageFilter && village !== villageFilter) return;
       var sample = {
         case_id: '',
+        name: String(roster.name || '').trim(),
+        national_id: nid,
         name_masked: maskName_(roster.name),
         id_masked: maskId_(nid),
         village: village,
         visit_status: '',
         has_careform: false,
         has_direct_mark: false,
+        civil_worker_name: '',
+        social_worker_name: '',
+        builder_name: '',
         mark_outcome: '',
         roster_status: String(roster.roster_status || ''),
         channel: '僅清冊',
@@ -1034,7 +1114,7 @@ var CaseProgressModule = (function () {
     var totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
     if (totalPages > 0 && page > totalPages) page = totalPages;
     var start = (page - 1) * pageSize;
-    var slice = all.slice(start, start + pageSize).map(maskIndexRow_);
+    var slice = all.slice(start, start + pageSize).map(mapIndexRow_);
 
     return {
       bucket: bucket,
@@ -1048,7 +1128,9 @@ var CaseProgressModule = (function () {
       notes:
         total === 0
           ? ['此分桶目前無索引列。若摘要人數非 0，請按「強制重算」重建分桶索引後再試。']
-          : [],
+          : [
+              '姓名／身分證為承辦完整顯示；若社政／民政／建檔欄空白，請按「強制重算」重建索引。',
+            ],
     };
   }
 

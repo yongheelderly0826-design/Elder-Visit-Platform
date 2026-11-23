@@ -17,17 +17,26 @@ function asNumber(v: unknown, fallback = 0) {
 }
 
 function mapRow(raw: Record<string, unknown>): CaseProgressSample {
+  const name = String(raw.name ?? "").trim();
+  const nationalId = String(raw.national_id ?? "").trim();
+  const nameMasked = String(raw.name_masked ?? "—");
+  const idMasked = String(raw.id_masked ?? "—");
   return {
     case_id: String(raw.case_id ?? ""),
     seq: Number(raw.seq) || 0,
-    name_masked: String(raw.name_masked ?? "—"),
-    id_masked: String(raw.id_masked ?? "—"),
+    name,
+    national_id: nationalId,
+    name_masked: nameMasked,
+    id_masked: idMasked,
     village: String(raw.village ?? ""),
     visit_status: String(raw.visit_status ?? ""),
     has_careform: Boolean(raw.has_careform),
     has_direct_mark: Boolean(raw.has_direct_mark),
     mark_outcome: String(raw.mark_outcome ?? ""),
     roster_status: String(raw.roster_status ?? ""),
+    civil_worker_name: String(raw.civil_worker_name ?? ""),
+    social_worker_name: String(raw.social_worker_name ?? ""),
+    builder_name: String(raw.builder_name ?? ""),
     channel: String(raw.channel ?? ""),
   };
 }
