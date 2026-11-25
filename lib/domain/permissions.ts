@@ -98,6 +98,7 @@ export const workspaceRoles: WorkspaceRole[] = [
       "audit.run",
       "audit.approve",
       "audit.reject",
+      "payments.read",
       "payments.calculate",
       "payments.lock",
       "payments.unlock",
