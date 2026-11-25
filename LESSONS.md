@@ -1,3 +1,11 @@
+## Lesson: 分桶索引 staff 空白＝過舊索引；清索引勿 deleteRows 全刪
+
+- **Trigger:** 個案進度 D 桶 1540 人社政／民政／建檔全「—」，黃條叫按強制重算但清單區無按鈕；且強制重算報「無法刪除所有非凍結的列」。
+- **Cause:** 索引 `computed_at` 早於 staff 欄上線（2026-11-22 vs 11-23）；關懷表 answers 其實有名。`saveBucketIndex_`／`clearDataRows` 對凍結表頭 `deleteRows` 清光非凍結列會被 Sheets 拒絕。
+- **Rule:** staff 空白先強制重算（~17k 列約 30s）；清資料用 `clearContent` 勿全刪非凍結列。分桶黃條旁也放「強制重算」。
+- **Evidence:** `CaseProgressModule.saveBucketIndex_`, `SheetHelper.clearDataRows`, case-progress-dashboard bucket note.
+- **Added on:** 2026-11-25
+
 ## Lesson: 訪查計費費率真相在「計費參數」Sheet
 
 - **Trigger:** 訪查員／建檔計費需官方簡表三線（訪視／建檔／稽核），且 ops 要能改單價免 deploy。

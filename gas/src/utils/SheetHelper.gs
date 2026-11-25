@@ -334,14 +334,19 @@ var SheetHelper = (function () {
     }
   }
 
-  /** 保留第 1 列表頭，刪除其餘資料列。回傳刪除列數。 */
+  /**
+   * 保留第 1 列表頭，清空其餘資料列。
+   * 凍結表頭時不可 deleteRows 清光所有非凍結列，改 clearContent。
+   * 回傳清空列數。
+   */
   function clearDataRows(sheetName) {
     var sheet = getSheet(sheetName);
     var lastRow = sheet.getLastRow();
     if (lastRow <= 1) return 0;
     var count = lastRow - 1;
-    sheet.deleteRows(2, count);
-    logOperation_('clear_data', sheetName, { deleted: count });
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    sheet.getRange(2, 1, count, lastCol).clearContent();
+    logOperation_('clear_data', sheetName, { cleared: count });
     return count;
   }
 

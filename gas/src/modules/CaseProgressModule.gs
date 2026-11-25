@@ -775,8 +775,10 @@ var CaseProgressModule = (function () {
     ensureSchema_();
     var sheet = SheetHelper.getSheet(INDEX);
     var lastRow = sheet.getLastRow();
+    var lastCol = Math.max(sheet.getLastColumn(), INDEX_HEADERS.length);
+    // 凍結表頭時不可 deleteRows 清光所有非凍結列（會 INTERNAL_ERROR）；改清內容。
     if (lastRow > 1) {
-      sheet.deleteRows(2, lastRow - 1);
+      sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
     }
     rows = rows || [];
     if (!rows.length) return 0;
@@ -790,7 +792,7 @@ var CaseProgressModule = (function () {
           return obj[h] !== undefined ? obj[h] : '';
         });
       });
-      // getRange(row, column, numRows, numColumns)
+      // Sheet#getRange(row, column, numRows, numColumns)
       sheet.getRange(2 + i, 1, values.length, headers.length).setValues(values);
     }
     return rows.length;

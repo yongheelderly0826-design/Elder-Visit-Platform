@@ -732,9 +732,19 @@ export function CaseProgressDashboard() {
             </div>
 
             {bucketMessage && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                {bucketMessage}
-              </p>
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                <p className="flex-1 min-w-[12rem]">{bucketMessage}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-amber-400 bg-white hover:bg-amber-100"
+                  disabled={loading}
+                  onClick={() => void load(true)}
+                >
+                  強制重算
+                </Button>
+              </div>
             )}
 
             {bucketLoading && !bucketList ? (
