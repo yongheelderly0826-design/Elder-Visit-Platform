@@ -168,10 +168,39 @@ var SheetHelper = (function () {
     return null;
   }
 
+  /** Update every row matching keyField=keyValue (for duplicate keys). */
+  function updateAllByKey(sheetName, keyField, keyValue, patch) {
+    var sheet = getSheet(sheetName);
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var headers = data[0];
+    var keyIdx = headers.indexOf(keyField);
+    if (keyIdx === -1) throw new Error('Unknown key field: ' + keyField);
+    var updated = [];
+    for (var r = 1; r < data.length; r++) {
+      if (String(data[r][keyIdx]) !== String(keyValue)) continue;
+      var obj = {};
+      headers.forEach(function (h, i) {
+        obj[h] = data[r][i];
+      });
+      Object.keys(patch || {}).forEach(function (k) {
+        obj[k] = patch[k];
+      });
+      var rowValues = headers.map(function (h) {
+        return obj[h] !== undefined ? obj[h] : '';
+      });
+      sheet.getRange(r + 1, 1, 1, headers.length).setValues([rowValues]);
+      logOperation_('update_all', sheetName, obj);
+      updated.push(obj);
+    }
+    return updated;
+  }
+
   function initAllSheets() {
     var ss = getSpreadsheet();
     var templates = {
       '_設定': ['key', 'value', 'description'],
+      '計費參數': ['key', 'value', 'unit', 'note', 'updated_at', 'updated_by', 'effective_from', 'rate_card_version'],
       '訪查員主檔': ['visitor_id', 'name', 'id_number', 'phone', 'email', 'service_areas', 'volunteer_group', 'job_title', 'gender', 'department', 'status', 'badge_no', 'photo_url', 'bank_account', 'bank_name', 'bank_code', 'bank_account_name', 'registered_at', 'approved_at', 'updated_at'],
       '存摺補件': ['submission_id', 'visitor_id', 'name_snapshot', 'id_masked', 'account_name', 'account_number', 'bank_name', 'bank_code', 'passbook_drive_url', 'status', 'submitted_at', 'reviewed_at', 'reviewed_by', 'review_note', 'source', 'campaign_code'],
       '訪員註冊申請': ['request_id', 'account_id', 'email', 'full_name', 'requested_unit_name', 'requested_workspace_id', 'requested_workspace_name', 'requested_role_key', 'status', 'review_note', 'submitted_at', 'reviewed_at', 'visitor_id', 'profile_json', 'created_at', 'updated_at'],
@@ -357,6 +386,7 @@ var SheetHelper = (function () {
     findRowsByKeyFast: findRowsByKeyFast,
     findFirstByKeyFast: findFirstByKeyFast,
     updateByKey: updateByKey,
+    updateAllByKey: updateAllByKey,
     deleteByKey: deleteByKey,
     clearDataRows: clearDataRows,
     ensureColumns: ensureColumns,

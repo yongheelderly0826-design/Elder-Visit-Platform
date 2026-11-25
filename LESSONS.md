@@ -1,3 +1,11 @@
+## Lesson: 訪查計費費率真相在「計費參數」Sheet
+
+- **Trigger:** 訪查員／建檔計費需官方簡表三線（訪視／建檔／稽核），且 ops 要能改單價免 deploy。
+- **Cause:** 舊 `PaymentModule`／`payments.ts` 硬編碼 180+30，無法分形態、分人、分建檔／稽核。
+- **Rule:** Live 費率讀 Sheet「計費參數」；`lib/domain/fee-rate-card.ts` 僅 fallback。社政＋民政各發訪視費；建檔費只給建檔人；稽核費受款人可設定（初始沈煒庭）。獨訪／共同 soft-warn 250／500，不折減。統計讀分桶索引 staff 欄，索引過舊先強制重算。
+- **Evidence:** `FeeRateConfig.gs`, `WorkerFeeStatsModule.gs`, `/manager/worker-fee-stats`, `docs/plans/visitor-builder-fee-stats-plan.md`.
+- **Added on:** 2026-11-25
+
 ## Lesson: getCaseDetail 禁止 VisitRecordIndex.build 全表掃描
 
 - **Trigger:** `/manager/case-progress` 點列詳情卡 3–5 秒「載入中」。

@@ -65,6 +65,7 @@ var Config = (function () {
       ROSTER_SNAPSHOT: '清冊快照',
       CASE_PROGRESS_CACHE: '個案進度快取',
       CASE_PROGRESS_BUCKET_INDEX: '個案進度分桶索引',
+      FEE_RATE_PARAMS: '計費參數',
       LOG: '_操作日誌',
     },
   };

@@ -951,6 +951,29 @@ export const gasClient = {
         summary?: Record<string, unknown>;
       }>("caseProgress.replaceRosterSnapshot", { method: "POST", body }),
   },
+  workerFeeStats: {
+    summary: (params?: { village_name?: string; village?: string }) =>
+      gasFetch<Record<string, unknown>>("workerFeeStats.summary", {
+        params: params as Record<string, string> | undefined,
+      }),
+    getRateCard: () =>
+      gasFetch<Record<string, unknown>>("workerFeeStats.getRateCard"),
+    listParams: () =>
+      gasFetch<{
+        sheet?: string;
+        rows?: Array<Record<string, unknown>>;
+        card?: Record<string, unknown>;
+      }>("workerFeeStats.listParams"),
+    upsertParams: (body: {
+      patches: Array<{ key: string; value: string }>;
+      updated_by?: string;
+    }) =>
+      gasFetch<{
+        written?: number;
+        missing?: string[];
+        card?: Record<string, unknown>;
+      }>("workerFeeStats.upsertParams", { method: "POST", body }),
+  },
   passbook: {
     verify: (body: {
       campaign_code: string;

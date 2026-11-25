@@ -7,6 +7,12 @@ var CareFormModule = (function () {
 
   function get(assignmentId) {
     var rows = SheetHelper.findByKey(SHEET, 'assignment_id', assignmentId);
+    if (!rows || !rows.length) return null;
+    // Prefer latest non-作廢 so void siblings do not win reads (living-address false fails).
+    var i;
+    for (i = rows.length - 1; i >= 0; i--) {
+      if (String(rows[i].status || '').trim() !== '作廢') return rows[i];
+    }
     return rows[rows.length - 1] || null;
   }
 

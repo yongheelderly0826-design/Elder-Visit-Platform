@@ -46,6 +46,7 @@ export type NavKey =
   | "mohwProgressDashboard"
   | "mohwProgressCorrections"
   | "caseProgress"
+  | "workerFeeStats"
   | "villageAdmins"
   | "dailyVisits"
   | "audit"
@@ -218,6 +219,15 @@ export const navItems: NavItem[] = [
     href: "/manager/case-progress",
     icon: ContactRound,
     requiredCapabilities: ["visits.read"],
+    allowedRoles: ["workspace_owner", "workspace_manager"],
+    group: "operations",
+  },
+  {
+    key: "workerFeeStats",
+    label: "訪查員／建檔計費統計",
+    href: "/manager/worker-fee-stats",
+    icon: Wallet,
+    requiredCapabilities: ["payments.read"],
     allowedRoles: ["workspace_owner", "workspace_manager"],
     group: "operations",
   },

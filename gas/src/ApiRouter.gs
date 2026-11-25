@@ -177,6 +177,9 @@ var ApiRouter = (function () {
     'ops.refreshCareformValidation': function (p, b) {
       return OpsModule.refreshCareformValidation(b || p);
     },
+    'ops.closeAssignmentRowsAllMatches': function (p, b) {
+      return OpsModule.closeAssignmentRowsAllMatches(b || p);
+    },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },
     'deskClerks.get': function (p) {
@@ -203,6 +206,12 @@ var ApiRouter = (function () {
     'caseProgress.listBucket': function (p) { return CaseProgressModule.listBucket(p); },
     'caseProgress.getCaseDetail': function (p) { return CaseProgressModule.getCaseDetail(p); },
     'caseProgress.rosterMeta': function (p) { return CaseProgressModule.rosterMeta(p); },
+    'workerFeeStats.summary': function (p) { return WorkerFeeStatsModule.summary(p); },
+    'workerFeeStats.getRateCard': function () { return WorkerFeeStatsModule.getRateCard(); },
+    'workerFeeStats.listParams': function () { return WorkerFeeStatsModule.listParams(); },
+    'workerFeeStats.upsertParams': function (p, b) {
+      return WorkerFeeStatsModule.upsertParams(b || p);
+    },
     'caseProgress.replaceRosterSnapshot': function (p, b) {
       return CaseProgressModule.replaceRosterSnapshot(b || p);
     },
