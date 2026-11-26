@@ -69,3 +69,38 @@ export function findTaiwanBankByCode(code: string): TaiwanBank | null {
   const normalized = code.replace(/\D/g, "");
   return TAIWAN_BANKS.find((bank) => bank.code === normalized) ?? null;
 }
+
+/** 存摺補件／車馬費匯款僅接受台新、合庫 */
+export const PASSBOOK_ALLOWED_BANK_CODES = ["006", "812"] as const;
+
+export type PassbookAllowedBankCode = (typeof PASSBOOK_ALLOWED_BANK_CODES)[number];
+
+export const PASSBOOK_ALLOWED_BANKS: TaiwanBank[] = PASSBOOK_ALLOWED_BANK_CODES.map(
+  (code) => findTaiwanBankByCode(code)!,
+);
+
+export function isPassbookAllowedBankCode(code: string): code is PassbookAllowedBankCode {
+  const normalized = code.replace(/\D/g, "");
+  return (PASSBOOK_ALLOWED_BANK_CODES as readonly string[]).includes(normalized);
+}
+
+export function matchPassbookAllowedBanks(query: string, limit = 8): TaiwanBank[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return PASSBOOK_ALLOWED_BANKS.slice(0, limit);
+  const digits = q.replace(/\D/g, "");
+  const scored = PASSBOOK_ALLOWED_BANKS.map((bank) => {
+    const name = bank.name.toLowerCase();
+    let score = 0;
+    if (digits && bank.code.startsWith(digits)) score += 100 - digits.length;
+    if (name.includes(q)) score += 50;
+    if (bank.code === digits) score += 200;
+    if (name.startsWith(q)) score += 30;
+    // 口語別名
+    if (q.includes("合庫") && bank.code === "006") score += 80;
+    if (q.includes("台新") && bank.code === "812") score += 80;
+    return { bank, score };
+  })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((item) => item.bank);
+}

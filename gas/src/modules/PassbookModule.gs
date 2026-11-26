@@ -13,6 +13,7 @@ var PassbookModule = (function () {
     'account_number',
     'bank_name',
     'bank_code',
+    'using_others_account',
     'address_type',
     'address',
     'passbook_drive_url',
@@ -25,6 +26,11 @@ var PassbookModule = (function () {
     'campaign_code',
   ];
   var ADDRESS_TYPES = { 居住地址: true, 戶籍地址: true };
+  /** 匯款僅限合庫 006、台新 812 */
+  var ALLOWED_BANKS = {
+    '006': '合作金庫銀行',
+    '812': '台新銀行',
+  };
   var GENERIC_DENY = '無法確認身分或通道已關閉，請聯絡承辦';
   var CACHE = CacheService.getScriptCache();
   var FAIL_TTL_SEC = 900;
@@ -119,6 +125,7 @@ var PassbookModule = (function () {
       'bank_name',
       'bank_code',
       'bank_account_name',
+      'using_others_account',
       'address_type',
       'address',
     ]);
@@ -260,17 +267,29 @@ var PassbookModule = (function () {
 
     var accountName = String(data.account_name || '').trim();
     var accountNumber = String(data.account_number || '').replace(/\s/g, '').trim();
-    var bankName = String(data.bank_name || '').trim();
     var bankCode = String(data.bank_code || '').replace(/\D/g, '').trim();
+    var bankName = ALLOWED_BANKS[bankCode] || String(data.bank_name || '').trim();
+    var usingOthersRaw = data.using_others_account;
+    var usingOthersAccount =
+      usingOthersRaw === true ||
+      usingOthersRaw === 'true' ||
+      usingOthersRaw === 'TRUE' ||
+      usingOthersRaw === '是' ||
+      usingOthersRaw === 1 ||
+      usingOthersRaw === '1';
     var addressType = String(data.address_type || '').trim();
     var address = String(data.address || '')
       .replace(/\s+/g, ' ')
       .trim();
     var photo = String(data.passbook_data_url || data.passbook_cover_url || '');
 
-    if (!accountName || !accountNumber || !bankName || !bankCode || !photo) {
+    if (!accountName || !accountNumber || !bankCode || !photo) {
       throwError_('VALIDATION_ERROR', '請完整填寫帳戶名稱、帳戶號碼、銀行與存摺照片');
     }
+    if (!ALLOWED_BANKS[bankCode]) {
+      throwError_('VALIDATION_ERROR', '匯款銀行僅限台新銀行（812）或合作金庫（006）');
+    }
+    bankName = ALLOWED_BANKS[bankCode];
     if (!ADDRESS_TYPES[addressType] || !address) {
       throwError_('VALIDATION_ERROR', '請選擇居住地址或戶籍地址，並填寫完整地址');
     }
@@ -306,6 +325,7 @@ var PassbookModule = (function () {
       account_number: accountNumber,
       bank_name: bankName,
       bank_code: bankCode,
+      using_others_account: usingOthersAccount ? '是' : '否',
       address_type: addressType,
       address: address,
       passbook_drive_url: driveUrl,
@@ -370,6 +390,7 @@ var PassbookModule = (function () {
         bank_name: row.bank_name,
         bank_code: row.bank_code,
         bank_account_name: row.account_name,
+        using_others_account: row.using_others_account || '否',
         address_type: row.address_type || '',
         address: row.address || '',
       });

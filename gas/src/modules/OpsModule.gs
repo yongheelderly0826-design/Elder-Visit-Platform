@@ -3610,6 +3610,430 @@ var OpsModule = (function () {
     };
   }
 
+  /**
+   * Close duplicate assignment_id rows that updateByKey cannot reach (first-match only).
+   * data.assignment_ids: string[]
+   * data.status?: default 退回
+   * data.notes?: ops note
+   */
+  function closeAssignmentRowsAllMatches(data) {
+    data = data || {};
+    var ids = (data.assignment_ids || [])
+      .map(function (id) {
+        return String(id || '').trim();
+      })
+      .filter(Boolean);
+    if (!ids.length) {
+      var err = new Error('assignment_ids 不可為空');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+    var status = String(data.status || '退回').trim() || '退回';
+    var notes = data.notes != null ? String(data.notes) : '';
+    var now = new Date().toISOString();
+    var results = [];
+    ids.forEach(function (assignmentId) {
+      var patch = {
+        status: status,
+        updated_at: now,
+      };
+      if (notes) patch.notes = notes;
+      var rows = SheetHelper.updateAllByKey(
+        Config.SHEET_NAMES.ASSIGNMENTS,
+        'assignment_id',
+        assignmentId,
+        patch
+      );
+      results.push({
+        assignment_id: assignmentId,
+        matched: rows.length,
+        statuses: rows.map(function (r) {
+          return String(r.status || '');
+        }),
+      });
+    });
+    try {
+      ReadCache.bump();
+    } catch (eBump) {}
+    return { count: results.length, results: results };
+  }
+
+  /**
+   * 依「民政訪查員」改派「建檔人員」來源欄位。
+   * 正確範圍：個案進度分桶索引 civil_worker_name = from_civil，
+   * 將建檔歸因改為 to_builder（紙本登打紀錄.display_name／直 KEY keyed_by_name）。
+   * 預設 dry-run；apply=true 才寫入。可選 refresh_index 強制重算分桶索引。
+   */
+  function reassignBuilderByCivilWorker(data) {
+    data = data || {};
+    var fromCivil = String(data.from_civil || data.civil_worker_name || '').trim();
+    var toBuilder = String(data.to_builder || data.builder_name || '').trim();
+    var toClerkId = String(data.to_clerk_id || '').trim().toUpperCase();
+    var apply = data.apply === true || data.apply === 'true';
+    var refreshIndex = data.refresh_index === true || data.refresh_index === 'true';
+    // 預設直接改索引 builder_name；傳 patch_index_direct=false 可關閉
+    var patchIndexDirect = !(
+      data.patch_index_direct === false || data.patch_index_direct === 'false'
+    );
+
+    if (!fromCivil || !toBuilder) {
+      var err = new Error('from_civil 與 to_builder 必填');
+      err.code = 'VALIDATION';
+      throw err;
+    }
+
+    var INDEX = Config.SHEET_NAMES.CASE_PROGRESS_BUCKET_INDEX;
+    var LOGS = Config.SHEET_NAMES.DESK_KEY_LOGS;
+    var MARKS = Config.SHEET_NAMES.MOHW_PROGRESS_MARKS;
+    var REPORTS = Config.SHEET_NAMES.MOHW_PROGRESS_REPORTS;
+    var CLERKS = Config.SHEET_NAMES.DESK_CLERKS;
+
+    // Resolve TEMP clerk for target builder if not provided
+    if (!toClerkId) {
+      var clerkRows = SheetHelper.rowsToObjects(SheetHelper.getSheet(CLERKS));
+      for (var ci = 0; ci < clerkRows.length; ci++) {
+        if (String(clerkRows[ci].display_name || '').trim() === toBuilder) {
+          toClerkId = String(clerkRows[ci].clerk_id || '').trim().toUpperCase();
+          break;
+        }
+      }
+    }
+
+    var indexRows = SheetHelper.rowsToObjects(SheetHelper.getSheet(INDEX));
+    var bucketTotals = {};
+    var civilRows = [];
+    var builderDist = {};
+    var perBucket = {};
+    for (var i = 0; i < indexRows.length; i++) {
+      var row = indexRows[i];
+      var bucket = String(row.bucket || '').trim() || '(空)';
+      bucketTotals[bucket] = (bucketTotals[bucket] || 0) + 1;
+      if (String(row.civil_worker_name || '').trim() !== fromCivil) continue;
+      civilRows.push(row);
+      perBucket[bucket] = (perBucket[bucket] || 0) + 1;
+      var bn = String(row.builder_name || '').trim() || '(空)';
+      builderDist[bn] = (builderDist[bn] || 0) + 1;
+    }
+
+    var needRows = civilRows.filter(function (r) {
+      return String(r.builder_name || '').trim() !== toBuilder;
+    });
+    var alreadyOk = civilRows.length - needRows.length;
+    var caseIdSet = {};
+    needRows.forEach(function (r) {
+      var id = String(r.case_id || '').trim();
+      if (id) caseIdSet[id] = true;
+    });
+    var caseIds = Object.keys(caseIdSet);
+
+    // Desk logs for target cases
+    var deskSheet = SheetHelper.getSheet(LOGS);
+    var deskValues = deskSheet.getDataRange().getValues();
+    var deskHeaders = deskValues.length ? deskValues[0] : [];
+    var deskCaseIdx = deskHeaders.indexOf('case_id');
+    var deskNameIdx = deskHeaders.indexOf('display_name');
+    var deskClerkIdx = deskHeaders.indexOf('clerk_id');
+    var deskLogIdx = deskHeaders.indexOf('log_id');
+    var deskPlanned = [];
+    if (deskCaseIdx !== -1 && deskNameIdx !== -1) {
+      for (var dr = 1; dr < deskValues.length; dr++) {
+        var dCase = String(deskValues[dr][deskCaseIdx] || '').trim();
+        if (!caseIdSet[dCase]) continue;
+        var beforeName = String(deskValues[dr][deskNameIdx] || '').trim();
+        var beforeClerk = deskClerkIdx !== -1 ? String(deskValues[dr][deskClerkIdx] || '').trim() : '';
+        if (beforeName === toBuilder && (!toClerkId || beforeClerk.toUpperCase() === toClerkId)) continue;
+        deskPlanned.push({
+          row: dr + 1,
+          log_id: deskLogIdx !== -1 ? String(deskValues[dr][deskLogIdx] || '') : '',
+          case_id: dCase,
+          before_display_name: beforeName,
+          before_clerk_id: beforeClerk,
+          after_display_name: toBuilder,
+          after_clerk_id: toClerkId || beforeClerk,
+        });
+      }
+    }
+
+    // Marks where civil = fromCivil
+    var markSheet = SheetHelper.getSheet(MARKS);
+    var markValues = markSheet.getDataRange().getValues();
+    var markHeaders = markValues.length ? markValues[0] : [];
+    var markIdIdx = markHeaders.indexOf('mark_id');
+    var markCivilIdx = markHeaders.indexOf('civil_worker_name');
+    var markKeyedNameIdx = markHeaders.indexOf('keyed_by_name');
+    var markKeyedIdIdx = markHeaders.indexOf('keyed_by_id');
+    var markStatusIdx = markHeaders.indexOf('status');
+    var markCaseIdx = markHeaders.indexOf('case_id');
+    var markPlanned = [];
+    if (markCivilIdx !== -1 && markKeyedNameIdx !== -1) {
+      for (var mr = 1; mr < markValues.length; mr++) {
+        var mStatus = markStatusIdx !== -1 ? String(markValues[mr][markStatusIdx] || 'active') : 'active';
+        if (mStatus && mStatus !== 'active') continue;
+        if (String(markValues[mr][markCivilIdx] || '').trim() !== fromCivil) continue;
+        var beforeKeyed = String(markValues[mr][markKeyedNameIdx] || '').trim();
+        if (beforeKeyed === toBuilder) continue;
+        markPlanned.push({
+          row: mr + 1,
+          mark_id: markIdIdx !== -1 ? String(markValues[mr][markIdIdx] || '') : '',
+          case_id: markCaseIdx !== -1 ? String(markValues[mr][markCaseIdx] || '') : '',
+          before_keyed_by_name: beforeKeyed,
+          after_keyed_by_name: toBuilder,
+          after_keyed_by_id: toClerkId || '',
+        });
+      }
+    }
+
+    // Reports where civil = fromCivil
+    var reportSheet = SheetHelper.getSheet(REPORTS);
+    var reportValues = reportSheet.getDataRange().getValues();
+    var reportHeaders = reportValues.length ? reportValues[0] : [];
+    var reportIdIdx = reportHeaders.indexOf('report_id');
+    var reportCivilIdx = reportHeaders.indexOf('civil_worker_name');
+    var reportKeyedNameIdx = reportHeaders.indexOf('keyed_by_name');
+    var reportKeyedIdIdx = reportHeaders.indexOf('keyed_by_id');
+    var reportStatusIdx = reportHeaders.indexOf('status');
+    var reportPlanned = [];
+    if (reportCivilIdx !== -1 && reportKeyedNameIdx !== -1) {
+      for (var rr = 1; rr < reportValues.length; rr++) {
+        var rStatus = reportStatusIdx !== -1 ? String(reportValues[rr][reportStatusIdx] || 'active') : 'active';
+        if (rStatus && rStatus !== 'active') continue;
+        if (String(reportValues[rr][reportCivilIdx] || '').trim() !== fromCivil) continue;
+        var beforeRepKeyed = String(reportValues[rr][reportKeyedNameIdx] || '').trim();
+        if (beforeRepKeyed === toBuilder) continue;
+        reportPlanned.push({
+          row: rr + 1,
+          report_id: reportIdIdx !== -1 ? String(reportValues[rr][reportIdIdx] || '') : '',
+          before_keyed_by_name: beforeRepKeyed,
+          after_keyed_by_name: toBuilder,
+          after_keyed_by_id: toClerkId || '',
+        });
+      }
+    }
+
+    // Index rows to patch builder_name
+    var indexSheet = SheetHelper.getSheet(INDEX);
+    var indexValues = indexSheet.getDataRange().getValues();
+    var indexHeaders = indexValues.length ? indexValues[0] : [];
+    var idxCivil = indexHeaders.indexOf('civil_worker_name');
+    var idxBuilder = indexHeaders.indexOf('builder_name');
+    var idxCase = indexHeaders.indexOf('case_id');
+    var idxBucket = indexHeaders.indexOf('bucket');
+    var indexPlanned = [];
+    if (idxCivil !== -1 && idxBuilder !== -1) {
+      for (var ir = 1; ir < indexValues.length; ir++) {
+        if (String(indexValues[ir][idxCivil] || '').trim() !== fromCivil) continue;
+        var beforeBuilder = String(indexValues[ir][idxBuilder] || '').trim();
+        if (beforeBuilder === toBuilder) continue;
+        indexPlanned.push({
+          row: ir + 1,
+          case_id: idxCase !== -1 ? String(indexValues[ir][idxCase] || '') : '',
+          bucket: idxBucket !== -1 ? String(indexValues[ir][idxBucket] || '') : '',
+          before_builder_name: beforeBuilder,
+          after_builder_name: toBuilder,
+        });
+      }
+    }
+
+    var result = {
+      apply: apply,
+      from_civil: fromCivil,
+      to_builder: toBuilder,
+      to_clerk_id: toClerkId || null,
+      explained_1618: {
+        d_bucket_total: bucketTotals['D_careform_roster_pending'] || 0,
+        d_civil_from: perBucket['D_careform_roster_pending'] || 0,
+        note: 'UI「1,618」是 D 桶全量，不是民政=沈煒庭筆數',
+      },
+      bucket_totals: bucketTotals,
+      civil_index_total: civilRows.length,
+      already_builder_ok: alreadyOk,
+      need_builder_change: needRows.length,
+      unique_case_ids: caseIds.length,
+      per_bucket_civil: perBucket,
+      builder_distribution_before: builderDist,
+      planned: {
+        desk_logs: deskPlanned.length,
+        marks: markPlanned.length,
+        reports: reportPlanned.length,
+        index_rows: indexPlanned.length,
+      },
+      samples: {
+        index: indexPlanned.slice(0, 12),
+        desk_logs: deskPlanned.slice(0, 8),
+        marks: markPlanned.slice(0, 8),
+      },
+      written: {
+        desk_logs: 0,
+        marks: 0,
+        reports: 0,
+        index_rows: 0,
+      },
+      refresh: null,
+    };
+
+    if (!apply) return result;
+
+    // Desk logs
+    for (var d = 0; d < deskPlanned.length; d++) {
+      var dp = deskPlanned[d];
+      deskSheet.getRange(dp.row, deskNameIdx + 1).setValue(toBuilder);
+      if (toClerkId && deskClerkIdx !== -1) {
+        deskSheet.getRange(dp.row, deskClerkIdx + 1).setValue(toClerkId);
+      }
+      result.written.desk_logs += 1;
+    }
+
+    // Marks
+    for (var m = 0; m < markPlanned.length; m++) {
+      var mp = markPlanned[m];
+      markSheet.getRange(mp.row, markKeyedNameIdx + 1).setValue(toBuilder);
+      if (toClerkId && markKeyedIdIdx !== -1) {
+        markSheet.getRange(mp.row, markKeyedIdIdx + 1).setValue(toClerkId);
+      }
+      result.written.marks += 1;
+    }
+
+    // Reports
+    for (var r = 0; r < reportPlanned.length; r++) {
+      var rp = reportPlanned[r];
+      reportSheet.getRange(rp.row, reportKeyedNameIdx + 1).setValue(toBuilder);
+      if (toClerkId && reportKeyedIdIdx !== -1) {
+        reportSheet.getRange(rp.row, reportKeyedIdIdx + 1).setValue(toClerkId);
+      }
+      result.written.reports += 1;
+    }
+
+    // Direct index patch for immediate UI (仍建議之後強制重算對齊來源)
+    if (patchIndexDirect) {
+      for (var x = 0; x < indexPlanned.length; x++) {
+        var ip = indexPlanned[x];
+        indexSheet.getRange(ip.row, idxBuilder + 1).setValue(toBuilder);
+        result.written.index_rows += 1;
+      }
+    }
+
+    try {
+      ReadCache.bump();
+    } catch (eBump) {}
+
+    if (refreshIndex) {
+      try {
+        result.refresh = CaseProgressModule.summary({ force_refresh: true });
+      } catch (eRefresh) {
+        result.refresh = { error: String((eRefresh && eRefresh.message) || eRefresh) };
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 盤點：未遇／查無此人（關懷表答案 + 名冊 + 計費形態）
+   */
+  function countVisitOutcomes(params) {
+    params = params || {};
+    var eligibleOnly =
+      params.eligible_only !== false &&
+      params.eligible_only !== 'false' &&
+      String(params.eligible_only || '').toUpperCase() !== 'NO';
+
+    function parseAnswers_(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      try {
+        return JSON.parse(String(raw));
+      } catch (e) {
+        return {};
+      }
+    }
+
+    var careforms = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.CAREFORMS)
+    );
+    var answersStatus = {};
+    var visitResult = {};
+    var stampMissed = 0;
+    var answersNotFound = 0;
+    var answersMissedLiteral = 0;
+    var answersAddrUnknown = 0;
+    var answersRefused = 0;
+    var answersCompleted = 0;
+    var eligibleRows = 0;
+    var scanned = 0;
+    var overlapNotFoundWithStamp = 0;
+    var notFoundWithoutStamp = 0;
+    var stampWithoutNotFound = 0;
+
+    careforms.forEach(function (cf) {
+      var status = String(cf.status || '').trim();
+      if (eligibleOnly && !VisitRecordIndex.ELIGIBLE[status]) return;
+      eligibleRows += 1;
+      scanned += 1;
+      var answers = parseAnswers_(cf.answers_json);
+      var vs = String(answers.visit_status || '').trim() || '(空)';
+      var vr = String(cf.visit_result || '').trim() || '(空)';
+      answersStatus[vs] = (answersStatus[vs] || 0) + 1;
+      visitResult[vr] = (visitResult[vr] || 0) + 1;
+
+      var blob =
+        String(answers.living_address_other || '') +
+        ' ' +
+        String(answers.visit_notes || '') +
+        ' ' +
+        String(cf.notes || '');
+      var hasStamp = blob.indexOf('訪視未遇') !== -1;
+      if (hasStamp) stampMissed += 1;
+      if (vs === '查無此人') {
+        answersNotFound += 1;
+        if (hasStamp) overlapNotFoundWithStamp += 1;
+        else notFoundWithoutStamp += 1;
+      } else if (hasStamp) {
+        stampWithoutNotFound += 1;
+      }
+      if (vs === '未遇' || vs.indexOf('未遇') >= 0) answersMissedLiteral += 1;
+      if (vs === '住址不詳') answersAddrUnknown += 1;
+      if (vs === '拒絕訪視' || vs === '拒訪') answersRefused += 1;
+      if (vs === '已完成') answersCompleted += 1;
+    });
+
+    var cases = SheetHelper.rowsToObjects(SheetHelper.getSheet(Config.SHEET_NAMES.CASES));
+    var caseStatus = {};
+    cases.forEach(function (row) {
+      var s = String(row.visit_status || '').trim() || '(空)';
+      caseStatus[s] = (caseStatus[s] || 0) + 1;
+    });
+
+    var feeMorph = null;
+    try {
+      feeMorph = WorkerFeeStatsModule.summary({}).totals.morph;
+    } catch (eFee) {
+      feeMorph = { error: String((eFee && eFee.message) || eFee) };
+    }
+
+    return {
+      computed_at: new Date().toISOString(),
+      eligible_only: eligibleOnly,
+      careforms_scanned: scanned,
+      careforms_eligible_rows: eligibleRows,
+      headline: {
+        answers_查無此人: answersNotFound,
+        answers_字面未遇: answersMissedLiteral,
+        notes_含訪視未遇戳: stampMissed,
+        查無此人_且有未遇戳: overlapNotFoundWithStamp,
+        查無此人_無未遇戳: notFoundWithoutStamp,
+        有未遇戳_但非查無此人: stampWithoutNotFound,
+        名冊_空訪: caseStatus['空訪'] || 0,
+        名冊_查無此人: caseStatus['查無此人'] || 0,
+      },
+      answers_visit_status: answersStatus,
+      careform_visit_result: visitResult,
+      case_visit_status: caseStatus,
+      fee_morph_from_index: feeMorph,
+      note:
+        '產品上「一鍵／表單未遇」多寫 visit_result=未遇 且 answers.visit_status=查無此人；計費形態優先 visit_result→未遇，其餘 answers.visit_status 才分查無／拒訪／成功；無關懷表才用直 KEY／名冊。',
+    };
+  }
+
   return {
     clearVisitTestData: clearVisitTestData,
     repairDuplicateMissedStamps: repairDuplicateMissedStamps,
@@ -3631,6 +4055,9 @@ var OpsModule = (function () {
     deleteCareformsByIds: deleteCareformsByIds,
     patchCareformAnswers: patchCareformAnswers,
     refreshCareformValidation: refreshCareformValidation,
+    closeAssignmentRowsAllMatches: closeAssignmentRowsAllMatches,
+    reassignBuilderByCivilWorker: reassignBuilderByCivilWorker,
+    countVisitOutcomes: countVisitOutcomes,
   };
 })();
 

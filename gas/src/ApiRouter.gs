@@ -180,6 +180,12 @@ var ApiRouter = (function () {
     'ops.closeAssignmentRowsAllMatches': function (p, b) {
       return OpsModule.closeAssignmentRowsAllMatches(b || p);
     },
+    'ops.reassignBuilderByCivilWorker': function (p, b) {
+      return OpsModule.reassignBuilderByCivilWorker(b || p);
+    },
+    'ops.countVisitOutcomes': function (p, b) {
+      return OpsModule.countVisitOutcomes(b || p);
+    },
 
     'deskClerks.list': function () { return DeskClerkModule.list(); },
     'deskClerks.get': function (p) {
@@ -214,6 +220,16 @@ var ApiRouter = (function () {
     },
     'caseProgress.replaceRosterSnapshot': function (p, b) {
       return CaseProgressModule.replaceRosterSnapshot(b || p);
+    },
+
+    'progressCorrections.listCareforms': function (p) {
+      return ProgressCorrectionModule.listCareforms(p);
+    },
+    'progressCorrections.listIndex': function (p) {
+      return ProgressCorrectionModule.listIndex(p);
+    },
+    'progressCorrections.patchRows': function (p, b) {
+      return ProgressCorrectionModule.patchRows(b || p);
     },
   };
 

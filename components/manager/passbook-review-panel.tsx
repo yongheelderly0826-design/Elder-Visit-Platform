@@ -12,12 +12,19 @@ type Submission = {
   account_number?: string;
   bank_name?: string;
   bank_code?: string;
+  using_others_account?: string | boolean;
   address_type?: string;
   address?: string;
   passbook_drive_url?: string;
   status?: string;
   submitted_at?: string;
 };
+
+function isUsingOthersAccount(value: string | boolean | undefined): boolean {
+  if (value === true) return true;
+  const text = String(value ?? "").trim();
+  return text === "是" || text.toLowerCase() === "true" || text === "1";
+}
 
 export function PassbookReviewPanel() {
   const [items, setItems] = useState<Submission[]>([]);
@@ -107,6 +114,12 @@ export function PassbookReviewPanel() {
                     </p>
                     <p>
                       {item.bank_code} {item.bank_name}／戶名 {item.account_name}
+                    </p>
+                    <p className="text-xs text-stone-700">
+                      帳戶歸屬：
+                      {isUsingOthersAccount(item.using_others_account)
+                        ? "委用他人帳戶"
+                        : "本人台新／合庫帳戶"}
                     </p>
                     <p className="font-mono text-xs tracking-wide">
                       帳號 {item.account_number}

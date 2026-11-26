@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
 import {
   createCompactPassbookDataUrl,
   readFileAsDataUrl,
 } from "@/lib/client/passbook-image";
-import { findTaiwanBankByCode, matchTaiwanBanks } from "@/lib/domain/taiwan-banks";
+import {
+  isPassbookAllowedBankCode,
+  PASSBOOK_ALLOWED_BANKS,
+} from "@/lib/domain/taiwan-banks";
 
 type Step = "verify" | "form" | "success" | "closed";
+
+type AccountOwnership = "own" | "others" | "";
 
 type MeData = {
   authenticated?: boolean;
@@ -31,9 +36,9 @@ export function PassbookSubmitPanel({
   const [name, setName] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [phoneLast4, setPhoneLast4] = useState("");
+  const [accountOwnership, setAccountOwnership] = useState<AccountOwnership>("");
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [bankQuery, setBankQuery] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankCode, setBankCode] = useState("");
   const [addressType, setAddressType] = useState<"居住地址" | "戶籍地址" | "">(
@@ -46,11 +51,6 @@ export function PassbookSubmitPanel({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [deadline, setDeadline] = useState("2026-12-30");
   const [sessionName, setSessionName] = useState("");
-
-  const bankSuggestions = useMemo(
-    () => matchTaiwanBanks(bankQuery || bankCode || bankName, 6),
-    [bankQuery, bankCode, bankName],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -82,24 +82,12 @@ export function PassbookSubmitPanel({
   function selectBank(code: string, bankDisplayName: string) {
     setBankCode(code);
     setBankName(bankDisplayName);
-    setBankQuery(`${code} ${bankDisplayName}`);
   }
 
-  function onBankQueryChange(value: string) {
-    setBankQuery(value);
-    const digits = value.replace(/\D/g, "").slice(0, 3);
-    if (digits.length === 3) {
-      const matched = findTaiwanBankByCode(digits);
-      if (matched) {
-        setBankCode(matched.code);
-        setBankName(matched.name);
-        return;
-      }
-    }
-    const byName = matchTaiwanBanks(value, 1)[0];
-    if (byName && value.includes(byName.name)) {
-      setBankCode(byName.code);
-      setBankName(byName.name);
+  function onAccountOwnershipChange(value: AccountOwnership) {
+    setAccountOwnership(value);
+    if (value === "own" && sessionName) {
+      setAccountName(sessionName);
     }
   }
 
@@ -159,8 +147,12 @@ export function PassbookSubmitPanel({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!bankName || !bankCode) {
-      setMessage("請選擇銀行名稱／代碼。");
+    if (!accountOwnership) {
+      setMessage("請選擇本人帳戶或委用他人帳戶。");
+      return;
+    }
+    if (!bankName || !bankCode || !isPassbookAllowedBankCode(bankCode)) {
+      setMessage("匯款銀行僅限台新銀行或合作金庫，請擇一。");
       return;
     }
     if (!addressType) {
@@ -188,6 +180,7 @@ export function PassbookSubmitPanel({
           bankCode,
           addressType,
           address: address.trim(),
+          usingOthersAccount: accountOwnership === "others",
           passbookDataUrl,
         }),
       });
@@ -276,11 +269,67 @@ export function PassbookSubmitPanel({
               您好，{sessionName || "訪查員"}。請填寫匯款帳戶、地址與存摺封面。
             </p>
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <Field label="帳戶名稱（戶名）">
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-stone-700">
+                  帳戶歸屬（必選）
+                </legend>
+                <p className="text-xs leading-relaxed text-stone-500">
+                  匯款僅能入帳至台新或合作金庫。若您本人沒有這兩家銀行帳戶，請選擇「委用他人帳戶」，並填寫對方的台新／合庫帳號。
+                </p>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-start gap-3 rounded-md border border-stone-200 bg-white px-3 py-3 text-sm leading-relaxed">
+                    <input
+                      className="mt-0.5"
+                      type="radio"
+                      name="accountOwnership"
+                      value="own"
+                      checked={accountOwnership === "own"}
+                      onChange={() => onAccountOwnershipChange("own")}
+                      required
+                    />
+                    <span>
+                      <span className="font-medium text-stone-800">本人台新／合庫帳戶</span>
+                      <span className="mt-0.5 block text-xs font-normal text-stone-500">
+                        戶名為您本人
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-md border border-stone-200 bg-white px-3 py-3 text-sm leading-relaxed">
+                    <input
+                      className="mt-0.5"
+                      type="radio"
+                      name="accountOwnership"
+                      value="others"
+                      checked={accountOwnership === "others"}
+                      onChange={() => onAccountOwnershipChange("others")}
+                      required
+                    />
+                    <span>
+                      <span className="font-medium text-stone-800">
+                        委用他人帳戶（限台新／合庫）
+                      </span>
+                      <span className="mt-0.5 block text-xs font-normal text-stone-500">
+                        本人無台新或合庫時適用；請填寫對方戶名與帳號
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              <Field
+                label={
+                  accountOwnership === "others" ? "帳戶名稱（他人戶名）" : "帳戶名稱（戶名）"
+                }
+              >
                 <input
                   className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm"
                   value={accountName}
                   onChange={(event) => setAccountName(event.target.value)}
+                  placeholder={
+                    accountOwnership === "others"
+                      ? "請輸入他人存摺上的戶名"
+                      : "請與存摺戶名一致"
+                  }
                   required
                 />
               </Field>
@@ -296,36 +345,32 @@ export function PassbookSubmitPanel({
                   required
                 />
               </Field>
-              <Field label="銀行名稱／代碼">
-                <input
-                  className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm"
-                  value={bankQuery}
-                  onChange={(event) => onBankQueryChange(event.target.value)}
-                  placeholder="輸入代碼或銀行名稱，例如 004 或 臺灣銀行"
-                  required
-                />
-                {bankSuggestions.length > 0 && (
-                  <ul className="mt-2 max-h-40 overflow-auto rounded-md border border-stone-200 bg-white text-sm">
-                    {bankSuggestions.map((bank) => (
-                      <li key={bank.code}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-teal-50"
-                          onClick={() => selectBank(bank.code, bank.name)}
-                        >
-                          <span>{bank.name}</span>
-                          <span className="text-stone-500">{bank.code}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {bankCode && bankName && (
-                  <p className="mt-2 text-xs text-stone-500">
-                    已選：{bankCode} {bankName}
-                  </p>
-                )}
-              </Field>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-stone-700">
+                  銀行（僅限台新／合庫）
+                </legend>
+                <div className="flex flex-col gap-2">
+                  {PASSBOOK_ALLOWED_BANKS.map((bank) => (
+                    <label
+                      key={bank.code}
+                      className="flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-white px-3 py-3 text-sm"
+                    >
+                      <span className="inline-flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="bankCode"
+                          value={bank.code}
+                          checked={bankCode === bank.code}
+                          onChange={() => selectBank(bank.code, bank.name)}
+                          required
+                        />
+                        <span>{bank.name}</span>
+                      </span>
+                      <span className="text-stone-500">{bank.code}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium text-stone-700">
                   地址類型（擇一）

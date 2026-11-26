@@ -46,13 +46,21 @@
 - **Evidence:** `CaseProgressModule.getCaseDetail`, `/api/manager/case-progress/detail`, case-progress detail modal.
 - **Added on:** 2026-11-23
 
+## Lesson: 進度修正三來源——直 KEY／關懷表／分桶索引
+
+- **Trigger:** 承辦要改正建檔／民政／社政／狀態，但直 KEY 頁看不到關懷表與分桶真實內容。
+- **Cause:** 原「進度修正」只讀 `MOHW進度個案標記`。
+- **Rule:** 進度修正分頁：**直 KEY**（marks）、**關懷表**（eligible answers／visit_result）、**分桶索引**。關懷表／索引改正優先回寫來源；索引有關懷表先改關懷表、有直 KEY 再同步 mark。未遇在關懷表仍寫 `visit_result=未遇`＋`visit_status=查無此人`。
+- **Evidence:** `ProgressCorrectionModule.gs`, `components/manage/mohw-progress-corrections.tsx`, `app/api/manager/progress-corrections/*`.
+- **Added on:** 2026-11-26
+
 ## Lesson: 公開存摺補件必須活動碼＋截止日，且 TEMP 不可審
 
 - **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
 - **Cause:** 正式 `/visitor/profile` 需登入；主檔無生日可當第三因子；TEMP 權限過大。
-- **Rule:** 暫時通道 `/volunteer/passbook`：`PASSBOOK_CAMPAIGN_CODE` 空白則不需活動碼、直接身分核對（姓名／身分證／手機末四碼）；仍以 `PASSBOOK_DEADLINE`（台北日，預設 2026-12-30）關閉；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。補件表單另必填 **地址類型（居住地址／戶籍地址擇一）＋完整地址**，確認後回寫主檔 `address_type`／`address`。
+- **Rule:** 暫時通道 `/volunteer/passbook`：`PASSBOOK_CAMPAIGN_CODE` 空白則不需活動碼、直接身分核對（姓名／身分證／手機末四碼）；仍以 `PASSBOOK_DEADLINE`（台北日，預設 2026-12-30）關閉；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。補件表單另必填 **地址類型（居住地址／戶籍地址擇一）＋完整地址**，確認後回寫主檔 `address_type`／`address`。匯款銀行**僅限 `006` 合庫／`812` 台新**；須明示本人帳戶或「委用他人帳戶」（仍限上述兩行），欄位 `using_others_account`。
 - **Evidence:** `PassbookModule.gs`, `app/volunteer/passbook/*`, `app/manager/passbook/page.tsx`, `docs/tasks/2026-11-22-temp-public-passbook.md`.
-- **Added on:** 2026-11-22（2026-11-25 補地址欄）
+- **Added on:** 2026-11-22（2026-11-25 補地址欄；2026-11-26 限台新／合庫＋委用他人）
 
 ## Lesson: 居住地址不詳時清空並鎖定住址明細
 

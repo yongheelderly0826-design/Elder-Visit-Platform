@@ -1000,6 +1000,7 @@ export const gasClient = {
       bank_code: string;
       address_type: "居住地址" | "戶籍地址";
       address: string;
+      using_others_account: boolean;
       passbook_data_url: string;
     }) => gasFetch<Record<string, unknown>>("passbook.submit", { method: "POST", body }),
     list: (params?: { status?: string }) =>
@@ -1020,6 +1021,39 @@ export const gasClient = {
       }>("passbook.channelStatus", {
         params: params as Record<string, string> | undefined,
       }),
+  },
+  progressCorrections: {
+    listCareforms: (params?: { village_name?: string }) =>
+      gasFetch<{
+        source?: string;
+        rows?: Array<Record<string, unknown>>;
+        keyed_by_names?: string[];
+        villages?: string[];
+      }>("progressCorrections.listCareforms", {
+        params: params as Record<string, string> | undefined,
+      }),
+    listIndex: (params?: { village_name?: string; bucket?: string; max_rows?: number }) =>
+      gasFetch<{
+        source?: string;
+        rows?: Array<Record<string, unknown>>;
+        keyed_by_names?: string[];
+        villages?: string[];
+        truncated?: boolean;
+        note?: string | null;
+      }>("progressCorrections.listIndex", {
+        params: params as Record<string, string> | undefined,
+      }),
+    patchRows: (body: {
+      source: "careform" | "index";
+      patches: Array<Record<string, unknown>>;
+      note?: string;
+      corrected_by?: string;
+    }) =>
+      gasFetch<{
+        updated_count?: number;
+        missing_count?: number;
+        missing?: Array<{ row_id?: string; reason?: string }>;
+      }>("progressCorrections.patchRows", { method: "POST", body }),
   },
 };
 

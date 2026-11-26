@@ -1,6 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { GasApiError, gasClient } from "@/lib/gas-client";
+import {
+  findTaiwanBankByCode,
+  isPassbookAllowedBankCode,
+} from "@/lib/domain/taiwan-banks";
 import { isPassbookChannelOpenLocally } from "@/lib/passbook/campaign";
 import {
   clearPassbookSessionCookie,
@@ -38,6 +42,7 @@ export async function POST(request: NextRequest) {
     bankCode?: string;
     addressType?: string;
     address?: string;
+    usingOthersAccount?: boolean;
     passbookDataUrl?: string;
   };
 
@@ -47,6 +52,7 @@ export async function POST(request: NextRequest) {
   const bankCode = String(body.bankCode ?? "").replace(/\D/g, "").trim();
   const addressType = String(body.addressType ?? "").trim();
   const address = String(body.address ?? "").replace(/\s+/g, " ").trim();
+  const usingOthersAccount = Boolean(body.usingOthersAccount);
   const passbookDataUrl = String(body.passbookDataUrl ?? "");
 
   if (!accountName || !accountNumber || !bankName || !bankCode || !passbookDataUrl) {
@@ -60,6 +66,21 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  if (!isPassbookAllowedBankCode(bankCode)) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "匯款銀行僅限台新銀行（812）或合作金庫（006）。",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  const canonicalBank = findTaiwanBankByCode(bankCode);
+  const resolvedBankName = canonicalBank?.name ?? bankName;
 
   if (addressType !== "居住地址" && addressType !== "戶籍地址") {
     return NextResponse.json(
@@ -115,10 +136,11 @@ export async function POST(request: NextRequest) {
       visitor_id: session.visitorId,
       account_name: accountName,
       account_number: accountNumber,
-      bank_name: bankName,
+      bank_name: resolvedBankName,
       bank_code: bankCode,
       address_type: addressType,
       address,
+      using_others_account: usingOthersAccount,
       passbook_data_url: passbookDataUrl,
     });
 

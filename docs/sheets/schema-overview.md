@@ -74,9 +74,10 @@
 | badge_no | 證件編號 | text | | |
 | photo_url | 照片 | url | ✅* | Drive `_訪員註冊證件照` 連結 |
 | bank_account | 匯款帳號 | text | | 車馬費用（完整帳號；公開補件確認後回寫） |
-| bank_name | 銀行名稱 | text | | ensureColumns；補件確認後可回寫 |
-| bank_code | 銀行代碼 | text | | ensureColumns |
+| bank_name | 銀行名稱 | text | | ensureColumns；補件確認後可回寫；僅台新／合庫 |
+| bank_code | 銀行代碼 | text | | ensureColumns；僅 `006`／`812` |
 | bank_account_name | 戶名 | text | | ensureColumns |
+| using_others_account | 委用他人帳戶 | enum | | `是`／`否`；補件確認後回寫 |
 | address_type | 地址類型 | enum | | `居住地址`／`戶籍地址`；補件確認後回寫 |
 | address | 地址 | text | | 對應 address_type 的完整地址；補件確認後回寫 |
 | registered_at | 建檔日 | date | | |
@@ -99,8 +100,9 @@
 | id_masked | 身分證遮罩 | text | | 例 A12****89 |
 | account_name | 帳戶名稱 | text | ✅ | 戶名 |
 | account_number | 帳戶號碼 | text | ✅ | 完整帳號 |
-| bank_name | 銀行名稱 | text | ✅ | |
-| bank_code | 銀行代碼 | text | ✅ | |
+| bank_name | 銀行名稱 | text | ✅ | 僅台新銀行／合作金庫銀行 |
+| bank_code | 銀行代碼 | text | ✅ | 僅 `812`（台新）／`006`（合庫） |
+| using_others_account | 委用他人帳戶 | enum | ✅ | `是`／`否`；無本人台新／合庫時選是 |
 | address_type | 地址類型 | enum | ✅ | `居住地址`／`戶籍地址`（擇一） |
 | address | 地址 | text | ✅ | 完整地址（核銷匯款用） |
 | passbook_drive_url | 存摺照片 | url | ✅ | Drive `_訪員存摺補件` |
