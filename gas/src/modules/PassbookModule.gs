@@ -13,6 +13,8 @@ var PassbookModule = (function () {
     'account_number',
     'bank_name',
     'bank_code',
+    'address_type',
+    'address',
     'passbook_drive_url',
     'status',
     'submitted_at',
@@ -22,6 +24,7 @@ var PassbookModule = (function () {
     'source',
     'campaign_code',
   ];
+  var ADDRESS_TYPES = { 居住地址: true, 戶籍地址: true };
   var GENERIC_DENY = '無法確認身分或通道已關閉，請聯絡承辦';
   var CACHE = CacheService.getScriptCache();
   var FAIL_TTL_SEC = 900;
@@ -116,6 +119,8 @@ var PassbookModule = (function () {
       'bank_name',
       'bank_code',
       'bank_account_name',
+      'address_type',
+      'address',
     ]);
   }
 
@@ -257,10 +262,20 @@ var PassbookModule = (function () {
     var accountNumber = String(data.account_number || '').replace(/\s/g, '').trim();
     var bankName = String(data.bank_name || '').trim();
     var bankCode = String(data.bank_code || '').replace(/\D/g, '').trim();
+    var addressType = String(data.address_type || '').trim();
+    var address = String(data.address || '')
+      .replace(/\s+/g, ' ')
+      .trim();
     var photo = String(data.passbook_data_url || data.passbook_cover_url || '');
 
     if (!accountName || !accountNumber || !bankName || !bankCode || !photo) {
       throwError_('VALIDATION_ERROR', '請完整填寫帳戶名稱、帳戶號碼、銀行與存摺照片');
+    }
+    if (!ADDRESS_TYPES[addressType] || !address) {
+      throwError_('VALIDATION_ERROR', '請選擇居住地址或戶籍地址，並填寫完整地址');
+    }
+    if (address.length < 6) {
+      throwError_('VALIDATION_ERROR', '地址過短，請填寫完整地址（含縣市區與街道路名）');
     }
     if (accountNumber.length < 8 || accountNumber.length > 20) {
       throwError_('VALIDATION_ERROR', '帳戶號碼長度不正確');
@@ -291,6 +306,8 @@ var PassbookModule = (function () {
       account_number: accountNumber,
       bank_name: bankName,
       bank_code: bankCode,
+      address_type: addressType,
+      address: address,
       passbook_drive_url: driveUrl,
       status: '待審',
       submitted_at: nowIso_(),
@@ -353,6 +370,8 @@ var PassbookModule = (function () {
         bank_name: row.bank_name,
         bank_code: row.bank_code,
         bank_account_name: row.account_name,
+        address_type: row.address_type || '',
+        address: row.address || '',
       });
     }
 

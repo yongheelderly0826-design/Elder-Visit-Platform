@@ -1,3 +1,11 @@
+## Lesson: 計費形態以關懷表為準，未遇優先於查無此人
+
+- **Trigger:** 訪查計費 morph 未遇／查無近零（~157／10），但 eligible 關懷表 visit_result 未遇=2167、answers 查無此人=1496。
+- **Cause:** `WorkerFeeStatsModule` 只讀分桶索引 `visit_status`（多為名冊「已完成」）；一鍵未遇又把 answers 寫成「查無此人」，若先讀 answers 會把未遇全算成查無。
+- **Rule:** 有關懷表時：answers 住址不詳／拒訪先定形；`visit_result=未遇` → missed（蓋過 answers=查無此人的一鍵編碼）；其餘才看 answers／visit_result。無關懷表才用直 KEY／名冊。索引寫入 `careform_visit_*`；缺欄時 summary 即時 overlay。強制重算可固化欄位。一鍵未遇與查無在 answers 高度重疊，故 fee morph 的 not_found 不會≈ answers 查無筆數。
+- **Evidence:** `WorkerFeeStatsModule.gs`, `CaseProgressModule.gs` INDEX_HEADERS, `lib/domain/fee-rate-card.ts` `resolveCaseMorph`／`morphFromCareform`.
+- **Added on:** 2026-11-25
+
 ## Lesson: 分桶索引 staff 空白＝過舊索引；清索引勿 deleteRows 全刪
 
 - **Trigger:** 個案進度 D 桶 1540 人社政／民政／建檔全「—」，黃條叫按強制重算但清單區無按鈕；且強制重算報「無法刪除所有非凍結的列」。
@@ -42,9 +50,9 @@
 
 - **Trigger:** 需讓不會登入的訪查員補車馬費存摺／帳號，但不能永久公開敏感匯款資料。
 - **Cause:** 正式 `/visitor/profile` 需登入；主檔無生日可當第三因子；TEMP 權限過大。
-- **Rule:** 暫時通道 `/volunteer/passbook`：`PASSBOOK_CAMPAIGN_CODE` 空白則不需活動碼、直接身分核對（姓名／身分證／手機末四碼）；仍以 `PASSBOOK_DEADLINE`（台北日，預設 2026-12-30）關閉；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。
+- **Rule:** 暫時通道 `/volunteer/passbook`：`PASSBOOK_CAMPAIGN_CODE` 空白則不需活動碼、直接身分核對（姓名／身分證／手機末四碼）；仍以 `PASSBOOK_DEADLINE`（台北日，預設 2026-12-30）關閉；完整帳號進獨立 `存摺補件` 佇列，確認後才回寫主檔；審核僅 owner／manager，desk_clerk／TEMP 禁止。補件表單另必填 **地址類型（居住地址／戶籍地址擇一）＋完整地址**，確認後回寫主檔 `address_type`／`address`。
 - **Evidence:** `PassbookModule.gs`, `app/volunteer/passbook/*`, `app/manager/passbook/page.tsx`, `docs/tasks/2026-11-22-temp-public-passbook.md`.
-- **Added on:** 2026-11-22
+- **Added on:** 2026-11-22（2026-11-25 補地址欄）
 
 ## Lesson: 居住地址不詳時清空並鎖定住址明細
 

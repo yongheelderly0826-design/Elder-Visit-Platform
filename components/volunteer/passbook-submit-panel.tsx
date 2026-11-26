@@ -36,6 +36,10 @@ export function PassbookSubmitPanel({
   const [bankQuery, setBankQuery] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankCode, setBankCode] = useState("");
+  const [addressType, setAddressType] = useState<"居住地址" | "戶籍地址" | "">(
+    "",
+  );
+  const [address, setAddress] = useState("");
   const [passbookDataUrl, setPassbookDataUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -159,6 +163,14 @@ export function PassbookSubmitPanel({
       setMessage("請選擇銀行名稱／代碼。");
       return;
     }
+    if (!addressType) {
+      setMessage("請選擇要填寫居住地址或戶籍地址。");
+      return;
+    }
+    if (address.trim().length < 6) {
+      setMessage("請填寫完整地址（含縣市區與街道路名）。");
+      return;
+    }
     if (!passbookDataUrl) {
       setMessage("請上傳存摺封面照片。");
       return;
@@ -174,6 +186,8 @@ export function PassbookSubmitPanel({
           accountNumber: accountNumber.replace(/\s/g, "").trim(),
           bankName,
           bankCode,
+          addressType,
+          address: address.trim(),
           passbookDataUrl,
         }),
       });
@@ -259,7 +273,7 @@ export function PassbookSubmitPanel({
         {step === "form" && (
           <CalmCard>
             <p className="mb-4 text-sm text-stone-600">
-              您好，{sessionName || "訪查員"}。請填寫匯款帳戶與存摺封面。
+              您好，{sessionName || "訪查員"}。請填寫匯款帳戶、地址與存摺封面。
             </p>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <Field label="帳戶名稱（戶名）">
@@ -311,6 +325,41 @@ export function PassbookSubmitPanel({
                     已選：{bankCode} {bankName}
                   </p>
                 )}
+              </Field>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-stone-700">
+                  地址類型（擇一）
+                </legend>
+                <div className="flex flex-wrap gap-3">
+                  {(["居住地址", "戶籍地址"] as const).map((option) => (
+                    <label
+                      key={option}
+                      className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <input
+                        type="radio"
+                        name="addressType"
+                        value={option}
+                        checked={addressType === option}
+                        onChange={() => setAddressType(option)}
+                        required
+                      />
+                      {option}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <Field label={addressType ? addressType : "居住／戶籍地址"}>
+                <textarea
+                  className="min-h-[5.5rem] w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm leading-relaxed"
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  placeholder="例：新北市永和區永和路一段 xx 號"
+                  required
+                />
+                <p className="mt-1.5 text-xs font-normal text-stone-500">
+                  核銷匯款用，請擇一填寫完整地址。
+                </p>
               </Field>
               <Field label="存摺封面照片">
                 <div className="rounded-md border border-dashed border-stone-300 bg-white p-3">

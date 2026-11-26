@@ -12,6 +12,8 @@ type Submission = {
   account_number?: string;
   bank_name?: string;
   bank_code?: string;
+  address_type?: string;
+  address?: string;
   passbook_drive_url?: string;
   status?: string;
   submitted_at?: string;
@@ -109,6 +111,11 @@ export function PassbookReviewPanel() {
                     <p className="font-mono text-xs tracking-wide">
                       帳號 {item.account_number}
                     </p>
+                    {(item.address_type || item.address) && (
+                      <p className="text-xs leading-relaxed text-stone-700">
+                        {item.address_type || "地址"}：{item.address || "—"}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {id} · {item.submitted_at}
                     </p>

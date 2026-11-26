@@ -77,6 +77,8 @@
 | bank_name | 銀行名稱 | text | | ensureColumns；補件確認後可回寫 |
 | bank_code | 銀行代碼 | text | | ensureColumns |
 | bank_account_name | 戶名 | text | | ensureColumns |
+| address_type | 地址類型 | enum | | `居住地址`／`戶籍地址`；補件確認後回寫 |
+| address | 地址 | text | | 對應 address_type 的完整地址；補件確認後回寫 |
 | registered_at | 建檔日 | date | | |
 | approved_at | 核准日 | date | | |
 | updated_at | 更新時間 | datetime | | |
@@ -99,6 +101,8 @@
 | account_number | 帳戶號碼 | text | ✅ | 完整帳號 |
 | bank_name | 銀行名稱 | text | ✅ | |
 | bank_code | 銀行代碼 | text | ✅ | |
+| address_type | 地址類型 | enum | ✅ | `居住地址`／`戶籍地址`（擇一） |
+| address | 地址 | text | ✅ | 完整地址（核銷匯款用） |
 | passbook_drive_url | 存摺照片 | url | ✅ | Drive `_訪員存摺補件` |
 | status | 狀態 | enum | ✅ | 待審／已確認／退回 |
 | submitted_at | 送件時間 | datetime | | |

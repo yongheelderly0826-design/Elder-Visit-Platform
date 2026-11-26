@@ -108,34 +108,69 @@ export const FEE_RATE_PARAM_SEEDS: Array<{
 export function morphFromVisitStatus(status: string): FeeMorph | null {
   const s = String(status || "").trim();
   if (!s) return null;
-  if (s === "已完成" || s === "訪視成功" || s === "完成") return "success";
-  if (s === "拒絕訪視" || s === "拒訪") return "refused";
-  if (s === "查無此人" || s === "地址錯誤") return "not_found";
-  if (s === "住址不詳") return "addr_unknown";
-  if (s === "未遇" || s === "空訪" || s.includes("未遇")) return "missed";
+  if (
+    s === "已完成" ||
+    s === "訪視成功" ||
+    s === "完成" ||
+    s === "完成訪視" ||
+    s === "success"
+  ) {
+    return "success";
+  }
+  if (s === "拒絕訪視" || s === "拒訪" || s === "refused") return "refused";
+  if (s === "查無此人" || s === "地址錯誤" || s === "not_found") return "not_found";
+  if (s === "住址不詳" || s === "addr_unknown") return "addr_unknown";
+  if (s === "未遇" || s === "空訪" || s === "missed" || s.includes("未遇")) return "missed";
   return null;
 }
 
 export function morphFromMarkOutcome(outcome: string): FeeMorph | null {
-  const o = String(outcome || "").trim();
-  if (!o) return null;
-  if (o === "已完成" || o === "訪視成功" || o === "完成" || o === "success") return "success";
-  if (o === "拒訪" || o === "拒絕訪視" || o === "refused") return "refused";
-  if (o === "查無此人" || o === "not_found") return "not_found";
-  if (o === "住址不詳" || o === "addr_unknown") return "addr_unknown";
-  if (o === "未遇" || o === "missed") return "missed";
-  return morphFromVisitStatus(o);
+  return morphFromVisitStatus(outcome);
 }
 
+/**
+ * 關懷表形態優先序：
+ * - answers 住址不詳／拒訪：真實結果，即使 visit_result=未遇
+ * - visit_result=未遇：未遇（含一鍵未遇寫成 answers=查無此人）
+ * - 其餘看 answers.visit_status，再看 visit_result
+ */
+export function morphFromCareform(input: {
+  visit_result?: string | null;
+  visit_status?: string | null;
+}): FeeMorph | null {
+  const vs = String(input.visit_status || "").trim();
+  const vr = String(input.visit_result || "").trim();
+  if (vs === "住址不詳") return "addr_unknown";
+  if (vs === "拒絕訪視" || vs === "拒訪") return "refused";
+  if (vr === "未遇" || vr.includes("未遇")) return "missed";
+  return morphFromVisitStatus(vs) || morphFromVisitStatus(vr) || null;
+}
+
+/**
+ * 計費形態優先序：
+ * 1. 有關懷表 → careform visit_result／answers.visit_status
+ * 2. 否則 → 直 KEY mark_outcome
+ * 3. 否則 → 個案名冊 visit_status
+ */
 export function resolveCaseMorph(input: {
+  has_careform?: boolean | null;
+  careform_visit_result?: string | null;
+  careform_visit_status?: string | null;
+  visit_result?: string | null;
   visit_status?: string | null;
   mark_outcome?: string | null;
-  visit_result?: string | null;
 }): FeeMorph {
+  const hasCf = Boolean(input.has_careform);
+  if (hasCf) {
+    const fromCf = morphFromCareform({
+      visit_result: input.careform_visit_result ?? input.visit_result,
+      visit_status: input.careform_visit_status,
+    });
+    if (fromCf) return fromCf;
+  }
   return (
-    morphFromVisitStatus(String(input.visit_status || "")) ||
     morphFromMarkOutcome(String(input.mark_outcome || "")) ||
-    morphFromVisitStatus(String(input.visit_result || "")) ||
+    morphFromVisitStatus(String(input.visit_status || "")) ||
     "missed"
   );
 }

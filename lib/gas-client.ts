@@ -998,6 +998,8 @@ export const gasClient = {
       account_number: string;
       bank_name: string;
       bank_code: string;
+      address_type: "居住地址" | "戶籍地址";
+      address: string;
       passbook_data_url: string;
     }) => gasFetch<Record<string, unknown>>("passbook.submit", { method: "POST", body }),
     list: (params?: { status?: string }) =>

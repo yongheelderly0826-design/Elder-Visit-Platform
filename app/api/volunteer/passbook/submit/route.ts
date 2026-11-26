@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
     accountNumber?: string;
     bankName?: string;
     bankCode?: string;
+    addressType?: string;
+    address?: string;
     passbookDataUrl?: string;
   };
 
@@ -43,6 +45,8 @@ export async function POST(request: NextRequest) {
   const accountNumber = String(body.accountNumber ?? "").replace(/\s/g, "").trim();
   const bankName = String(body.bankName ?? "").trim();
   const bankCode = String(body.bankCode ?? "").replace(/\D/g, "").trim();
+  const addressType = String(body.addressType ?? "").trim();
+  const address = String(body.address ?? "").replace(/\s+/g, " ").trim();
   const passbookDataUrl = String(body.passbookDataUrl ?? "");
 
   if (!accountName || !accountNumber || !bankName || !bankCode || !passbookDataUrl) {
@@ -51,6 +55,30 @@ export async function POST(request: NextRequest) {
         error: {
           code: "VALIDATION_ERROR",
           message: "請完整填寫帳戶名稱、帳戶號碼、銀行與存摺照片。",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  if (addressType !== "居住地址" && addressType !== "戶籍地址") {
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "請選擇居住地址或戶籍地址。",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  if (address.length < 6) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "請填寫完整地址（含縣市區與街道路名）。",
         },
       },
       { status: 400 },
@@ -89,6 +117,8 @@ export async function POST(request: NextRequest) {
       account_number: accountNumber,
       bank_name: bankName,
       bank_code: bankCode,
+      address_type: addressType,
+      address,
       passbook_data_url: passbookDataUrl,
     });
 

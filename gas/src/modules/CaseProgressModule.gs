@@ -52,6 +52,8 @@ var CaseProgressModule = (function () {
     'mark_outcome',
     'has_careform',
     'has_direct_mark',
+    'careform_visit_result',
+    'careform_visit_status',
   ];
 
   function ensureSchema_() {
@@ -126,6 +128,8 @@ var CaseProgressModule = (function () {
       mark_outcome: sample.mark_outcome || '',
       has_careform: sample.has_careform ? 'Y' : 'N',
       has_direct_mark: sample.has_direct_mark ? 'Y' : 'N',
+      careform_visit_result: sample.careform_visit_result || '',
+      careform_visit_status: sample.careform_visit_status || '',
     };
   }
 
@@ -145,6 +149,8 @@ var CaseProgressModule = (function () {
       has_careform: String(row.has_careform || '') === 'Y',
       has_direct_mark: String(row.has_direct_mark || '') === 'Y',
       mark_outcome: String(row.mark_outcome || ''),
+      careform_visit_result: String(row.careform_visit_result || ''),
+      careform_visit_status: String(row.careform_visit_status || ''),
       roster_status: String(row.roster_status || ''),
       civil_worker_name: String(row.civil_worker_name || ''),
       social_worker_name: String(row.social_worker_name || ''),
@@ -888,9 +894,13 @@ var CaseProgressModule = (function () {
       var visitStatus = String(caseRow.visit_status || '').trim() || '（空白）';
       visitStatusCounts[visitStatus] = (visitStatusCounts[visitStatus] || 0) + 1;
 
-      var hasCareform = Boolean(VisitRecordIndex.latestEligibleCareformForCase(index, caseId));
+      var latestCf = VisitRecordIndex.latestEligibleCareformForCase(index, caseId);
+      var hasCareform = Boolean(latestCf);
       var mark = markByCase[caseId] || null;
       var hasMark = Boolean(mark);
+      var cfAnswers = latestCf ? parseAnswers_(latestCf.answers_json) : {};
+      var careformVisitResult = latestCf ? String(latestCf.visit_result || '').trim() : '';
+      var careformVisitStatus = latestCf ? String(cfAnswers.visit_status || '').trim() : '';
 
       if (hasCareform && hasMark) channel.both += 1;
       else if (hasCareform) channel.careform += 1;
@@ -921,6 +931,8 @@ var CaseProgressModule = (function () {
         has_careform: hasCareform,
         has_direct_mark: hasMark,
         mark_outcome: mark ? String(mark.outcome || '') : '',
+        careform_visit_result: careformVisitResult,
+        careform_visit_status: careformVisitStatus,
         roster_status: roster ? String(roster.roster_status || '') : '',
         civil_worker_name: staff.civil_worker_name,
         social_worker_name: staff.social_worker_name,
@@ -980,6 +992,8 @@ var CaseProgressModule = (function () {
         social_worker_name: '',
         builder_name: '',
         mark_outcome: '',
+        careform_visit_result: '',
+        careform_visit_status: '',
         roster_status: String(roster.roster_status || ''),
         channel: '僅清冊',
       };

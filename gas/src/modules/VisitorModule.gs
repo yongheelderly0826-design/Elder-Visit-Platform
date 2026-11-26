@@ -117,7 +117,14 @@ var VisitorModule = (function () {
   }
 
   function update(data) {
-    SheetHelper.ensureColumns(SHEET, ['volunteer_group', 'job_title', 'gender', 'department']);
+    SheetHelper.ensureColumns(SHEET, [
+      'volunteer_group',
+      'job_title',
+      'gender',
+      'department',
+      'address_type',
+      'address',
+    ]);
     Validation.requireFields(data, ['visitor_id']);
     if (data.id_number != null && String(data.id_number).trim()) {
       data.id_number = extractTaiwanId_(data.id_number);
