@@ -327,6 +327,189 @@ var CareFormModule = (function () {
     };
   }
 
+  var ELIGIBLE_WINDOW_STATUS_ = {
+    已提交: true,
+    已稽核: true,
+    待補件: true,
+    草稿: true,
+  };
+
+  function toIsoVisitDate_(value) {
+    var s = String(value || '').trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+    var roc = s.match(/^(\d{2,3})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (roc) {
+      var y = Number(roc[1]) + 1911;
+      var m = ('0' + roc[2]).slice(-2);
+      var d = ('0' + roc[3]).slice(-2);
+      return y + '-' + m + '-' + d;
+    }
+    return '';
+  }
+
+  function toHhmm_(value) {
+    var t = String(value || '').trim();
+    var m = t.match(/(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    return ('0' + m[1]).slice(-2) + ':' + m[2];
+  }
+
+  function minutesOf_(hhmm) {
+    var m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  function visitWindowsOverlap_(aDate, aStart, aEnd, bDate, bStart, bEnd) {
+    if (String(aDate) !== String(bDate)) return false;
+    var as = minutesOf_(aStart);
+    var ae = minutesOf_(aEnd);
+    var bs = minutesOf_(bStart);
+    var be = minutesOf_(bEnd);
+    if (as == null || ae == null || bs == null || be == null) return false;
+    if (ae <= as || be <= bs) return false;
+    return as < be && bs < ae;
+  }
+
+  function parseAnswersObject_(careform) {
+    try {
+      var raw = careform && careform.answers_json;
+      if (!raw) return {};
+      if (typeof raw === 'object') return raw;
+      return JSON.parse(String(raw));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /**
+   * 同案其他關懷表時段（供前端防呆／submit 後備）。
+   * body: { case_id, exclude_assignment_id?, exclude_careform_id? }
+   */
+  function listVisitWindowsForCase(params) {
+    params = params || {};
+    var caseId = String(params.case_id || params.caseId || '').trim();
+    var excludeAsg = String(
+      params.exclude_assignment_id || params.excludeAssignmentId || ''
+    ).trim();
+    var excludeCf = String(
+      params.exclude_careform_id || params.excludeCareformId || ''
+    ).trim();
+    if (!caseId) return { windows: [], scanned: 0 };
+
+    var assignments = SheetHelper.rowsToObjects(
+      SheetHelper.getSheet(Config.SHEET_NAMES.ASSIGNMENTS)
+    );
+    var asgById = {};
+    var asgIdsForCase = {};
+    assignments.forEach(function (row) {
+      var id = String(row.assignment_id || '').trim();
+      if (!id) return;
+      asgById[id] = row;
+      if (String(row.case_id || '').trim() === caseId) asgIdsForCase[id] = true;
+    });
+
+    var careforms = SheetHelper.rowsToObjects(SheetHelper.getSheet(SHEET));
+    var windows = [];
+    careforms.forEach(function (cf) {
+      var careformId = String(cf.careform_id || '').trim();
+      var assignmentId = String(cf.assignment_id || '').trim();
+      if (excludeCf && careformId === excludeCf) return;
+      if (excludeAsg && assignmentId === excludeAsg) return;
+      if (!asgIdsForCase[assignmentId]) return;
+      var status = String(cf.status || '').trim();
+      if (status === '作廢') return;
+      if (status && !ELIGIBLE_WINDOW_STATUS_[status]) return;
+
+      var answers = parseAnswersObject_(cf);
+      var visitDate = toIsoVisitDate_(answers.visit_date);
+      var start = toHhmm_(answers.visit_start_time || answers.visit_time_start);
+      var end = toHhmm_(answers.visit_end_time || answers.visit_time_end);
+      if (!visitDate || !start || !end) return;
+
+      var result =
+        String(cf.visit_result || '').trim() ||
+        String(answers.visit_status || '').trim() ||
+        '關懷表';
+      var encoded =
+        String(cf.encoded_id || '').trim() ||
+        String((asgById[assignmentId] && asgById[assignmentId].encoded_id) || '').trim() ||
+        caseId;
+      windows.push({
+        careform_id: careformId,
+        assignment_id: assignmentId,
+        visitor_id: String(cf.visitor_id || '').trim(),
+        visit_date: visitDate,
+        visit_start_time: start,
+        visit_end_time: end,
+        visit_result: result,
+        status: status,
+        label: '關懷表 ' + (careformId || assignmentId) + '・' + result + '・' + encoded,
+      });
+    });
+
+    return { windows: windows, scanned: careforms.length };
+  }
+
+  /**
+   * 送出前：同案其他表不可與本表 visit_date＋起迄重疊（不限訪查員）。
+   * 覆寫同一 careform_id／同一 assignment 時略過。
+   */
+  function assertNoSameCaseVisitTimeConflict_(data, answers, excludeCareformId) {
+    var assignmentId = String(data.assignment_id || '').trim();
+    var caseRow = caseRowForAssignment_(assignmentId);
+    var caseId = caseRow ? String(caseRow.case_id || '').trim() : '';
+    if (!caseId) {
+      try {
+        var asg = AssignmentModule.get(assignmentId);
+        caseId = asg ? String(asg.case_id || '').trim() : '';
+      } catch (e) {
+        caseId = '';
+      }
+    }
+    if (!caseId) return;
+
+    var visitDate = toIsoVisitDate_(answers.visit_date);
+    var start = toHhmm_(answers.visit_start_time || answers.visit_time_start);
+    var end = toHhmm_(answers.visit_end_time || answers.visit_time_end);
+    if (!visitDate || !start || !end) return;
+
+    var listed = listVisitWindowsForCase({
+      case_id: caseId,
+      exclude_assignment_id: assignmentId,
+      exclude_careform_id: excludeCareformId || '',
+    });
+    var i;
+    for (i = 0; i < listed.windows.length; i++) {
+      var hit = listed.windows[i];
+      if (
+        visitWindowsOverlap_(
+          visitDate,
+          start,
+          end,
+          hit.visit_date,
+          hit.visit_start_time,
+          hit.visit_end_time
+        )
+      ) {
+        var err = new Error(
+          '本張訪視時段與同案另一筆「' +
+            hit.label +
+            '」（' +
+            hit.visit_date +
+            ' ' +
+            hit.visit_start_time +
+            '–' +
+            hit.visit_end_time +
+            '）相同或重疊。同案兩張關懷表不可使用同一時段，請改時間後再送。'
+        );
+        err.code = 'TIME_CONFLICT';
+        throw err;
+      }
+    }
+  }
+
   /**
    * 未遇送出：若 living_address_other／visit_notes／notes 戳記與同訪查員衝突，自動 +10 解衝突。
    */
@@ -483,6 +666,8 @@ var CareFormModule = (function () {
     var careformId = replaceExisting
       ? String(existing.careform_id)
       : 'CF-' + Utilities.getUuid().slice(0, 8);
+    // 同案第二張表：時段不可與其他 eligible 關懷表相同／重疊（輸入端也有防呆；此為後備）
+    assertNoSameCaseVisitTimeConflict_(data, answers, careformId);
     var photoRecords = isMissed
       ? normalizeMissedPhotos_(data, careformId)
       : (data.photos || []);
@@ -605,5 +790,6 @@ var CareFormModule = (function () {
     submit: submit,
     validate: validate,
     listMissedStamps: listMissedStamps,
+    listVisitWindowsForCase: listVisitWindowsForCase,
   };
 })();

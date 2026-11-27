@@ -4,6 +4,9 @@ import {
   addCalendarDaysIso,
   collectMissedVisitStampKeys,
   findOverlappingWindow,
+  findSameCaseTimeConflict,
+  formatSameCaseVisitTimeConflictMessage,
+  normalizeDeskVisitDateToIso,
   parseDeskAssignmentNotes,
   parseMissedVisitStamps,
   resolveNonOverlappingVisitSlot,
@@ -11,6 +14,7 @@ import {
   type DeskVisitWindow,
   type ResolvedVisitSlot,
 } from "@/lib/domain/desk-care-batch";
+import { parseCareformAnswers } from "@/lib/domain/manager-care-form-desk";
 import {
   VISIT_WINDOW_LABEL,
   isWithinVisitWindow,
@@ -25,6 +29,13 @@ function datePart(value: unknown) {
   const match = text(value).match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0] ?? "";
 }
+
+const ELIGIBLE_CAREFORM_STATUS: Record<string, true> = {
+  已提交: true,
+  已稽核: true,
+  待補件: true,
+  草稿: true,
+};
 
 export async function collectVisitorWindowsForDate(input: {
   visitorIds: string[];
@@ -73,6 +84,164 @@ export async function collectVisitorWindowsForDate(input: {
   return windows;
 }
 
+function windowFromCareformRow_(
+  row: Record<string, unknown>,
+  meta?: { caseId?: string; encodedId?: string },
+): DeskVisitWindow | null {
+  const assignmentId = text(row.assignment_id);
+  const careformId = text(row.careform_id);
+  const status = text(row.status);
+  if (status === "作廢") return null;
+  if (status && !ELIGIBLE_CAREFORM_STATUS[status]) return null;
+
+  const answers = (parseCareformAnswers(row) ?? {}) as Record<string, unknown>;
+  const visitDate =
+    normalizeDeskVisitDateToIso(answers.visit_date) ||
+    datePart(answers.visit_date) ||
+    "";
+  const start = text(answers.visit_start_time || answers.visit_time_start).slice(0, 5);
+  const end = text(answers.visit_end_time || answers.visit_time_end).slice(0, 5);
+  if (!visitDate || !start || !end) return null;
+
+  const result = text(row.visit_result) || text(answers.visit_status) || "關懷表";
+  const caseHint =
+    text(meta?.encodedId) || text(row.encoded_id) || text(meta?.caseId) || assignmentId;
+  const visitorId = text(row.visitor_id);
+
+  return {
+    assignmentId: assignmentId || undefined,
+    caseId: text(meta?.caseId) || undefined,
+    label: `關懷表 ${careformId || assignmentId}・${result}・${caseHint}`,
+    visitDate,
+    start,
+    end,
+    visitorIds: visitorId ? [visitorId] : [],
+  };
+}
+
+/**
+ * 同案其他關懷表／派案時段（不限訪查員）。
+ * 優先 GAS `careform.listVisitWindowsForCase`；失敗則 assignments＋careform.get 後備。
+ */
+export async function collectSameCaseVisitWindows(input: {
+  caseId: string;
+  excludeAssignmentId?: string;
+  excludeCareformId?: string;
+}): Promise<DeskVisitWindow[]> {
+  const caseId = text(input.caseId);
+  if (!caseId) return [];
+
+  try {
+    const data = await gasClient.careform.listVisitWindowsForCase({
+      case_id: caseId,
+      exclude_assignment_id: input.excludeAssignmentId,
+      exclude_careform_id: input.excludeCareformId,
+    });
+    const rows = Array.isArray(data?.windows) ? data.windows : [];
+    const fromGas: DeskVisitWindow[] = [];
+    for (const row of rows) {
+      const visitDate =
+        datePart(row.visit_date) || normalizeDeskVisitDateToIso(row.visit_date) || "";
+      const start = text(row.visit_start_time).slice(0, 5);
+      const end = text(row.visit_end_time).slice(0, 5);
+      const assignmentId = text(row.assignment_id);
+      if (!visitDate || !start || !end) continue;
+      const visitorId = text(row.visitor_id);
+      fromGas.push({
+        assignmentId: assignmentId || undefined,
+        caseId,
+        label: text(row.label) || `關懷表 ${text(row.careform_id) || assignmentId}`,
+        visitDate,
+        start,
+        end,
+        visitorIds: visitorId ? [visitorId] : [],
+      });
+    }
+    return fromGas;
+  } catch {
+    // fall through
+  }
+
+  const assignments = ((await gasClient.assignments.list()) as Record<string, unknown>[]) ?? [];
+  const sameCase = assignments.filter((row) => text(row.case_id) === caseId);
+  const windows: DeskVisitWindow[] = [];
+  const seenAssignment = new Set<string>();
+
+  for (const row of sameCase) {
+    const assignmentId = text(row.assignment_id);
+    if (!assignmentId) continue;
+    if (input.excludeAssignmentId && assignmentId === input.excludeAssignmentId) continue;
+
+    const notes = parseDeskAssignmentNotes(row.notes);
+    if (notes.visitDate && notes.visitStartTime && notes.visitEndTime) {
+      const label = `${text(row.encoded_id) || caseId || assignmentId}`;
+      windows.push({
+        assignmentId,
+        caseId,
+        label: `派案 ${label}`,
+        visitDate: notes.visitDate,
+        start: notes.visitStartTime,
+        end: notes.visitEndTime,
+        visitorIds: [
+          ...new Set(
+            [text(row.visitor_id), notes.primaryVisitorId, ...notes.companionVisitorIds].filter(
+              Boolean,
+            ) as string[],
+          ),
+        ],
+      });
+      seenAssignment.add(assignmentId);
+    }
+
+    try {
+      const careform = (await gasClient.careform.get(assignmentId)) as Record<
+        string,
+        unknown
+      > | null;
+      if (!careform) continue;
+      if (
+        input.excludeCareformId &&
+        text(careform.careform_id) === text(input.excludeCareformId)
+      ) {
+        continue;
+      }
+      const fromCf = windowFromCareformRow_(careform, {
+        caseId,
+        encodedId: text(row.encoded_id),
+      });
+      if (!fromCf) continue;
+      if (input.excludeAssignmentId && fromCf.assignmentId === input.excludeAssignmentId) {
+        continue;
+      }
+      // Prefer careform answers over notes when both exist for same assignment
+      if (seenAssignment.has(assignmentId)) {
+        const idx = windows.findIndex((w) => w.assignmentId === assignmentId);
+        if (idx >= 0) windows[idx] = fromCf;
+      } else {
+        windows.push(fromCf);
+        seenAssignment.add(assignmentId);
+      }
+    } catch {
+      // ignore single get failure
+    }
+  }
+
+  return windows;
+}
+
+export type DeskVisitTimeAuditResult =
+  | {
+      ok: true;
+      candidate: DeskVisitWindow;
+      checked: number;
+    }
+  | {
+      ok: false;
+      message: string;
+      conflict?: DeskVisitWindow;
+      conflictKind?: "same_case" | "same_visitor_team";
+    };
+
 export async function auditDeskVisitTime(input: {
   visitorIds: string[];
   visitDate: string;
@@ -81,8 +250,9 @@ export async function auditDeskVisitTime(input: {
   label: string;
   assignmentId?: string;
   caseId?: string;
+  excludeCareformId?: string;
   siblingWindows?: DeskVisitWindow[];
-}) {
+}): Promise<DeskVisitTimeAuditResult> {
   const candidate: DeskVisitWindow = {
     visitorIds: [...new Set(input.visitorIds.filter(Boolean))],
     visitDate: datePart(input.visitDate),
@@ -109,28 +279,53 @@ export async function auditDeskVisitTime(input: {
     return { ok: false as const, message: "缺少訪查員，無法稽核時段。" };
   }
 
+  const siblings = (input.siblingWindows ?? []).filter(
+    (item) => !candidate.assignmentId || item.assignmentId !== candidate.assignmentId,
+  );
+
+  // 1) 同案其他表：硬擋（不限訪查員）
+  if (candidate.caseId) {
+    const sameCase = await collectSameCaseVisitWindows({
+      caseId: candidate.caseId,
+      excludeAssignmentId: candidate.assignmentId,
+      excludeCareformId: input.excludeCareformId,
+    });
+    const sameCaseHit = findSameCaseTimeConflict(candidate, [...sameCase, ...siblings]);
+    if (sameCaseHit) {
+      return {
+        ok: false as const,
+        message: formatSameCaseVisitTimeConflictMessage(sameCaseHit, candidate.label),
+        conflict: sameCaseHit,
+        conflictKind: "same_case",
+      };
+    }
+  }
+
+  // 2) 同組訪查員跨案：既有核銷規則
   const existing = await collectVisitorWindowsForDate({
     visitorIds: candidate.visitorIds,
     visitDate: candidate.visitDate,
     excludeAssignmentId: candidate.assignmentId,
   });
-  const siblings = (input.siblingWindows ?? []).filter(
-    (item) => !candidate.assignmentId || item.assignmentId !== candidate.assignmentId,
-  );
   const hit = findOverlappingWindow(candidate, [...existing, ...siblings]);
   if (hit) {
     return {
       ok: false as const,
       message: `時段與「${hit.label}」（${hit.visitDate} ${hit.start}–${hit.end}）衝突，同一批訪查員不可重疊，以免核銷重複。`,
       conflict: hit,
+      conflictKind: "same_visitor_team",
     };
   }
-  return { ok: true as const, candidate, checked: existing.length + siblings.length };
+  return {
+    ok: true as const,
+    candidate,
+    checked: existing.length + siblings.length,
+  };
 }
 
 /**
- * 訪查員 KEY：與 audit 相同偵測；若重疊則把本案往後挪（時長＋移動間隔），
- * 當日溢出則隔日 09:00。供 visitor confirm-time 使用；場生紙本仍走嚴格 audit。
+ * 訪查員 KEY：與 audit 相同偵測；若為「同組跨案」重疊則把本案往後挪。
+ * **同案衝突不自動順延**，改硬擋提醒（避免兩張同案表撞時卻默默改時間）。
  */
 export async function auditDeskVisitTimeAutoResolve(input: {
   visitorIds: string[];
@@ -140,6 +335,7 @@ export async function auditDeskVisitTimeAutoResolve(input: {
   label: string;
   assignmentId?: string;
   caseId?: string;
+  excludeCareformId?: string;
   siblingWindows?: DeskVisitWindow[];
   travelGapMinutes?: number;
   morningStart?: string;
@@ -153,7 +349,7 @@ export async function auditDeskVisitTimeAutoResolve(input: {
       message: string | null;
       checked: number;
     }
-  | { ok: false; message: string }
+  | { ok: false; message: string; conflictKind?: "same_case" | "same_visitor_team" }
 > {
   const visitDate = datePart(input.visitDate);
   const visitStartTime = text(input.visitStartTime).slice(0, 5);
@@ -188,6 +384,13 @@ export async function auditDeskVisitTimeAutoResolve(input: {
       checked: baseAudit.checked,
     };
   }
+  if (baseAudit.conflictKind === "same_case") {
+    return {
+      ok: false,
+      message: baseAudit.message,
+      conflictKind: "same_case",
+    };
+  }
   if (!baseAudit.conflict) {
     return { ok: false, message: baseAudit.message };
   }
@@ -214,6 +417,16 @@ export async function auditDeskVisitTimeAutoResolve(input: {
   );
   const existing = [...windowLists.flat(), ...siblings];
 
+  // 自動順延後仍須避開同案時段（若順到與同案另一張撞）
+  let sameCaseWindows: DeskVisitWindow[] = [];
+  if (input.caseId) {
+    sameCaseWindows = await collectSameCaseVisitWindows({
+      caseId: input.caseId,
+      excludeAssignmentId: input.assignmentId,
+      excludeCareformId: input.excludeCareformId,
+    });
+  }
+
   const resolved = resolveNonOverlappingVisitSlot({
     candidate: {
       visitorIds,
@@ -224,7 +437,9 @@ export async function auditDeskVisitTimeAutoResolve(input: {
       assignmentId: input.assignmentId,
       caseId: input.caseId,
     },
-    existing,
+    // 把同案視窗也丟進 existing：resolve 用 windowsOverlap（需 visitor 交集）。
+    // 同案異人可能無法靠 resolve 避開 → 下方再硬驗一次。
+    existing: [...existing, ...sameCaseWindows.filter((w) => teamIdsIntersect(visitorIds, w.visitorIds))],
     travelGapMinutes: travelGap,
     morningStart,
     maxDayHops,
@@ -244,6 +459,15 @@ export async function auditDeskVisitTimeAutoResolve(input: {
     assignmentId: input.assignmentId,
     caseId: input.caseId,
   };
+
+  const sameCaseHit = findSameCaseTimeConflict(candidate, sameCaseWindows);
+  if (sameCaseHit) {
+    return {
+      ok: false,
+      message: formatSameCaseVisitTimeConflictMessage(sameCaseHit, input.label),
+      conflictKind: "same_case",
+    };
+  }
 
   return {
     ok: true,

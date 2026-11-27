@@ -474,14 +474,15 @@ export function VisitDialogueForm({
 
   /**
    * 訪查員 KEY：進表／簽到帶入時段後，用與場生相同稽核偵測衝突；
-   * 有重疊則自動往後挪並寫回表單＋派案 notes（不擋 modal）。
+   * 同組跨案重疊可自動往後挪；**同案衝突硬擋＋提示**（不順延）。
+   * 場生／公所代填：改走 manager confirm-time（同樣會擋同案撞時）。
    */
   async function syncVisitorVisitTimes(times?: {
     visitDate?: string;
     visitStartTime?: string;
     visitEndTime?: string;
   }) {
-    if (readonly || isDeskEntry) return;
+    if (readonly) return;
     const latest = careFormAnswersRef.current;
     const visitDateRaw = String(times?.visitDate ?? latest.visit_date ?? "").trim();
     const visitStartTime = String(times?.visitStartTime ?? latest.visit_start_time ?? "")
@@ -497,21 +498,71 @@ export function VisitDialogueForm({
       normalizeDeskVisitDateToIso(schedule.visitDate) ||
       new Date().toISOString().slice(0, 10);
 
+    const caseLabel = formatDeskCasePaperLabel({
+      villageCode: elderCase.villageCode,
+      village: elderCase.village,
+      villageSeq: elderCase.villageSeq,
+      name: elderCase.name,
+      caseCode: elderCase.caseCode,
+    }).full;
+
     const seq = ++timeSyncSeqRef.current;
     try {
+      if (isDeskEntry) {
+        const batch = readDeskBatchState();
+        const notesMeta = parseDeskAssignmentNotes(schedule.assignmentReason);
+        const primaryVisitorId =
+          batch?.primaryVisitorId ||
+          selectedVisitor?.id ||
+          schedule.visitorId ||
+          notesMeta.primaryVisitorId ||
+          "";
+        if (!primaryVisitorId) return;
+        const companionVisitorIds = [
+          ...new Set(
+            [
+              ...(batch?.companionVisitorIds ?? []),
+              ...notesMeta.companionVisitorIds,
+            ]
+              .map((id) => String(id || "").trim())
+              .filter((id) => id && id !== primaryVisitorId),
+          ),
+        ];
+        const response = await fetch("/api/manager/care-forms/confirm-time", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            assignmentId: schedule.id,
+            caseId: elderCase.id,
+            caseLabel,
+            primaryVisitorId,
+            companionVisitorIds,
+            visitDate: visitDateIso,
+            visitStartTime,
+            visitEndTime,
+          }),
+        });
+        const json = (await response.json()) as {
+          error?: { message?: string; code?: string };
+        };
+        if (seq !== timeSyncSeqRef.current) return;
+        if (!response.ok) {
+          setTimeAdjustNotice(
+            json.error?.message || "時段與同案或其他派案衝突，請修改訪視時間。",
+          );
+          return;
+        }
+        setTimeAdjustNotice(null);
+        return;
+      }
+
       const response = await fetch("/api/visitor/confirm-time", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           assignmentId: schedule.id,
           caseId: elderCase.id,
-          caseLabel: formatDeskCasePaperLabel({
-            villageCode: elderCase.villageCode,
-            village: elderCase.village,
-            villageSeq: elderCase.villageSeq,
-            name: elderCase.name,
-            caseCode: elderCase.caseCode,
-          }).full,
+          caseLabel,
           visitDate: visitDateIso,
           visitStartTime,
           visitEndTime,
@@ -551,6 +602,8 @@ export function VisitDialogueForm({
       }));
       if (json.data.adjusted && json.data.message) {
         setTimeAdjustNotice(json.data.message);
+      } else {
+        setTimeAdjustNotice(null);
       }
     } catch {
       if (seq !== timeSyncSeqRef.current) return;
@@ -559,7 +612,7 @@ export function VisitDialogueForm({
   }
 
   useEffect(() => {
-    if (readonly || isDeskEntry) return;
+    if (readonly) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
@@ -573,6 +626,28 @@ export function VisitDialogueForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readonly, isDeskEntry, schedule.id]);
 
+  // 表內改起迄：debounce 再查同案／同組衝突（場生＋訪員）
+  useEffect(() => {
+    if (readonly) return;
+    const start = String(careFormAnswers.visit_start_time || "").trim().slice(0, 5);
+    const end = String(careFormAnswers.visit_end_time || "").trim().slice(0, 5);
+    if (!start || !end) return;
+    const timer = window.setTimeout(() => {
+      void syncVisitorVisitTimes({
+        visitDate: String(careFormAnswers.visit_date || ""),
+        visitStartTime: start,
+        visitEndTime: end,
+      });
+    }, 450);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    readonly,
+    careFormAnswers.visit_date,
+    careFormAnswers.visit_start_time,
+    careFormAnswers.visit_end_time,
+  ]);
+
   async function submitVisit(options?: {
     submissionOverride?: Partial<typeof submission>;
     answersPatch?: Partial<MohwLifeCareAnswers>;
@@ -581,6 +656,10 @@ export function VisitDialogueForm({
     skipMissedExpand?: boolean;
   }) {
     if (readonly) return;
+    if (timeAdjustNotice && timeAdjustNotice.includes("同案")) {
+      setResult(timeAdjustNotice);
+      return;
+    }
     setIsSubmitting(true);
     setResult(null);
     setMohwErrors([]);
@@ -971,6 +1050,10 @@ export function VisitDialogueForm({
 
   async function runDeskQuickSubmit(kind: DeskQuickSubmitKind) {
     if (readonly || !isDeskEntry || isSubmitting) return;
+    if (timeAdjustNotice && timeAdjustNotice.includes("同案")) {
+      setResult(timeAdjustNotice);
+      return;
+    }
     const visitDateRaw =
       normalizeDeskVisitDateToIso(careFormAnswers.visit_date) ||
       normalizeDeskVisitDateToIso(initialTimes?.visitDate) ||
@@ -1556,8 +1639,12 @@ export function VisitDialogueForm({
 
         {timeAdjustNotice ? (
           <p
-            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-            role="status"
+            className={
+              timeAdjustNotice.includes("同案")
+                ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                : "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            }
+            role={timeAdjustNotice.includes("同案") ? "alert" : "status"}
           >
             {timeAdjustNotice}
           </p>

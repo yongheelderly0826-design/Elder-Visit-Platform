@@ -472,13 +472,16 @@ export function chainDeskBatchAfterKeyed(
   return { ...state, items, updatedAt: new Date().toISOString() };
 }
 
-export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {
+function windowsShareAssignment_(a: DeskVisitWindow, b: DeskVisitWindow) {
+  return Boolean(
+    a.assignmentId && b.assignmentId && a.assignmentId === b.assignmentId,
+  );
+}
+
+/** 同日＋起迄區間重疊（不含訪查員條件；相鄰結束＝開始不算重疊）。 */
+export function windowsTimeOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {
   if (a.visitDate !== b.visitDate) return false;
-  if (a.assignmentId && b.assignmentId && a.assignmentId === b.assignmentId) {
-    return false;
-  }
-  const shared = a.visitorIds.some((id) => b.visitorIds.includes(id));
-  if (!shared) return false;
+  if (windowsShareAssignment_(a, b)) return false;
   const aStart = toMinutes(a.start);
   const aEnd = toMinutes(a.end);
   const bStart = toMinutes(b.start);
@@ -488,11 +491,33 @@ export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {
   return aStart < bEnd && bStart < aEnd;
 }
 
+export function windowsOverlap(a: DeskVisitWindow, b: DeskVisitWindow) {
+  if (!windowsTimeOverlap(a, b)) return false;
+  const shared = a.visitorIds.some((id) => b.visitorIds.includes(id));
+  return shared;
+}
+
 export function findOverlappingWindow(
   candidate: DeskVisitWindow,
   existing: DeskVisitWindow[],
 ) {
   return existing.find((item) => windowsOverlap(candidate, item)) ?? null;
+}
+
+/** 同案第二張表：只比日期／時段，不要求訪查員相同。 */
+export function findSameCaseTimeConflict(
+  candidate: DeskVisitWindow,
+  existing: DeskVisitWindow[],
+) {
+  return existing.find((item) => windowsTimeOverlap(candidate, item)) ?? null;
+}
+
+export function formatSameCaseVisitTimeConflictMessage(
+  hit: DeskVisitWindow,
+  candidateLabel?: string,
+) {
+  const who = candidateLabel ? `「${candidateLabel}」` : "本張";
+  return `${who}訪視時段與同案另一筆「${hit.label}」（${hit.visitDate} ${hit.start}–${hit.end}）相同或重疊。同案兩張關懷表不可使用同一時段，請改時間後再送。`;
 }
 
 /** 日界溢出後改排隔日上午（與紙本早班／建檔預設一致）。 */

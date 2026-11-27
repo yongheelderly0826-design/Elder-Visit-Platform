@@ -505,6 +505,25 @@ export const gasClient = {
         scanned: number;
         matched: number;
       }>("careform.listMissedStamps", { method: "POST", body }),
+    listVisitWindowsForCase: (body: {
+      case_id: string;
+      exclude_assignment_id?: string;
+      exclude_careform_id?: string;
+    }) =>
+      gasFetch<{
+        windows: Array<{
+          careform_id?: string;
+          assignment_id?: string;
+          visitor_id?: string;
+          visit_date?: string;
+          visit_start_time?: string;
+          visit_end_time?: string;
+          visit_result?: string;
+          status?: string;
+          label?: string;
+        }>;
+        scanned: number;
+      }>("careform.listVisitWindowsForCase", { method: "POST", body }),
     generatePdf: (body: {
       answers: Record<string, unknown>;
       elder_name?: string;

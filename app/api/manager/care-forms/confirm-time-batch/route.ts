@@ -5,11 +5,16 @@ import {
   buildDeskAssignmentNotes,
   deskStaleAssignmentMessage,
   findOverlappingWindow,
+  findSameCaseTimeConflict,
+  formatSameCaseVisitTimeConflictMessage,
   parseAssignmentNotFoundId,
   parseDeskAssignmentNotes,
   type DeskVisitWindow,
 } from "@/lib/domain/desk-care-batch";
-import { collectVisitorWindowsForDate } from "@/lib/domain/desk-visit-time-audit";
+import {
+  collectSameCaseVisitWindows,
+  collectVisitorWindowsForDate,
+} from "@/lib/domain/desk-visit-time-audit";
 import { GasApiError, gasClient } from "@/lib/gas-client";
 import { invalidateGasReadCaches } from "@/lib/gas-read-cache";
 
@@ -115,6 +120,28 @@ export async function POST(request: NextRequest) {
 
   for (const candidate of planned) {
     const siblings = planned.filter((item) => item.assignmentId !== candidate.assignmentId);
+    if (candidate.caseId) {
+      const sameCase = await collectSameCaseVisitWindows({
+        caseId: candidate.caseId,
+        excludeAssignmentId: candidate.assignmentId,
+      });
+      const sameCaseSiblings = siblings.filter((item) => item.caseId === candidate.caseId);
+      const sameCaseHit = findSameCaseTimeConflict(candidate, [
+        ...sameCase,
+        ...sameCaseSiblings,
+      ]);
+      if (sameCaseHit) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "TIME_CONFLICT",
+              message: formatSameCaseVisitTimeConflictMessage(sameCaseHit, candidate.label),
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
     const external = existing.filter((item) => item.assignmentId !== candidate.assignmentId);
     const hit = findOverlappingWindow(candidate, [...external, ...siblings]);
     if (hit) {

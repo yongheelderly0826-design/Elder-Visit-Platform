@@ -25,6 +25,7 @@
     "scripts/write-mohw-gold-report.ts",
     "scripts/desk-missed-stamp-smoke.ts",
     "scripts/orphan-worker-dates-smoke.ts",
-    "scripts/mohw-submit-guards-smoke.ts"
+    "scripts/mohw-submit-guards-smoke.ts",
+    "scripts/same-case-visit-time-smoke.ts"
   ]
 }

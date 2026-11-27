@@ -5,10 +5,16 @@
 import {
   DESK_BATCH_SLOT_MINUTES,
   addMinutesToTime,
+  canChainVisitStartWithinWindow,
+  clampTimeToVisitWindow,
 } from "@/lib/domain/desk-care-batch";
 import { formatRocDate, CASE_PHONE_NONE, CASE_PHONE_REFUSED } from "@/lib/domain/mohw-life-care-export";
 import type { MohwLifeCareAnswers } from "@/lib/domain/mohw-life-care-form";
 import { createInitialMohwAnswers } from "@/lib/domain/mohw-life-care-ui";
+import {
+  VISIT_WINDOW_END_HHMM,
+  VISIT_WINDOW_START_HHMM,
+} from "@/lib/domain/mohw-submit-guard-rules";
 import { normalizeTaiwanBirthToRocText } from "@/lib/domain/taiwan-birth-date";
 import type { ElderCase, VisitSchedule } from "@/lib/domain/types";
 
@@ -168,7 +174,8 @@ export function finalizeDeskContactPhones(answers: MohwLifeCareAnswers): MohwLif
   };
 }
 
-/** 現場現在：民國訪查日＋開始／結束（預設時長與建檔批次相同，10 分）。 */
+/** 現場現在：民國訪查日＋開始／結束（預設時長與建檔批次相同，10 分）。
+ * 牆鐘若超出衛福允許窗 08:00–20:00，夾回窗內並確保結束仍 ≤ 20:00。 */
 export function getDeskNowVisitClock(now: Date = new Date()): {
   visitDate: string;
   visitStartTime: string;
@@ -181,9 +188,23 @@ export function getDeskNowVisitClock(now: Date = new Date()): {
       : formatRocDate(now);
   const startTotal = now.getHours() * 60 + now.getMinutes();
   const pad = (n: number) => String(n).padStart(2, "0");
-  const visitStartTime = `${pad(Math.floor(startTotal / 60))}:${pad(startTotal % 60)}`;
-  const visitEndTime =
+  const rawStart = `${pad(Math.floor(startTotal / 60))}:${pad(startTotal % 60)}`;
+  let visitStartTime =
+    clampTimeToVisitWindow(rawStart) || VISIT_WINDOW_START_HHMM;
+  // 夾到 20:00 時無法再加預設時長 → 往前挪，讓結束剛好 20:00
+  if (!canChainVisitStartWithinWindow(visitStartTime, DESK_BATCH_SLOT_MINUTES)) {
+    const endMins =
+      Number(VISIT_WINDOW_END_HHMM.slice(0, 2)) * 60 +
+      Number(VISIT_WINDOW_END_HHMM.slice(3, 5));
+    const startMins = Math.max(
+      Number(VISIT_WINDOW_START_HHMM.slice(0, 2)) * 60,
+      endMins - DESK_BATCH_SLOT_MINUTES,
+    );
+    visitStartTime = `${pad(Math.floor(startMins / 60))}:${pad(startMins % 60)}`;
+  }
+  const rawEnd =
     addMinutesToTime(visitStartTime, DESK_BATCH_SLOT_MINUTES) || visitStartTime;
+  const visitEndTime = clampTimeToVisitWindow(rawEnd) || visitStartTime;
   return {
     visitDate: safeDate === "INVALID_DATE" ? "" : safeDate,
     visitStartTime,

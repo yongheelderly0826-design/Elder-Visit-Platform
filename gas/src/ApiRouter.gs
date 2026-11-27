@@ -73,6 +73,9 @@ var ApiRouter = (function () {
     'careform.saveDraft': function (p, b) { return CareFormModule.saveDraft(b); },
     'careform.submit': function (p, b) { return CareFormModule.submit(b); },
     'careform.validate': function (p, b) { return CareFormModule.validate(b); },
+    'careform.listVisitWindowsForCase': function (p, b) {
+      return CareFormModule.listVisitWindowsForCase(b || p);
+    },
     'careform.listMissedStamps': function (p, b) {
       return CareFormModule.listMissedStamps(b || p);
     },

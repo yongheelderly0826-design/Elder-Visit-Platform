@@ -1601,17 +1601,21 @@ export function CareFormDeskPanel({
               時段衝突，請修改時間
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              主填「
-              {batch
-                ? batch.visitorNames[batch.primaryVisitorId] || batch.primaryVisitorId
-                : "訪查員"}
-              」當日已有其他派案時段，與本次排程重疊，無法套用（核銷不可重複）。
+              {conflictAlert.includes("同案")
+                ? "同案已有另一張關懷表使用此時段（或重疊）。兩張表不可撞同一訪視時間，請改時間後再進表／送出。"
+                : `主填「${
+                    batch
+                      ? batch.visitorNames[batch.primaryVisitorId] || batch.primaryVisitorId
+                      : "訪查員"
+                  }」當日已有其他派案時段，與本次排程重疊，無法套用（核銷不可重複）。`}
             </p>
             <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm leading-relaxed">
               {conflictAlert}
             </p>
             <p className="mt-3 text-sm text-muted-foreground">
-              請把開始時間改到衝突時段之後，或先處理／調整舊派案時段。
+              {conflictAlert.includes("同案")
+                ? "請將本張開始／結束改到與同案舊表不重疊的時段（不同日或錯開起迄）。"
+                : "請把開始時間改到衝突時段之後，或先處理／調整舊派案時段。"}
             </p>
             <div className="mt-4 flex justify-end">
               <Button type="button" onClick={() => setConflictAlert(null)}>
@@ -1636,7 +1640,7 @@ export function CareFormDeskPanel({
                   caseCode: timeDraft.caseCode,
                 }).full
               }
-              · 同組訪查員時段不可衝突（核銷稽核）
+              · 同組訪查員時段不可衝突；同案兩張關懷表亦不可使用相同／重疊時段
             </p>
             <div className="mt-4 grid gap-3">
               <Field label="訪視日期 *">

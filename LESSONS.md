@@ -1,3 +1,11 @@
+## Lesson: 同案第二張關懷表時段防呆必須忽略訪查員 ID
+
+- **Trigger:** 未遇後再 KEY 成功（或異人補登）時，兩張表不可撞同一訪視時段；既有 `windowsOverlap` 要求訪查員 ID 交集，同案異人會漏擋。
+- **Cause:** 跨案核銷規則綁「同組訪查員」；同案補登是另一產品規則。
+- **Rule:** 同案用 `windowsTimeOverlap`／`findSameCaseTimeConflict`（只比日期＋起迄）；confirm-time／表內改時即提醒並阻擋；同案衝突**不**走訪員自動順延。GAS `careform.submit`＋`listVisitWindowsForCase` 後備。reuse 同一張表須 exclude 本 assignment／careform。
+- **Evidence:** `desk-care-batch.ts`, `desk-visit-time-audit.ts`, `CareFormModule.gs`, desk／visitor confirm-time, `scripts/same-case-visit-time-smoke.ts`.
+- **Added on:** 2026-11-27
+
 ## Lesson: 計費形態以關懷表為準，未遇優先於查無此人
 
 - **Trigger:** 訪查計費 morph 未遇／查無近零（~157／10），但 eligible 關懷表 visit_result 未遇=2167、answers 查無此人=1496。
@@ -45,6 +53,14 @@
 - **Rule:** `caseProgress.getCaseDetail` 接受 `case_id` 或 `bucket+seq`；回傳遮罩基本資料、關懷表 KEY 者（訪查員／desk TEMP）、直 KEY 社政／民政欄。listBucket 需回 `seq`。
 - **Evidence:** `CaseProgressModule.getCaseDetail`, `/api/manager/case-progress/detail`, case-progress detail modal.
 - **Added on:** 2026-11-23
+
+## Lesson: 進表「目前時間」必須夾回 08:00–20:00
+
+- **Trigger:** 晚上 KEY 時開始／結束被帶成 22:xx，畫面紅字但使用者疑惑為何能超過設定窗。
+- **Cause:** `getDeskNowVisitClock` 直接用牆鐘，未呼叫 `clampTimeToVisitWindow`。
+- **Rule:** 現場鐘自動帶入須夾在衛福窗內；若夾到 20:00 無法再加預設時長，往前挪起始使結束 ≤ 20:00。驗證紅字仍保留作最後防線。
+- **Evidence:** `mohw-desk-form-defaults.ts`, `desk-care-batch.ts` `clampTimeToVisitWindow`, `mohw-submit-guard-rules.ts`.
+- **Added on:** 2026-11-26
 
 ## Lesson: 進度修正三來源——直 KEY／關懷表／分桶索引
 
